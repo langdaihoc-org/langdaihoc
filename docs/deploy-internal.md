@@ -92,6 +92,10 @@ Ghi chú:
 
 Sau deploy: cập nhật Railway `FRONTEND_URL` + Supabase Auth URLs.
 
+### PWA (install-only)
+
+Đã có `manifest.webmanifest` + `sw.js` (không cache offline). Trên Android Chrome: menu → **Cài đặt ứng dụng** / **Thêm vào màn hình chính**. iOS Safari: Share → **Thêm vào Màn hình chính**.
+
 Health:
 - Liveness: `GET /api/health`
 - Readiness (DB): `GET /api/health/ready`
