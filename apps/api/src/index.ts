@@ -45,7 +45,7 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());
 app.use(requireTrustedOrigin);
 
@@ -65,7 +65,7 @@ app.use(errorHandler);
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`API listening on 0.0.0.0:${PORT}`);
-  scheduleDataRetention(db);
+  scheduleDataRetention(db, supabaseAdmin);
 });
 
 function shutdown(signal: string) {

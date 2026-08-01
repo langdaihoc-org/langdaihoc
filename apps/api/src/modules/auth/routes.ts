@@ -123,13 +123,23 @@ authRouter.post(
     }
 
     if (!DEMO_MODE) {
-      await supabaseAdmin.auth.resend({
+      const { error: mailError } = await supabaseAdmin.auth.resend({
         type: 'signup',
         email: input.email,
         options: {
           emailRedirectTo: `${frontendUrl}/auth/verify-email`,
         },
       });
+      if (mailError) {
+        console.error('[auth] buyer register mail failed', input.email, mailError.message);
+        res.status(201).json({
+          message:
+            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+          redirectTo: '/auth/check-email',
+          emailSendFailed: true,
+        });
+        return;
+      }
     }
 
     res.status(201).json({
@@ -194,13 +204,23 @@ authRouter.post(
     }
 
     if (!DEMO_MODE) {
-      await supabaseAdmin.auth.resend({
+      const { error: mailError } = await supabaseAdmin.auth.resend({
         type: 'signup',
         email: input.email,
         options: {
           emailRedirectTo: `${frontendUrl}/auth/verify-email`,
         },
       });
+      if (mailError) {
+        console.error('[auth] seller register mail failed', input.email, mailError.message);
+        res.status(201).json({
+          message:
+            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+          redirectTo: '/auth/check-email',
+          emailSendFailed: true,
+        });
+        return;
+      }
     }
 
     res.status(201).json({
@@ -478,13 +498,16 @@ authRouter.post(
     const email = await resolveAuthEmail(db, identifier);
     if (email) {
       const frontendUrl = getFrontendUrl();
-      await req.app.locals.supabaseAdmin.auth.resend({
+      const { error: mailError } = await req.app.locals.supabaseAdmin.auth.resend({
         type: 'signup',
         email,
         options: {
           emailRedirectTo: `${frontendUrl}/auth/verify-email`,
         },
       });
+      if (mailError) {
+        console.error('[auth] resend-verification failed', email, mailError.message);
+      }
     }
 
     res.json({ message: 'Nếu tài khoản tồn tại, email xác minh đã được gửi lại.' });

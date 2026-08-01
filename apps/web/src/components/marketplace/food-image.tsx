@@ -7,12 +7,15 @@ export function FoodImage({
   alt,
   className,
   type = 'food',
+  priority = false,
 }: {
   src?: string | null;
   index?: number;
   alt: string;
   className?: string;
   type?: 'food' | 'laundry';
+  /** true = ảnh above-the-fold (không lazy). */
+  priority?: boolean;
 }) {
   const fallback = type === 'food' ? getFoodImage(index) : getLaundryImage(index);
   return (
@@ -20,6 +23,8 @@ export function FoodImage({
       src={src || fallback}
       alt={alt}
       className={cn('h-full w-full object-cover', className)}
+      loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
       onError={(e) => {
         (e.target as HTMLImageElement).src = fallback;
       }}
@@ -42,6 +47,8 @@ export function StoreAvatar({
         src={src}
         alt={name}
         className={cn('rounded-sm object-cover', className)}
+        loading="lazy"
+        decoding="async"
       />
     );
   }

@@ -56,6 +56,7 @@ export function FoodGridCard({ item, index, onAdd }: { item: FoodItem; index: nu
             index={index}
             alt={item.name}
             className="transition-transform duration-300 group-hover:scale-105"
+            priority={index < 4}
           />
         </div>
       </Link>

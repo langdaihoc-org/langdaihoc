@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { eq, and, isNull, gte, sql } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
@@ -7,11 +8,20 @@ import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
 import { getFrontendUrl } from '../../lib/env.js';
+import { createSupabaseAnon } from '../../lib/supabase.js';
 import { ensurePhoneNotUsed, ensureEmailNotUsed, validateBuyerEmail } from '../auth/service.js';
 
 export const buyerRouter = Router();
 
 buyerRouter.use(requireAuth, requireRole('buyer'));
+
+/** Upload ảnh biên lai/bằng chứng — 20 lần/5 phút/IP (prod) */
+const uploadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 20 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 buyerRouter.get(
   '/addresses',
@@ -116,10 +126,22 @@ buyerRouter.patch(
     let emailVerified = req.user!.emailVerified;
 
     if (body.email && body.email !== req.user!.email.toLowerCase()) {
+      if (!body.currentPassword) {
+        throw new AppError(400, 'Nhập mật khẩu hiện tại để đổi email', 'PASSWORD_REQUIRED');
+      }
       validateBuyerEmail(body.email);
       await ensureEmailNotUsed(db, body.email, userId);
 
+      const { error: signInError } = await createSupabaseAnon().auth.signInWithPassword({
+        email: req.user!.email,
+        password: body.currentPassword,
+      });
+      if (signInError) {
+        throw new AppError(400, 'Mật khẩu hiện tại không đúng', 'WRONG_PASSWORD');
+      }
+
       const supabaseAdmin = req.app.locals.supabaseAdmin;
+      const oldEmail = req.user!.email;
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         email: body.email,
         email_confirm: DEMO_MODE,
@@ -128,8 +150,6 @@ buyerRouter.patch(
         throw new AppError(400, error.message || 'Không đổi được email', 'EMAIL_UPDATE_FAILED');
       }
 
-      // Admin update không tự gửi mail xác minh — gửi lại giống flow đăng ký
-      // để tránh soft-lock pending_email_verification mà không có link trong hộp thư.
       if (!DEMO_MODE) {
         const frontendUrl = getFrontendUrl();
         const { error: resendError } = await supabaseAdmin.auth.resend({
@@ -140,7 +160,16 @@ buyerRouter.patch(
           },
         });
         if (resendError) {
-          console.error('[buyer] email-change verification mail failed', userId, resendError.message);
+          await supabaseAdmin.auth.admin
+            .updateUserById(userId, { email: oldEmail, email_confirm: true })
+            .catch((e: unknown) =>
+              console.error('[buyer] rollback email failed', userId, e),
+            );
+          throw new AppError(
+            502,
+            'Không gửi được email xác minh. Email chưa đổi — thử lại sau.',
+            'EMAIL_SEND_FAILED',
+          );
         }
       }
 
@@ -213,6 +242,7 @@ buyerRouter.patch(
 
 buyerRouter.post(
   '/upload',
+  uploadLimiter,
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -233,17 +263,16 @@ buyerRouter.post(
     if (!order) {
       throw new AppError(404, 'Không tìm thấy đơn của bạn', 'NOT_FOUND');
     }
-    if (order.paymentMethod !== 'bank_transfer') {
-      throw new AppError(400, 'Đơn này không cần biên lai chuyển khoản', 'INVALID_PAYMENT');
-    }
-
+    // Endpoint dùng chung cho biên lai CK lẫn ảnh bằng chứng khiếu nại (mọi phương thức
+    // thanh toán) — không chặn theo paymentMethod ở đây; endpoint tạo biên lai riêng
+    // (`POST /orders/:id/payment-proof`) đã tự kiểm tra bank_transfer.
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [quota] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(paymentProofs)
       .where(and(eq(paymentProofs.orderId, body.orderId), gte(paymentProofs.uploadedAt, dayAgo)));
-    if (Number(quota?.count ?? 0) >= 10) {
-      throw new AppError(429, 'Quá số lần upload biên lai trong 24 giờ', 'UPLOAD_QUOTA');
+    if (Number(quota?.count ?? 0) >= 20) {
+      throw new AppError(429, 'Quá số lần upload ảnh trong 24 giờ', 'UPLOAD_QUOTA');
     }
 
     const { buffer, contentType, ext } = parseImageUpload(body.dataBase64, body.contentType);

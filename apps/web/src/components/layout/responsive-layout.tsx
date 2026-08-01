@@ -294,9 +294,8 @@ export function ResponsiveBuyerLayout() {
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-line)] bg-white/95 backdrop-blur lg:hidden pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex max-w-md items-stretch justify-around">
           {MOB_NAV.map((item) => {
-            const active = item.to === '/profile'
-              ? pathname.startsWith('/profile')
-              : item.to === '/' ? pathname === '/' : pathname.startsWith(item.to);
+            const active =
+              item.to === '/' ? pathname === '/' : pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
               <Link

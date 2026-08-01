@@ -31,7 +31,12 @@ import {
 } from '../../services/commerce.js';
 import { formatOrderSummary } from '@langdaihoc/shared';
 import { paramId } from '../../lib/params.js';
-import { assertUploadedImageUrl, assertUploadedImageUrls } from '../../lib/storage.js';
+import {
+  assertPrivateProofUrl,
+  assertPrivateProofUrls,
+  resignPrivateUrl,
+  resignPrivateUrls,
+} from '../../lib/storage.js';
 import { loadOrderForActor, assertSellerApprovedToMutate } from '../../lib/order-access.js';
 
 export const ordersRouter = Router();
@@ -230,6 +235,17 @@ ordersRouter.get(
       includeBuyer: isSeller,
       includeDetails: true,
     });
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
+    for (const row of data) {
+      const proofs = (row as { proofs?: { id: string; imageUrl: string; status: string }[] }).proofs;
+      if (!proofs?.length) continue;
+      (row as { proofs: typeof proofs }).proofs = await Promise.all(
+        proofs.map(async (p) => ({
+          ...p,
+          imageUrl: await resignPrivateUrl(supabaseAdmin, p.imageUrl),
+        })),
+      );
+    }
     res.json({ data, meta: { page, limit, hasMore } });
   }),
 );
@@ -276,6 +292,7 @@ ordersRouter.get(
     const review = reviewRows[0];
     const complaint = complaintRows[0];
     const sellerRow = sellerRows[0];
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
     const complaintThread = complaint
       ? await db
           .select({
@@ -290,6 +307,19 @@ ordersRouter.get(
           .where(eq(complaintMessages.complaintId, complaint.id))
           .orderBy(asc(complaintMessages.createdAt))
       : [];
+
+    const proofsFresh = await Promise.all(
+      (proofs as { id: string; imageUrl: string; status: string }[]).map(async (p) => ({
+        ...p,
+        imageUrl: await resignPrivateUrl(supabaseAdmin, p.imageUrl),
+      })),
+    );
+    const complaintFresh = complaint
+      ? {
+          ...complaint,
+          evidenceUrls: await resignPrivateUrls(supabaseAdmin, complaint.evidenceUrls ?? []),
+        }
+      : null;
 
     res.json({
       data: {
@@ -321,9 +351,9 @@ ordersRouter.get(
           ? { shopName: sellerRow.shopName, phone: sellerRow.phone, fullName: sellerRow.fullName }
           : null,
         history,
-        proofs,
+        proofs: proofsFresh,
         review: review ?? null,
-        complaint: complaint ?? null,
+        complaint: complaintFresh,
         complaintMessages: complaintThread,
       },
     });
@@ -552,7 +582,7 @@ ordersRouter.post(
   asyncHandler(async (req, res) => {
     const orderId = paramId(req);
     const { imageUrl: raw } = z.object({ imageUrl: z.string().min(5) }).parse(req.body);
-    const imageUrl = assertUploadedImageUrl(raw, 'Ảnh biên lai');
+    const imageUrl = assertPrivateProofUrl(raw, 'Ảnh biên lai');
     if (!imageUrl) throw new AppError(400, 'Ảnh biên lai bắt buộc', 'INVALID_IMAGE_URL');
     const db: Database = req.app.locals.db;
     const { order } = await loadOrderForActor(db, orderId, req.user!);
@@ -731,7 +761,7 @@ ordersRouter.post(
         evidenceUrls: z.array(z.string()).optional(),
       })
       .parse(req.body);
-    const evidenceUrls = assertUploadedImageUrls(body.evidenceUrls, 'Ảnh bằng chứng');
+    const evidenceUrls = assertPrivateProofUrls(body.evidenceUrls, 'Ảnh bằng chứng');
     const db = req.app.locals.db;
     const orderId = paramId(req);
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);

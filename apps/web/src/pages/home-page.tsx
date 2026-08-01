@@ -264,6 +264,7 @@ export function ProfilePage() {
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [emailPassword, setEmailPassword] = useState('');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -292,9 +293,13 @@ export function ProfilePage() {
     setFullName(user?.fullName ?? '');
     setPhone(user?.phone ?? '');
     setEmail(user?.email ?? '');
+    setEmailPassword('');
     setProfileMsg('');
     setEditingProfile(false);
   };
+
+  const emailChanged =
+    email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase();
 
   const profileMut = useMutation({
     mutationFn: () =>
@@ -302,11 +307,13 @@ export function ProfilePage() {
         fullName: fullName.trim() || undefined,
         phone: phone.trim() || null,
         email: email.trim().toLowerCase() || undefined,
+        ...(emailChanged ? { currentPassword: emailPassword } : {}),
       }),
     onSuccess: (res) => {
       // refetch() của auth-context đã kéo lại /me — không cần invalidate thêm
       refetch();
       setEditingProfile(false);
+      setEmailPassword('');
       setProfileMsg(res.message ?? 'Đã lưu hồ sơ');
       toast(res.message ?? 'Đã cập nhật thông tin cá nhân', 'success');
     },
@@ -418,6 +425,15 @@ export function ProfilePage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@gmail.com"
             />
+            {emailChanged && (
+              <Input
+                label="Mật khẩu hiện tại (để đổi email)"
+                type="password"
+                autoComplete="current-password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+              />
+            )}
             <p className="text-xs text-[var(--color-muted)]">
               Đổi email sẽ dùng email mới để đăng nhập
               {user?.emailVerified ? '' : ' · email hiện tại chưa xác minh'}.
@@ -428,7 +444,11 @@ export function ProfilePage() {
                 size="sm"
                 loading={profileMut.isPending}
                 onClick={() => profileMut.mutate()}
-                disabled={!fullName.trim() || !email.trim()}
+                disabled={
+                  !fullName.trim() ||
+                  !email.trim() ||
+                  (emailChanged && !emailPassword)
+                }
               >
                 Lưu
               </Button>

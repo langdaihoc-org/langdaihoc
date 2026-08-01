@@ -26,7 +26,14 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
       <Link to={href} className="block">
         <div className="relative flex h-36 items-end sm:h-44">
           {imageUrl ? (
-            <img src={imageUrl} alt="" className="absolute inset-0 size-full object-cover" />
+            <img
+              src={imageUrl}
+              alt=""
+              className="absolute inset-0 size-full object-cover"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-brand-orange to-brand-orange-dark" />
           )}

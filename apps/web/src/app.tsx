@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ComponentType } from 'react';
+import { Suspense, lazy, useEffect, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/contexts/auth-context';
@@ -9,22 +9,11 @@ import { LoginPage, CheckEmailPage, VerifyEmailPage } from '@/pages/auth/login-p
 import { BuyerRegisterPage } from '@/pages/auth/register-buyer-page';
 import { SellerRegisterPage } from '@/pages/auth/register-seller-page';
 import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/password-pages';
-import { FoodPage, LaundryPage, CartPage } from '@/pages/buyer/food-cart-pages';
-import { StorePage } from '@/pages/buyer/store-page';
-import {
-  OrdersPage,
-  OrderDetailPage,
-  CheckoutPage,
-  LaundryBookPage,
-} from '@/pages/buyer/orders-pages';
-import { ShipProxyPage, ShipProxyBookPage } from '@/pages/buyer/ship-proxy-pages';
-import { ExplorePage } from '@/pages/buyer/explore-page';
-import { PostDetailPage } from '@/pages/buyer/post-detail-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
-/** Lazy-load khu seller/admin — giảm bundle trang buyer. */
+/** Lazy-load theo named export — giảm bundle trang buyer. */
 function lazyNamed<T extends Record<string, ComponentType>>(
   loader: () => Promise<T>,
   name: keyof T & string,
@@ -34,6 +23,19 @@ function lazyNamed<T extends Record<string, ComponentType>>(
     return { default: mod[name] as ComponentType };
   });
 }
+
+const FoodPage = lazyNamed(() => import('@/pages/buyer/food-cart-pages'), 'FoodPage');
+const LaundryPage = lazyNamed(() => import('@/pages/buyer/food-cart-pages'), 'LaundryPage');
+const CartPage = lazyNamed(() => import('@/pages/buyer/food-cart-pages'), 'CartPage');
+const StorePage = lazyNamed(() => import('@/pages/buyer/store-page'), 'StorePage');
+const OrdersPage = lazyNamed(() => import('@/pages/buyer/orders-pages'), 'OrdersPage');
+const OrderDetailPage = lazyNamed(() => import('@/pages/buyer/orders-pages'), 'OrderDetailPage');
+const CheckoutPage = lazyNamed(() => import('@/pages/buyer/orders-pages'), 'CheckoutPage');
+const LaundryBookPage = lazyNamed(() => import('@/pages/buyer/orders-pages'), 'LaundryBookPage');
+const ShipProxyPage = lazyNamed(() => import('@/pages/buyer/ship-proxy-pages'), 'ShipProxyPage');
+const ShipProxyBookPage = lazyNamed(() => import('@/pages/buyer/ship-proxy-pages'), 'ShipProxyBookPage');
+const ExplorePage = lazyNamed(() => import('@/pages/buyer/explore-page'), 'ExplorePage');
+const PostDetailPage = lazyNamed(() => import('@/pages/buyer/post-detail-page'), 'PostDetailPage');
 
 const SellerLayout = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerLayout');
 const SellerDashboard = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerDashboard');
@@ -83,6 +85,11 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
+  useEffect(() => {
+    // Render thành công → xoá cờ auto-reload để lần chunk-error kế tiếp (deploy sau) vẫn tự hồi phục.
+    sessionStorage.removeItem('langdaihoc:chunk-reload');
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

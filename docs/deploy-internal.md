@@ -62,11 +62,18 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 DATABASE_URL=
+# Cloudflare R2 — ảnh public (menu/feed/banner). Proof CK vẫn trên Supabase.
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=langdaihoc-media
+R2_PUBLIC_BASE_URL=https://pub-xxxxx.r2.dev
 ```
 
 Ghi chú:
 
-- `DEMO_MODE=false` mặc định (bắt verify email). Chỉ bật `true` nếu team test nội bộ **chấp nhận** bỏ verify.
+- `DEMO_MODE=false` mặc định (bắt verify email).
+- **Không** bật `DEMO_MODE=true` khi `NODE_ENV=production` — API **fail boot**. Test bỏ verify → staging `NODE_ENV=development` hoặc project riêng.
 - `COOKIE_SAMESITE=none` cần khi web (Vercel) ≠ API (Railway). API có kiểm tra Origin trên request mutating.
 - Health: `https://<railway>/api/health`
 
@@ -93,12 +100,59 @@ Health:
 
 ---
 
-## E. Smoke
+## E. Cloudflare R2 (ảnh public)
 
-Đăng ký / đăng nhập trên URL Vercel. Nếu session không giữ: kiểm tra `COOKIE_SAMESITE=none`, `COOKIE_SECURE=true`, `FRONTEND_URL` khớp.
+1. Cloudflare → R2 → Create bucket (vd. `langdaihoc-media`)
+2. Settings bucket → **Public access** (r2.dev) hoặc gắn custom domain
+3. Manage R2 API Tokens → Create API token (Object Read & Write, scope bucket)
+4. Điền 5 biến `R2_*` trên Railway (xem mục C)
+5. Object key: `{bucket}/{path}` — vd. `food-images/seller/abc.jpg`
+6. URL: `{R2_PUBLIC_BASE_URL}/food-images/seller/abc.jpg`
+
+Không cấu hình R2 → API fallback Supabase Storage (có warn trên production).  
+`payment-proofs` **không** lên R2 (private signed URL trên Supabase).
+
+---
+
+## F. Resend (email Auth — verify / quên mật khẩu)
+
+Supabase built-in SMTP ~2 mail/giờ — production cần Resend (SMTP).
+
+1. [Resend](https://resend.com) → API Keys → Create (`re_…`)
+2. Domains → Add `langdaihoc.com.vn` (hoặc subdomain `mail.`) → thêm DNS (SPF/DKIM) → Wait Verified  
+   - Chưa có domain: tạm gửi từ `beth.t@example.com` **chỉ tới email đã verify trên Resend** (test nội bộ)
+3. Supabase → Authentication → Emails → **SMTP Settings** → Enable Custom SMTP:
+
+| Field | Value |
+|-------|--------|
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | API key `re_…` |
+| Sender email | `noreply@langdaihoc.com.vn` (domain verified) |
+| Sender name | `Làng Đại Học` |
+
+4. Authentication → **Rate Limits** — nâng email rate (mặc định custom SMTP ~30/h, nên ≥ 100–200/h khi mở bán)
+
+Hoặc chạy (cần [Supabase access token](https://supabase.com/dashboard/account/tokens) + `RESEND_API_KEY`):
+
+```bash
+$env:SUPABASE_ACCESS_TOKEN="sbp_..."
+$env:RESEND_API_KEY="re_..."
+$env:RESEND_FROM_EMAIL="noreply@langdaihoc.com.vn"
+node scripts/setup-resend-smtp.mjs
+```
+
+---
+
+## G. Smoke
+
+Đăng ký / đăng nhập trên URL Vercel. Nếu session không giữ: kiểm tra `COOKIE_SAMESITE=none`, `COOKIE_SECURE=true`, `FRONTEND_URL` khớp.  
+Upload ảnh món/feed → URL phải trỏ `R2_PUBLIC_BASE_URL` (khi đã set R2).  
+Đăng ký user mới → nhận mail verify qua Resend (check Resend → Logs).
 
 ---
 
 ## Chi phí
 
-Hobby + Railway + Supabase Free: thường khoảng **$0–15**/tháng tùy Railway.
+Hobby + Railway + Supabase Free (+ R2 free + Resend free ~100 mail/ngày): thường khoảng **$0–15**/tháng tùy Railway.

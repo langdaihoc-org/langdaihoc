@@ -49,3 +49,4 @@ supabase/.branches/
 # Misc local scratch
 _spec_extract.txt
 code-completion/
+.vercel

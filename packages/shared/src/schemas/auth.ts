@@ -160,6 +160,8 @@ export const changePasswordSchema = z
 export const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
   email: z.string().trim().email('Email không hợp lệ').toLowerCase().optional(),
+  /** Bắt buộc khi đổi email (kiểm tra thêm ở API). */
+  currentPassword: z.string().min(1).optional(),
   phone: z
     .union([phoneField, z.literal(''), z.null()])
     .optional()

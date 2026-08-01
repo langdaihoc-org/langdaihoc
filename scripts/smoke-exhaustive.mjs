@@ -1011,6 +1011,17 @@ async function main() {
       body: { imageUrl: 'https://evil.example/storage/v1/object/public/payment-proofs/x.png' },
     });
     assert(bad.status === 400 && bad.json.error?.code === 'INVALID_IMAGE_URL', JSON.stringify(bad.json));
+    const badPublic = await req(`/api/orders/${oid}/payment-proof`, {
+      method: 'POST',
+      cookie: buyer.cookie,
+      body: {
+        imageUrl: 'https://pub-a5053a1f36ec4957936716c7f5e26ff2.r2.dev/food-images/x.png',
+      },
+    });
+    assert(
+      badPublic.status === 400 && badPublic.json.error?.code === 'INVALID_IMAGE_URL',
+      JSON.stringify(badPublic.json),
+    );
     await patchStatus(sellerFood.cookie, oid, 'rejected');
   });
 

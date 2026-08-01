@@ -185,7 +185,12 @@ export const buyerApi = {
     orderId: string;
   }) =>
     api<{ data: { url: string } }>('/api/buyer/upload', { method: 'POST', body: JSON.stringify(body) }),
-  updateProfile: (body: { fullName?: string; phone?: string | null; email?: string }) =>
+  updateProfile: (body: {
+    fullName?: string;
+    phone?: string | null;
+    email?: string;
+    currentPassword?: string;
+  }) =>
     api<{ data: unknown; emailChanged?: boolean; message?: string }>('/api/buyer/profile', {
       method: 'PATCH',
       body: JSON.stringify(body),

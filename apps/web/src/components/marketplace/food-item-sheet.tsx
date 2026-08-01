@@ -148,6 +148,8 @@ function FoodGalleryLightbox({
           alt={alt}
           className="max-h-full max-w-full select-none object-contain"
           draggable={false}
+          loading="lazy"
+          decoding="async"
         />
       </div>
 

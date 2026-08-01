@@ -8,7 +8,9 @@ import {
   checkoutIdempotencyKeys,
   paymentProofs,
 } from '@langdaihoc/database';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { scheduleDailyAtMidnight } from './daily-schedule.js';
+import { removeStorageObjects } from '../lib/storage.js';
 
 /** Thông báo inbox — 7 ngày */
 const NOTIFICATIONS_DAYS = 7;
@@ -31,7 +33,7 @@ export function retentionCutoff(days = ORDER_HISTORY_DAYS) {
 }
 
 /** Purge ephemeral data. Orders/reviews/complaints/master data không bị xóa. */
-export async function runDataRetention(db: Database) {
+export async function runDataRetention(db: Database, supabase?: SupabaseClient) {
   // 1. Thông báo — 7 ngày
   const deletedNotifications = await db
     .delete(notifications)
@@ -62,15 +64,28 @@ export async function runDataRetention(db: Database) {
     );
 
   let deletedProofs = 0;
+  let deletedProofFiles = 0;
   let deletedHistory = 0;
 
   if (settled.length > 0) {
     const orderIds = settled.map((r) => r.id);
 
-    // 4a. Biên lai — xóa hết theo đơn đã settled
+    // 4a. Biên lai — xóa file storage rồi xóa row
     const chunkSize = 500;
     for (let i = 0; i < orderIds.length; i += chunkSize) {
       const chunk = orderIds.slice(i, i + chunkSize);
+      const rows = await db
+        .select({ id: paymentProofs.id, imageUrl: paymentProofs.imageUrl })
+        .from(paymentProofs)
+        .where(inArray(paymentProofs.orderId, chunk));
+
+      if (supabase && rows.length) {
+        deletedProofFiles += await removeStorageObjects(
+          supabase,
+          rows.map((r) => r.imageUrl),
+        );
+      }
+
       const removed = await db
         .delete(paymentProofs)
         .where(inArray(paymentProofs.orderId, chunk))
@@ -117,13 +132,14 @@ export async function runDataRetention(db: Database) {
     idempotencyKeys: deletedIdempotency.length,
     auditLogs: deletedAudit.length,
     paymentProofs: deletedProofs,
+    paymentProofFiles: deletedProofFiles,
     orderStatusHistory: deletedHistory,
   };
 }
 
-export function scheduleDataRetention(db: Database) {
+export function scheduleDataRetention(db: Database, supabase?: SupabaseClient) {
   const run = async () => {
-    const result = await runDataRetention(db);
+    const result = await runDataRetention(db, supabase);
     console.log('[retention]', JSON.stringify(result));
   };
 

@@ -4,6 +4,14 @@ import { Button } from '@/components/ui/button';
 type Props = { children: ReactNode };
 type State = { hasError: boolean };
 
+const CHUNK_ERROR_RE = /fetch dynamically imported module|importing a module script failed|loading chunk/i;
+const RELOAD_FLAG = 'langdaihoc:chunk-reload';
+
+/** Sau khi deploy, hash chunk cũ hết hiệu lực → lazy import() lỗi. Tự reload 1 lần thay vì trắng trang. */
+function isChunkLoadError(error: Error): boolean {
+  return CHUNK_ERROR_RE.test(error.message ?? '');
+}
+
 /** Bắt lỗi render — tránh trắng toàn trang. */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
@@ -14,6 +22,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
+    if (isChunkLoadError(error) && !sessionStorage.getItem(RELOAD_FLAG)) {
+      sessionStorage.setItem(RELOAD_FLAG, '1');
+      window.location.reload();
+    }
   }
 
   render() {

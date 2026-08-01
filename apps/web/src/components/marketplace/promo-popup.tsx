@@ -106,7 +106,13 @@ export function PromoPopup({ banners }: { banners?: Banner[] | null }) {
 
           <div className="relative flex h-52 items-end bg-gradient-to-br from-brand-orange to-brand-orange-dark p-5 text-white">
             {imageUrl && (
-              <img src={imageUrl} alt="" className="absolute inset-0 size-full object-cover" />
+              <img
+                src={imageUrl}
+                alt=""
+                className="absolute inset-0 size-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
             )}
             <div className="absolute inset-0 bg-black/40" />
             <div className="relative z-10">
