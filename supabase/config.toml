@@ -1,0 +1,35 @@
+# Forwards to Supabase CLI local stack. Run: supabase start (requires Docker)
+project_id = "langdaihoc"
+
+[api]
+enabled = true
+port = 55321
+
+[db]
+port = 55322
+
+[studio]
+enabled = true
+port = 55323
+
+[inbucket]
+enabled = true
+port = 55324
+
+[analytics]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/auth/verify-email", "http://localhost:5173/auth/reset-password"]
+# Access token: 15 phút (khớp server)
+jwt_expiry = 900
+# Refresh token: hết hạn sau 30 ngày không dùng ("nhớ đăng nhập")
+# Session thường (không nhớ) chỉ tồn tại 1 ngày do cookie maxAge ở server tự hết
+refresh_token_rotation_enabled = true
+security_refresh_token_reuse_interval = 10
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true

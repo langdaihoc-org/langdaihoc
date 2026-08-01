@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Env & secrets (giữ lại *.example)
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Build / cache
+dist/
+build/
+out/
+.turbo/
+.vite/
+*.tsbuildinfo
+
+# Logs & debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+dev-server.log
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+.nyc_output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Archives / local dumps
+*.zip
+*.tar
+*.tar.gz
+
+# Misc local scratch
+_spec_extract.txt
+code-completion/

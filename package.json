@@ -1,0 +1,30 @@
+{
+  "name": "langdaihoc",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @langdaihoc/web --filter @langdaihoc/api dev",
+    "dev:web": "pnpm --filter @langdaihoc/web dev",
+    "dev:api": "pnpm --filter @langdaihoc/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "verify": "pnpm typecheck && pnpm test:unit && pnpm build",
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm --filter @langdaihoc/shared test",
+    "test:e2e": "pnpm --filter @langdaihoc/web test:e2e",
+    "test:smoke": "node scripts/reset-demo-state.mjs && node scripts/smoke-all.mjs",
+    "reset:demo": "node scripts/reset-demo-state.mjs",
+    "setup:local": "node scripts/setup-local.mjs",
+    "preview": "pnpm --filter @langdaihoc/web preview",
+    "db:generate": "pnpm --filter @langdaihoc/database generate",
+    "db:migrate": "pnpm --filter @langdaihoc/database migrate",
+    "db:seed": "pnpm --filter @langdaihoc/database seed",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
