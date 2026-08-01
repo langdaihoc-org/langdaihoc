@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @langdaihoc/api build"
 
 [deploy]
-startCommand = "pnpm --filter @langdaihoc/api start:dist"
+startCommand = "pnpm --filter @langdaihoc/api start"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 100
 restartPolicyType = "on_failure"
