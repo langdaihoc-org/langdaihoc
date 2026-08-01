@@ -30,14 +30,14 @@ const HIDDEN_ORDER = new Set(['cancelled', 'rejected', 'needs_support']);
 
 export function HomePage() {
   const { isAuthenticated } = useAuth();
-  const { data: sellers, isLoading: loadingSellers } = useQuery({ queryKey: ['sellers', 'food'], queryFn: () => catalogApi.sellers('food') });
-  const { data: food, isLoading: loadingFood, isError: errFood, refetch: refetchFood } = useQuery({ queryKey: ['food'], queryFn: () => catalogApi.food() });
-  const { data: laundry, isLoading: loadingLaundry } = useQuery({ queryKey: ['laundry'], queryFn: () => catalogApi.laundry() });
-  const { data: categories } = useQuery({ queryKey: ['categories', 'food'], queryFn: () => catalogApi.categories('food') });
-  const { data: banners } = useQuery({ queryKey: ['banners', 'strip'], queryFn: () => catalogApi.banners({ popup: false }) });
-  const { data: popupBanners } = useQuery({
-    queryKey: ['banners', 'popup'],
-    queryFn: () => catalogApi.banners({ popup: true }),
+  const {
+    data: home,
+    isLoading: loadingHome,
+    isError: errHome,
+    refetch: refetchHome,
+  } = useQuery({
+    queryKey: ['catalog', 'home'],
+    queryFn: () => catalogApi.home(),
     staleTime: 60_000,
   });
   const { data: ordersData } = useQuery({
@@ -48,15 +48,23 @@ export function HomePage() {
     refetchOnWindowFocus: true,
   });
 
-  const featured = (food?.data ?? []).slice(0, 8);
-  const topStores = (sellers?.data ?? []).slice(0, 4);
-  const laundryFeatured = (laundry?.data ?? []).slice(0, 6);
-  const stripBanners = banners?.data ?? [];
+  const homeData = home?.data;
+  const featured = (homeData?.food ?? []).slice(0, 8);
+  const topStores = (homeData?.sellers ?? []).slice(0, 4);
+  const laundryFeatured = (homeData?.laundry ?? []).slice(0, 6);
+  const categories = homeData?.categories ?? [];
+  const stripBanners = homeData?.banners ?? [];
+  const popupBanners = homeData?.popupBanners ?? [];
+  const loadingFood = loadingHome;
+  const loadingLaundry = loadingHome;
+  const loadingSellers = loadingHome;
+  const errFood = errHome;
+  const refetchFood = refetchHome;
   const activeOrders = (ordersData?.data ?? []).filter((o) => ACTIVE_ORDER.has(o.status) && !HIDDEN_ORDER.has(o.status)).slice(0, 3);
 
   return (
     <div className="space-y-6">
-      <PromoPopup banners={popupBanners?.data} />
+      <PromoPopup banners={popupBanners} />
       <HomeHeroSearch />
 
       <BannerCarousel banners={stripBanners} />
@@ -147,7 +155,7 @@ export function HomePage() {
       <section>
         <h2 className="mb-3 text-lg font-bold">Danh mục</h2>
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {(categories?.data ?? []).map((c) => (
+          {categories.map((c) => (
             <Link
               key={c.id}
               to={`/food?category=${c.slug}`}

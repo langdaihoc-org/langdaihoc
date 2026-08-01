@@ -66,6 +66,17 @@ export const authApi = {
 };
 
 export const catalogApi = {
+  home: () =>
+    api<{
+      data: {
+        food: FoodItem[];
+        sellers: Seller[];
+        laundry: LaundryService[];
+        categories: Category[];
+        banners: Banner[];
+        popupBanners: Banner[];
+      };
+    }>('/api/catalog/home'),
   banners: (opts?: { popup?: boolean }) => {
     const q =
       opts?.popup === true ? '?popup=1' : opts?.popup === false ? '?popup=0' : '';

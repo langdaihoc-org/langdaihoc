@@ -16,6 +16,43 @@ import {
 
 export const catalogRouter = Router();
 
+/** Một round-trip cho trang chủ — giảm latency cold/cross-region. */
+catalogRouter.get(
+  '/home',
+  asyncHandler(async (req, res) => {
+    const db = req.app.locals.db;
+    const [foodResult, foodSellers, laundry, categoryRows, allBanners] = await Promise.all([
+      getFoodCatalog(db, { limit: 8, page: 1 }),
+      getApprovedSellers(db, 'food'),
+      getLaundryCatalog(db, undefined, { limit: 6 }),
+      db
+        .select()
+        .from(categories)
+        .where(and(eq(categories.isActive, true), eq(categories.type, 'food'))),
+      getActiveBanners(db),
+    ]);
+
+    const sellerIds = foodSellers.map((s) => s.id);
+    const ratings = await getSellerRatingsMap(db, sellerIds);
+    const sellers = foodSellers.slice(0, 4).map((s) => ({
+      ...s,
+      rating: ratings.get(s.id) ?? { average: 0, count: 0 },
+    }));
+
+    setPublicCatalogCache(res, 60);
+    res.json({
+      data: {
+        food: foodResult.data,
+        sellers,
+        laundry,
+        categories: categoryRows,
+        banners: allBanners.filter((b) => !b.isPopup),
+        popupBanners: allBanners.filter((b) => b.isPopup),
+      },
+    });
+  }),
+);
+
 catalogRouter.get(
   '/banners',
   asyncHandler(async (req, res) => {
@@ -74,7 +111,7 @@ catalogRouter.get(
       ...s,
       rating: ratings.get(s.id) ?? { average: 0, count: 0 },
     }));
-    setPublicCatalogCache(res, 30);
+    setPublicCatalogCache(res, 60);
     res.json({ data: withRating });
   }),
 );
@@ -94,8 +131,8 @@ catalogRouter.get(
       page,
       limit,
     });
-    // Search/q đổi nhanh — cache ngắn hơn; listing thường thì 30s
-    setPublicCatalogCache(res, q ? 15 : 30);
+    // Search/q đổi nhanh — cache ngắn hơn; listing thường thì 60s
+    setPublicCatalogCache(res, q ? 15 : 60);
     res.json(result);
   }),
 );
@@ -105,7 +142,7 @@ catalogRouter.get(
   asyncHandler(async (req, res) => {
     const sellerId = req.query.sellerId as string | undefined;
     const data = await getLaundryCatalog(req.app.locals.db, sellerId);
-    setPublicCatalogCache(res, 30);
+    setPublicCatalogCache(res, 60);
     res.json({ data });
   }),
 );
