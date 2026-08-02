@@ -254,6 +254,21 @@ authRouter.post(
       password: input.password,
     });
 
+    // Supabase (Confirm email bật): chưa xác minh → lỗi riêng, không nhầm “sai mật khẩu”.
+    const authErrMsg = (error?.message ?? '').toLowerCase();
+    if (
+      error &&
+      (authErrMsg.includes('email not confirmed') ||
+        authErrMsg.includes('email_not_confirmed') ||
+        error.code === 'email_not_confirmed')
+    ) {
+      throw new AppError(
+        403,
+        'Email chưa được xác minh. Vui lòng kiểm tra hộp thư (và spam) rồi bấm liên kết xác minh.',
+        'EMAIL_NOT_VERIFIED',
+      );
+    }
+
     if (error || !data.session || !data.user) {
       throw new AppError(401, 'Email/SĐT hoặc mật khẩu không đúng', 'INVALID_CREDENTIALS');
     }
@@ -274,7 +289,7 @@ authRouter.post(
 
     const emailVerified = Boolean(data.user.email_confirmed_at) || DEMO_MODE;
 
-    // Prod: chưa xác minh email → không tạo phiên đăng nhập.
+    // Prod: Auth chưa xác minh → không tạo phiên.
     if (!emailVerified) {
       const supabaseAdmin = req.app.locals.supabaseAdmin;
       await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global').catch(() => undefined);
@@ -286,6 +301,7 @@ authRouter.post(
       );
     }
 
+    // Đã xác minh Auth — đồng bộ profile pending → active nếu cần.
     await syncProfileStatusOnLogin(db, data.user.id, emailVerified);
 
     // sync có thể đã nâng status pending → active; đọc lại để payload khớp DB

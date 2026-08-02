@@ -102,19 +102,16 @@ async function sendViaResendApi(to: string, actionLink: string): Promise<boolean
   return true;
 }
 
-/** Gửi mail xác minh: ưu tiên Supabase resend, fallback generateLink + Resend API. */
+/**
+ * Gửi mail xác minh.
+ * 1) generateLink + Resend API (ổn định khi có RESEND_*)
+ * 2) fallback Supabase auth.resend (cần SMTP trên dashboard)
+ */
 export async function sendSignupVerificationEmail(
   supabaseAdmin: SupabaseClient,
   email: string,
   emailRedirectTo: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error: resendErr } = await createSupabaseAnon().auth.resend({
-    type: 'signup',
-    email,
-    options: { emailRedirectTo },
-  });
-  if (!resendErr) return { ok: true };
-
   const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email,
@@ -126,9 +123,22 @@ export async function sendSignupVerificationEmail(
     if (sent) return { ok: true };
   }
 
+  const { error: resendErr } = await createSupabaseAnon().auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo },
+  });
+  if (!resendErr) return { ok: true };
+
+  const hasResendKey = Boolean(process.env.RESEND_API_KEY?.trim() && process.env.RESEND_FROM_EMAIL?.trim());
   return {
     ok: false,
-    error: `resend=${formatAuthError(resendErr)}; link=${formatAuthError(linkErr)}; hasLink=${Boolean(actionLink)}`,
+    error: [
+      `hasLink=${Boolean(actionLink)}`,
+      `linkErr=${formatAuthError(linkErr)}`,
+      `resendApiConfigured=${hasResendKey}`,
+      `supabaseResend=${formatAuthError(resendErr)}`,
+    ].join('; '),
   };
 }
 
