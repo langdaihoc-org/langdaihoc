@@ -33,6 +33,7 @@ import {
   ensureUserRole,
   roleHomePath,
   createAuthUserForRegister,
+  sendSignupVerificationEmail,
   resendSignupConfirmation,
   formatAuthError,
 } from './service.js';
@@ -129,6 +130,24 @@ authRouter.post(
       throw e;
     }
 
+    if (!DEMO_MODE) {
+      const mail = await sendSignupVerificationEmail(
+        supabaseAdmin,
+        input.email,
+        `${frontendUrl}/auth/verify-email`,
+      );
+      if (!mail.ok) {
+        console.error('[auth] buyer register mail failed', input.email, mail.error);
+        res.status(201).json({
+          message:
+            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+          redirectTo: '/auth/check-email',
+          emailSendFailed: true,
+        });
+        return;
+      }
+    }
+
     res.status(201).json({
       message: DEMO_MODE
         ? 'Đăng ký thành công. Bạn có thể đăng nhập ngay.'
@@ -188,6 +207,24 @@ authRouter.post(
       throw e;
     }
 
+    if (!DEMO_MODE) {
+      const mail = await sendSignupVerificationEmail(
+        supabaseAdmin,
+        input.email,
+        `${frontendUrl}/auth/verify-email`,
+      );
+      if (!mail.ok) {
+        console.error('[auth] seller register mail failed', input.email, mail.error);
+        res.status(201).json({
+          message:
+            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+          redirectTo: '/auth/check-email',
+          emailSendFailed: true,
+        });
+        return;
+      }
+    }
+
     res.status(201).json({
       message: DEMO_MODE
         ? 'Đăng ký đối tác thành công. Bạn có thể đăng nhập — cửa hàng chờ admin duyệt.'
@@ -236,6 +273,19 @@ authRouter.post(
     }
 
     const emailVerified = Boolean(data.user.email_confirmed_at) || DEMO_MODE;
+
+    // Prod: chưa xác minh email → không tạo phiên đăng nhập.
+    if (!emailVerified) {
+      const supabaseAdmin = req.app.locals.supabaseAdmin;
+      await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global').catch(() => undefined);
+      clearSessionCookies(res);
+      throw new AppError(
+        403,
+        'Email chưa được xác minh. Vui lòng kiểm tra hộp thư (và spam) rồi bấm liên kết xác minh.',
+        'EMAIL_NOT_VERIFIED',
+      );
+    }
+
     await syncProfileStatusOnLogin(db, data.user.id, emailVerified);
 
     // sync có thể đã nâng status pending → active; đọc lại để payload khớp DB
@@ -254,7 +304,7 @@ authRouter.post(
     res.json({
       user,
       redirectTo: roleHomePath(role),
-      requiresEmailVerification: !emailVerified,
+      requiresEmailVerification: false,
     });
   }),
 );
@@ -460,16 +510,18 @@ authRouter.post(
     }
 
     const db = req.app.locals.db;
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
     const identifier = raw.includes('@') ? raw.toLowerCase() : normalizePhoneVN(raw) || raw;
     const email = await resolveAuthEmail(db, identifier);
     if (email) {
       const frontendUrl = getFrontendUrl();
-      const { error: mailError } = await resendSignupConfirmation(
+      const mail = await resendSignupConfirmation(
+        supabaseAdmin,
         email,
         `${frontendUrl}/auth/verify-email`,
       );
-      if (mailError) {
-        console.error('[auth] resend-verification failed', email, formatAuthError(mailError));
+      if (!mail.ok) {
+        console.error('[auth] resend-verification failed', email, mail.error);
       }
     }
 

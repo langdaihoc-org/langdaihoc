@@ -83,6 +83,10 @@ export function LoginPage() {
       navigate(dest, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.code === 'EMAIL_NOT_VERIFIED') {
+          setNeedsVerify(true);
+          setEmailForResend(getValues('identifier') ?? '');
+        }
         setError(err.message);
       } else {
         setError('Đăng nhập thất bại');

@@ -36,9 +36,9 @@ export function formatAuthError(err: unknown): string {
 }
 
 /**
- * Tạo user Auth.
- * - DEMO: admin.createUser + email_confirm (không gửi mail).
- * - Prod: anon.signUp — Supabase mailer tự gửi xác minh (createUser+resend thường fail).
+ * Tạo user Auth chưa xác minh email (trừ DEMO).
+ * Prod: admin.createUser(email_confirm:false) — tránh signUp auto-confirm khi
+ * dashboard tắt "Confirm email". Mail gửi riêng qua sendSignupVerificationEmail.
  */
 export async function createAuthUserForRegister(opts: {
   email: string;
@@ -48,49 +48,97 @@ export async function createAuthUserForRegister(opts: {
   emailRedirectTo: string;
   supabaseAdmin: SupabaseClient;
 }): Promise<{ userId: string }> {
-  if (DEMO_MODE) {
-    const { data, error } = await opts.supabaseAdmin.auth.admin.createUser({
-      email: opts.email,
-      password: opts.password,
-      email_confirm: true,
-      user_metadata: { full_name: opts.fullName, role: opts.role },
-    });
-    if (error || !data.user) {
-      throw new AppError(400, error?.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
-    }
-    return { userId: data.user.id };
-  }
-
-  const anon = createSupabaseAnon();
-  const { data, error } = await anon.auth.signUp({
+  const { data, error } = await opts.supabaseAdmin.auth.admin.createUser({
     email: opts.email,
     password: opts.password,
-    options: {
-      emailRedirectTo: opts.emailRedirectTo,
-      data: { full_name: opts.fullName, role: opts.role },
-    },
+    email_confirm: DEMO_MODE,
+    user_metadata: { full_name: opts.fullName, role: opts.role },
   });
-  if (error) {
-    throw new AppError(400, error.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
+  if (error || !data.user) {
+    throw new AppError(400, error?.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
   }
-  if (!data.user) {
-    throw new AppError(400, 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
+
+  // Phòng hờ dashboard/SMTP auto-confirm: ép lại chưa xác minh trên prod.
+  if (!DEMO_MODE && data.user.email_confirmed_at) {
+    const { error: unconfirmErr } = await opts.supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+      email_confirm: false,
+    });
+    if (unconfirmErr) {
+      console.error('[auth] failed to unconfirm auto-verified user', data.user.id, formatAuthError(unconfirmErr));
+    }
   }
-  // Email đã tồn tại: Supabase có thể trả user với identities rỗng (anti-enumeration).
-  if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-    throw new AppError(409, 'Email đã được sử dụng', 'EMAIL_EXISTS');
-  }
+
   return { userId: data.user.id };
 }
 
-/** Gửi lại mail xác minh — dùng anon client (đúng API public resend). */
-export async function resendSignupConfirmation(email: string, emailRedirectTo: string) {
-  const anon = createSupabaseAnon();
-  return anon.auth.resend({
+async function sendViaResendApi(to: string, actionLink: string): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
+  if (!apiKey || !from) return false;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: process.env.RESEND_SENDER_NAME?.trim()
+        ? `${process.env.RESEND_SENDER_NAME.trim()} <${from}>`
+        : from,
+      to: [to],
+      subject: 'Xác minh email — langdaihoc',
+      html: `<p>Chào bạn,</p>
+<p>Nhấn liên kết dưới đây để xác minh tài khoản langdaihoc:</p>
+<p><a href="${actionLink}">${actionLink}</a></p>
+<p>Nếu bạn không đăng ký, hãy bỏ qua email này.</p>`,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error('[auth] Resend API failed', res.status, body);
+    return false;
+  }
+  return true;
+}
+
+/** Gửi mail xác minh: ưu tiên Supabase resend, fallback generateLink + Resend API. */
+export async function sendSignupVerificationEmail(
+  supabaseAdmin: SupabaseClient,
+  email: string,
+  emailRedirectTo: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error: resendErr } = await createSupabaseAnon().auth.resend({
     type: 'signup',
     email,
     options: { emailRedirectTo },
   });
+  if (!resendErr) return { ok: true };
+
+  const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: emailRedirectTo },
+  });
+  const actionLink = linkData?.properties?.action_link;
+  if (!linkErr && actionLink) {
+    const sent = await sendViaResendApi(email, actionLink);
+    if (sent) return { ok: true };
+  }
+
+  return {
+    ok: false,
+    error: `resend=${formatAuthError(resendErr)}; link=${formatAuthError(linkErr)}; hasLink=${Boolean(actionLink)}`,
+  };
+}
+
+/** Gửi lại mail xác minh — cùng pipeline với đăng ký. */
+export async function resendSignupConfirmation(
+  supabaseAdmin: SupabaseClient,
+  email: string,
+  emailRedirectTo: string,
+) {
+  return sendSignupVerificationEmail(supabaseAdmin, email, emailRedirectTo);
 }
 
 export function validateBuyerEmail(email: string) {
