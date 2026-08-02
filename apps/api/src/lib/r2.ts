@@ -1,6 +1,6 @@
 /** Cloudflare R2 (S3-compatible) — ảnh public. */
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 export type R2Config = {
   client: S3Client;
@@ -76,4 +76,39 @@ export async function putR2Object(
 
   // Key đã sanitize (ASCII); không encode để khớp object key trên R2.
   return `${cfg.publicBaseUrl}/${key}`;
+}
+
+/** Best-effort delete — không throw nếu object không tồn tại. */
+export async function deleteR2Object(key: string): Promise<void> {
+  const cfg = getR2Config();
+  if (!cfg) return;
+  try {
+    await cfg.client.send(
+      new DeleteObjectCommand({
+        Bucket: cfg.bucket,
+        Key: key,
+      }),
+    );
+  } catch (err) {
+    console.error(`r2 delete ${key}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+/** Parse URL public R2 → object key. */
+export function parseR2PublicKey(url: string): string | null {
+  const cfg = getR2Config();
+  if (!cfg) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  try {
+    if (parsed.origin !== new URL(cfg.publicBaseUrl).origin) return null;
+  } catch {
+    return null;
+  }
+  const key = parsed.pathname.replace(/^\/+/, '');
+  return key || null;
 }

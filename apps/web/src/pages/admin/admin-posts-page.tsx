@@ -8,11 +8,12 @@ import { postStatusLabel } from '@/lib/format';
 import { useState } from 'react';
 import { MultiImageUploader, uploadAdminImage } from '@/components/ui/image-uploader';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminPostsPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['admin-posts', statusFilter],
     queryFn: () => adminApi.posts(statusFilter || undefined),
   });
@@ -55,6 +56,10 @@ export function AdminPostsPage() {
       qc.invalidateQueries({ queryKey: ['admin-posts'] });
     },
   });
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được bài đăng" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-3">

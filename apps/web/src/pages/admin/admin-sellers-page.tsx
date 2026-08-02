@@ -7,10 +7,11 @@ import { StatusBadge } from '@/components/ui/brand';
 import { serviceTypeLabel, sellerStatusLabel } from '@/lib/format';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminSellersPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-sellers'], queryFn: () => adminApi.sellers() });
+  const { data, isError, refetch } = useQuery({ queryKey: ['admin-sellers'], queryFn: () => adminApi.sellers() });
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [approveId, setApproveId] = useState<string | null>(null);
@@ -91,6 +92,10 @@ export function AdminSellersPage() {
   );
   const busy = approve.isPending || manage.isPending || remove.isPending;
   const actionError = (approve.error ?? manage.error ?? remove.error) as ApiError | null;
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được danh sách đối tác" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-5">

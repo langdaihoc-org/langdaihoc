@@ -7,10 +7,11 @@ import { StatusBadge } from '@/components/ui/brand';
 import { useState } from 'react';
 import { ImageUploader, uploadAdminImage } from '@/components/ui/image-uploader';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminBannersPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-banners'], queryFn: () => adminApi.banners() });
+  const { data, isError, refetch } = useQuery({ queryKey: ['admin-banners'], queryFn: () => adminApi.banners() });
   const [form, setForm] = useState({
     title: '',
     subtitle: '',
@@ -53,6 +54,10 @@ export function AdminBannersPage() {
       qc.invalidateQueries({ queryKey: ['admin-banners'] });
     },
   });
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được banner" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-3">

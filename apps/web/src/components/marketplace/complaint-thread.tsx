@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { cn } from '@/lib/utils';
+import { sanitizeImageUrl } from '@langdaihoc/shared';
 
 const ROLE_LABEL: Record<string, string> = {
   buyer: 'Người mua',
@@ -61,11 +62,18 @@ export function ComplaintThread({
 
       {complaint.evidenceUrls && complaint.evidenceUrls.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {complaint.evidenceUrls.map((url) => (
-            <a key={url} href={url} target="_blank" rel="noreferrer">
-              <img src={url} alt="Ảnh đính kèm" className="size-20 rounded-lg border border-[var(--color-line)] object-cover" />
-            </a>
-          ))}
+          {complaint.evidenceUrls
+            .map((url) => sanitizeImageUrl(url))
+            .filter((url): url is string => Boolean(url))
+            .map((url) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={url}
+                  alt="Ảnh đính kèm"
+                  className="size-20 rounded-lg border border-[var(--color-line)] object-cover"
+                />
+              </a>
+            ))}
         </div>
       )}
 

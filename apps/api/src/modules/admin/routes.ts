@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { eq, sql, desc, and, or, ilike, ne } from 'drizzle-orm';
 import {
@@ -20,7 +21,7 @@ import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { ensureUserRole, ensurePhoneNotUsed, ensureEmailNotUsed } from '../auth/service.js';
 import { writeAudit } from '../../lib/audit.js';
 import { enrichOrdersList } from '../../services/commerce.js';
-import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
+import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { createSupabaseAdmin } from '../../lib/supabase.js';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
 
@@ -105,8 +106,17 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole('admin'));
 
+/** Upload ảnh banner/post — 40 lần/5 phút/IP (prod) */
+const uploadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 40 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 adminRouter.post(
   '/upload',
+  uploadLimiter,
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -930,6 +940,14 @@ adminRouter.patch(
       .where(eq(banners.id, bannerId))
       .returning();
 
+    if (rawImage !== undefined) {
+      void removeReplacedPublicImages(
+        req.app.locals.supabaseAdmin,
+        [existing.imageUrl],
+        [updated?.imageUrl],
+      );
+    }
+
     await writeAudit(db, {
       ...auditFromReq(req),
       action: 'banner.update',
@@ -1060,6 +1078,14 @@ adminRouter.patch(
     }
 
     const [updated] = await db.update(posts).set(patch).where(eq(posts.id, postId)).returning();
+
+    if (imageUrls !== undefined || imageUrl !== undefined) {
+      void removeReplacedPublicImages(
+        req.app.locals.supabaseAdmin,
+        [existing.imageUrl, ...(existing.imageUrls ?? [])],
+        [updated?.imageUrl, ...((updated?.imageUrls as string[] | null) ?? [])],
+      );
+    }
 
     await writeAudit(db, {
       ...auditFromReq(req),

@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ToastProvider } from '@/components/ui/toast';
 import { ProtectedRoute, GuestOnlyRoute, BuyerOnlyLayout } from '@/components/layout/buyer-layout';
-import { HomePage, ProfilePage } from '@/pages/home-page';
+import { HomePage } from '@/pages/home-page';
+import { ProfilePage } from '@/pages/profile-page';
 import { LoginPage, CheckEmailPage, VerifyEmailPage } from '@/pages/auth/login-page';
 import { BuyerRegisterPage } from '@/pages/auth/register-buyer-page';
 import { SellerRegisterPage } from '@/pages/auth/register-seller-page';
@@ -37,29 +38,29 @@ const ShipProxyBookPage = lazyNamed(() => import('@/pages/buyer/ship-proxy-pages
 const ExplorePage = lazyNamed(() => import('@/pages/buyer/explore-page'), 'ExplorePage');
 const PostDetailPage = lazyNamed(() => import('@/pages/buyer/post-detail-page'), 'PostDetailPage');
 
-const SellerLayout = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerLayout');
-const SellerDashboard = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerDashboard');
-const SellerProfilePage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerProfilePage');
-const SellerOrdersPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerOrdersPage');
-const SellerProductsPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerProductsPage');
-const SellerMenuPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerMenuPage');
-const SellerLaundryPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerLaundryPage');
-const SellerBankPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerBankPage');
-const SellerReviewsPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerReviewsPage');
-const SellerComplaintsPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerComplaintsPage');
-const SellerPostsPage = lazyNamed(() => import('@/pages/seller/seller-pages'), 'SellerPostsPage');
+const SellerLayout = lazyNamed(() => import('@/pages/seller/seller-layout'), 'SellerLayout');
+const SellerDashboard = lazyNamed(() => import('@/pages/seller/seller-dashboard'), 'SellerDashboard');
+const SellerProfilePage = lazyNamed(() => import('@/pages/seller/seller-profile-page'), 'SellerProfilePage');
+const SellerOrdersPage = lazyNamed(() => import('@/pages/seller/seller-orders-page'), 'SellerOrdersPage');
+const SellerProductsPage = lazyNamed(() => import('@/pages/seller/seller-products-page'), 'SellerProductsPage');
+const SellerMenuPage = lazyNamed(() => import('@/pages/seller/seller-products-page'), 'SellerMenuPage');
+const SellerLaundryPage = lazyNamed(() => import('@/pages/seller/seller-products-page'), 'SellerLaundryPage');
+const SellerBankPage = lazyNamed(() => import('@/pages/seller/seller-bank-page'), 'SellerBankPage');
+const SellerReviewsPage = lazyNamed(() => import('@/pages/seller/seller-reviews-page'), 'SellerReviewsPage');
+const SellerComplaintsPage = lazyNamed(() => import('@/pages/seller/seller-complaints-page'), 'SellerComplaintsPage');
+const SellerPostsPage = lazyNamed(() => import('@/pages/seller/seller-posts-page'), 'SellerPostsPage');
 
-const AdminLayout = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminLayout');
-const AdminDashboard = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminDashboard');
-const AdminSellersPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminSellersPage');
-const AdminOrdersPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminOrdersPage');
-const AdminComplaintsPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminComplaintsPage');
-const AdminBannersPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminBannersPage');
-const AdminPostsPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminPostsPage');
-const AdminUsersPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminUsersPage');
-const AdminCategoriesPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminCategoriesPage');
-const AdminAuditPage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminAuditPage');
-const AdminProfilePage = lazyNamed(() => import('@/pages/admin/admin-pages'), 'AdminProfilePage');
+const AdminLayout = lazyNamed(() => import('@/pages/admin/admin-layout'), 'AdminLayout');
+const AdminDashboard = lazyNamed(() => import('@/pages/admin/admin-dashboard'), 'AdminDashboard');
+const AdminSellersPage = lazyNamed(() => import('@/pages/admin/admin-sellers-page'), 'AdminSellersPage');
+const AdminOrdersPage = lazyNamed(() => import('@/pages/admin/admin-orders-page'), 'AdminOrdersPage');
+const AdminComplaintsPage = lazyNamed(() => import('@/pages/admin/admin-complaints-page'), 'AdminComplaintsPage');
+const AdminBannersPage = lazyNamed(() => import('@/pages/admin/admin-banners-page'), 'AdminBannersPage');
+const AdminPostsPage = lazyNamed(() => import('@/pages/admin/admin-posts-page'), 'AdminPostsPage');
+const AdminUsersPage = lazyNamed(() => import('@/pages/admin/admin-users-page'), 'AdminUsersPage');
+const AdminCategoriesPage = lazyNamed(() => import('@/pages/admin/admin-categories-page'), 'AdminCategoriesPage');
+const AdminAuditPage = lazyNamed(() => import('@/pages/admin/admin-audit-page'), 'AdminAuditPage');
+const AdminProfilePage = lazyNamed(() => import('@/pages/admin/admin-profile-page'), 'AdminProfilePage');
 
 function RouteFallback() {
   return (

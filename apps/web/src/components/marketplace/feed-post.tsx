@@ -5,6 +5,7 @@ import type { FeedPost } from '@/lib/api';
 import { StoreAvatar } from '@/components/marketplace/food-image';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { SafeNavLink } from '@/components/ui/safe-nav-link';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { sanitizeLinkUrl, sanitizeImageUrl } from '@langdaihoc/shared';
@@ -339,12 +340,12 @@ export function FeedPostCard({ post }: { post: FeedPost }) {
       <PostImageCollage images={images} alt={post.title} />
 
       <div className="flex items-center gap-2 border-t border-[var(--color-line)] px-4 py-3">
-        <Link to={buyHref} className="flex-1">
+        <SafeNavLink to={buyHref} className="flex-1">
           <Button className="w-full">
             <CtaIcon className="size-4" />
             {ctaLabel}
           </Button>
-        </Link>
+        </SafeNavLink>
         <Button type="button" variant="outline" size="icon" onClick={share} aria-label="Chia sẻ">
           <Share2 className="size-4" />
         </Button>

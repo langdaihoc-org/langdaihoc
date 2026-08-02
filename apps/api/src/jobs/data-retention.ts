@@ -1,4 +1,4 @@
-import { lt, and, inArray, desc } from 'drizzle-orm';
+import { lt, and, inArray, desc, sql } from 'drizzle-orm';
 import type { Database } from '@langdaihoc/database';
 import {
   notifications,
@@ -20,8 +20,10 @@ const IDEMPOTENCY_DAYS = 3;
 const AUDIT_DAYS = 30;
 /** Timeline trạng thái đơn (rút gọn về 1 bản cuối) — 7 ngày */
 const ORDER_HISTORY_DAYS = 7;
-/** Biên lai CK — xóa theo đơn đã hoàn tất/huỷ (cùng cutoff với history) */
+/** Biên lai CK — xóa theo đơn đã hoàn tất/huỷ (cutoff theo updatedAt khi settled) */
 const PROOF_DAYS = ORDER_HISTORY_DAYS;
+/** pg_advisory_lock key — tránh multi-instance chạy retention trùng. */
+const RETENTION_LOCK_KEY = 7_714_201;
 
 function cutoff(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -59,7 +61,7 @@ export async function runDataRetention(db: Database, supabase?: SupabaseClient) 
     .where(
       and(
         inArray(orders.status, ['completed', 'cancelled', 'rejected']),
-        lt(orders.createdAt, cutoff(PROOF_DAYS)),
+        lt(orders.updatedAt, cutoff(PROOF_DAYS)),
       ),
     );
 
@@ -139,11 +141,37 @@ export async function runDataRetention(db: Database, supabase?: SupabaseClient) 
 
 export function scheduleDataRetention(db: Database, supabase?: SupabaseClient) {
   const run = async () => {
-    const result = await runDataRetention(db, supabase);
-    console.log('[retention]', JSON.stringify(result));
+    const locked = await tryRetentionLock(db);
+    if (!locked) {
+      console.log('[retention] skipped — another instance holds the advisory lock');
+      return;
+    }
+    try {
+      const result = await runDataRetention(db, supabase);
+      console.log('[retention]', JSON.stringify(result));
+    } finally {
+      await releaseRetentionLock(db);
+    }
   };
 
   // Chạy ngay 1 lần để bù nếu server tắt qua nửa đêm, sau đó mỗi ngày lúc 0h VN.
   void run();
   return scheduleDailyAtMidnight('retention', run);
+}
+
+async function tryRetentionLock(db: Database): Promise<boolean> {
+  const rows = await db.execute<{ pg_try_advisory_lock: boolean }>(
+    sql`select pg_try_advisory_lock(${RETENTION_LOCK_KEY}) as pg_try_advisory_lock`,
+  );
+  const list = Array.isArray(rows) ? rows : (rows as { rows?: { pg_try_advisory_lock: boolean }[] }).rows;
+  const first = list?.[0] as { pg_try_advisory_lock?: boolean } | undefined;
+  return Boolean(first?.pg_try_advisory_lock);
+}
+
+async function releaseRetentionLock(db: Database): Promise<void> {
+  try {
+    await db.execute(sql`select pg_advisory_unlock(${RETENTION_LOCK_KEY})`);
+  } catch (err) {
+    console.error('[retention] unlock failed', err instanceof Error ? err.message : err);
+  }
 }

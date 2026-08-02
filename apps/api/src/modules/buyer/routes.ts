@@ -5,7 +5,7 @@ import { eq, and, isNull, gte, sql } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
 import { profileUpdateSchema, DEMO_MODE } from '@langdaihoc/shared';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, requireRole } from '../../middleware/auth.js';
+import { requireAuth, requireRole, requireActiveBuyer } from '../../middleware/auth.js';
 import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
 import { getFrontendUrl } from '../../lib/env.js';
 import { createSupabaseAnon } from '../../lib/supabase.js';
@@ -243,6 +243,7 @@ buyerRouter.patch(
 buyerRouter.post(
   '/upload',
   uploadLimiter,
+  requireActiveBuyer,
   asyncHandler(async (req, res) => {
     const body = z
       .object({

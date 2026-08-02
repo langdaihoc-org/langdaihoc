@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { Banner } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { SafeNavLink } from '@/components/ui/safe-nav-link';
 import { sanitizeLinkUrl, sanitizeImageUrl } from '@langdaihoc/shared';
 
 /** Carousel banner ngang trên home. */
@@ -23,7 +23,7 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
 
   return (
     <section className="relative overflow-hidden rounded-2xl shadow-[var(--shadow-card)]">
-      <Link to={href} className="block">
+      <SafeNavLink to={href} className="block">
         <div className="relative flex h-36 items-end sm:h-44">
           {imageUrl ? (
             <img
@@ -48,7 +48,7 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
             </span>
           </div>
         </div>
-      </Link>
+      </SafeNavLink>
       {items.length > 1 && (
         <div className="absolute bottom-3 right-4 z-10 flex gap-1.5">
           {items.map((b, i) => (

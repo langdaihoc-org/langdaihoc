@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { AppError } from '../middleware/error-handler.js';
 import { getSupabaseUrl, isProd } from './env.js';
-import { getR2Config, putR2Object, r2PublicOrigins } from './r2.js';
+import { getR2Config, putR2Object, r2PublicOrigins, deleteR2Object, parseR2PublicKey } from './r2.js';
 
 export const PUBLIC_BUCKETS = [
   'food-images',
@@ -73,7 +73,7 @@ function isPublicBucket(bucket: string): boolean {
   return (PUBLIC_BUCKETS as readonly string[]).includes(bucket);
 }
 
-function useR2ForPublic(): boolean {
+function r2EnabledForPublic(): boolean {
   return getR2Config() != null;
 }
 
@@ -205,7 +205,7 @@ export async function uploadImage(
     return uploadToSupabase(supabase, bucket, path, buffer, contentType);
   }
 
-  if (useR2ForPublic()) {
+  if (r2EnabledForPublic()) {
     return uploadPublicToR2(bucket, path, buffer, contentType);
   }
 
@@ -362,18 +362,23 @@ export async function resignPrivateUrls(
   return Promise.all(urls.map((u) => resignPrivateUrl(supabase, u)));
 }
 
-/** Xóa object Supabase theo URL đã lưu (best-effort). */
+/** Xóa object storage theo URL đã lưu (Supabase + R2, best-effort). */
 export async function removeStorageObjects(
   supabase: SupabaseClient,
   urls: string[],
 ): Promise<number> {
   const byBucket = new Map<string, string[]>();
+  const r2Keys: string[] = [];
   for (const url of urls) {
     const ref = parseSupabaseStorageUrl(url);
-    if (!ref) continue;
-    const list = byBucket.get(ref.bucket) ?? [];
-    list.push(ref.path);
-    byBucket.set(ref.bucket, list);
+    if (ref) {
+      const list = byBucket.get(ref.bucket) ?? [];
+      list.push(ref.path);
+      byBucket.set(ref.bucket, list);
+      continue;
+    }
+    const r2Key = parseR2PublicKey(url);
+    if (r2Key) r2Keys.push(r2Key);
   }
   let removed = 0;
   for (const [bucket, paths] of byBucket) {
@@ -388,5 +393,29 @@ export async function removeStorageObjects(
       }
     }
   }
+  for (const key of [...new Set(r2Keys)]) {
+    await deleteR2Object(key);
+    removed += 1;
+  }
   return removed;
+}
+
+/**
+ * Khi CMS thay ảnh: xóa URL cũ không còn trong danh sách mới (public R2/Supabase).
+ * Không xóa private payment-proofs.
+ */
+export async function removeReplacedPublicImages(
+  supabase: SupabaseClient,
+  previous: (string | null | undefined)[],
+  next: (string | null | undefined)[],
+): Promise<void> {
+  const nextSet = new Set(next.map((u) => u?.trim()).filter(Boolean) as string[]);
+  const stale = previous
+    .map((u) => u?.trim())
+    .filter((u): u is string => typeof u === 'string' && u.length > 0 && !nextSet.has(u));
+  if (!stale.length) return;
+  // Chỉ xóa URL thuộc storage dự án (public)
+  const safe = stale.filter((u) => isUploadedImageUrl(u) && !isPrivateProofUrl(u));
+  if (!safe.length) return;
+  await removeStorageObjects(supabase, safe);
 }

@@ -4,13 +4,36 @@ import { Card } from '@/components/ui/card';
 import { StatCard, DataTable } from '@/components/layout/dashboard-shell';
 import { StatusBadge } from '@/components/ui/brand';
 import { orderStatusLabel, formatPrice, orderDisplayTitle, sellerStatusLabel } from '@/lib/format';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminDashboard() {
-  const { data: stats } = useQuery({ queryKey: ['admin-stats'], queryFn: () => adminApi.stats() });
-  const { data: sellers } = useQuery({ queryKey: ['admin-sellers'], queryFn: () => adminApi.sellers() });
-  const { data: orders } = useQuery({ queryKey: ['admin-orders'], queryFn: () => adminApi.orders() });
+  const { data: stats, isError: errStats, refetch: refetchStats } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: () => adminApi.stats(),
+  });
+  const { data: sellers, isError: errSellers, refetch: refetchSellers } = useQuery({
+    queryKey: ['admin-sellers'],
+    queryFn: () => adminApi.sellers(),
+  });
+  const { data: orders, isError: errOrders, refetch: refetchOrders } = useQuery({
+    queryKey: ['admin-orders'],
+    queryFn: () => adminApi.orders(),
+  });
   const s = stats?.data;
   const pendingSellers = (sellers?.data ?? []).filter((r) => r.seller.status === 'pending');
+
+  if (errStats || errSellers || errOrders) {
+    return (
+      <QueryErrorState
+        message="Không tải được bảng điều khiển"
+        onRetry={() => {
+          void refetchStats();
+          void refetchSellers();
+          void refetchOrders();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">

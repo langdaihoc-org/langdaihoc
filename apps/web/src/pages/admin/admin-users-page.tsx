@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { QueryErrorState } from '@/components/ui/query-state';
 import { useAuth } from '@/contexts/auth-context';
 import { ROLE_LABEL, USER_STATUS_LABEL } from './admin-shared';
 
@@ -20,7 +21,7 @@ export function AdminUsersPage() {
     email: string;
     kind: 'suspend' | 'delete';
   }>(null);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-users', roleFilter, statusFilter, search],
     queryFn: () =>
       adminApi.users({
@@ -56,6 +57,10 @@ export function AdminUsersPage() {
   const busy = update.isPending || remove.isPending;
   const actionError = (update.error ?? remove.error) as ApiError | null;
   const users = data?.data ?? [];
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được người dùng" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-3">

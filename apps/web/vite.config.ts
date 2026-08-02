@@ -19,8 +19,7 @@ export default defineConfig({
             if (id.includes('react-router')) return 'vendor-router';
             if (id.includes('react-dom') || id.includes('/react/')) return 'vendor-react';
           }
-          if (id.includes('/pages/seller/')) return 'seller';
-          if (id.includes('/pages/admin/')) return 'admin';
+          // Không gộp cả seller/admin vào 1 chunk — để lazyNamed theo từng page tách bundle.
         },
       },
     },

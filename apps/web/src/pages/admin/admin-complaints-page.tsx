@@ -7,10 +7,11 @@ import { StatusBadge } from '@/components/ui/brand';
 import { complaintStatusLabel } from '@/lib/format';
 import { useState } from 'react';
 import { ComplaintThread } from '@/components/marketplace/complaint-thread';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminComplaintsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-complaints'], queryFn: () => adminApi.complaints() });
+  const { data, isError, refetch } = useQuery({ queryKey: ['admin-complaints'], queryFn: () => adminApi.complaints() });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [resolution, setResolution] = useState<Record<string, string>>({});
   const [reply, setReply] = useState<Record<string, string>>({});
@@ -39,6 +40,10 @@ export function AdminComplaintsPage() {
   });
 
   const messages = messagesData?.data ?? [];
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được khiếu nại" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-3">

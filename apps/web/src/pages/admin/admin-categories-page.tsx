@@ -6,10 +6,11 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminCategoriesPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-categories'], queryFn: () => adminApi.categories() });
+  const { data, isError, refetch } = useQuery({ queryKey: ['admin-categories'], queryFn: () => adminApi.categories() });
   const [name, setName] = useState('');
   const [type, setType] = useState<'food' | 'laundry'>('food');
   const [editId, setEditId] = useState<string | null>(null);
@@ -76,6 +77,10 @@ export function AdminCategoriesPage() {
       )}
     </Card>
   );
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được danh mục" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-4">

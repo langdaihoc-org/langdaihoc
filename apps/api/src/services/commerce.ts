@@ -44,6 +44,24 @@ function cryptoRandom(len: number) {
   return out;
 }
 
+function isPgUniqueViolation(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { code?: string }).code === '23505');
+}
+
+/** Race: unique key → transaction rollback; đọc lại đơn đã thắng. */
+async function resolveIdempotentOrder(db: Database, buyerId: string, idempotencyKey: string) {
+  const [existingKey] = await db
+    .select()
+    .from(checkoutIdempotencyKeys)
+    .where(and(eq(checkoutIdempotencyKeys.userId, buyerId), eq(checkoutIdempotencyKeys.key, idempotencyKey)))
+    .limit(1);
+  if (!existingKey) return null;
+  const [existingOrder] = await db.select().from(orders).where(eq(orders.id, existingKey.orderId)).limit(1);
+  if (!existingOrder) return null;
+  const [enriched] = await enrichOrdersList(db, [existingOrder], { includeDetails: true });
+  return enriched ?? existingOrder;
+}
+
 export async function notifyUser(
   db: DbConn,
   userId: string,
@@ -634,6 +652,11 @@ export async function checkoutFood(
       orderId: order.id,
     });
     return order;
+  }).catch(async (err) => {
+    if (!isPgUniqueViolation(err)) throw err;
+    const existing = await resolveIdempotentOrder(db, buyerId, idempotencyKey);
+    if (existing) return existing;
+    throw err;
   });
 }
 
@@ -776,6 +799,11 @@ export async function createLaundryOrder(
     });
 
     return { ...order, summary: orderSummary };
+  }).catch(async (err) => {
+    if (!isPgUniqueViolation(err)) throw err;
+    const existing = await resolveIdempotentOrder(db, buyerId, idempotencyKey);
+    if (existing) return existing;
+    throw err;
   });
 }
 
@@ -904,6 +932,11 @@ export async function createShipProxyOrder(
     });
 
     return { ...order, summary: orderSummary };
+  }).catch(async (err) => {
+    if (!isPgUniqueViolation(err)) throw err;
+    const existing = await resolveIdempotentOrder(db, buyerId, idempotencyKey);
+    if (existing) return existing;
+    throw err;
   });
 }
 

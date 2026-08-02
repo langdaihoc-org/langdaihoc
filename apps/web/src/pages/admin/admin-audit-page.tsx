@@ -1,9 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi, type AuditLog } from '@/lib/api';
 import { DataTable } from '@/components/layout/dashboard-shell';
+import { QueryErrorState } from '@/components/ui/query-state';
 
 export function AdminAuditPage() {
-  const { data } = useQuery({ queryKey: ['admin-audit-logs'], queryFn: () => adminApi.auditLogs(50) });
+  const { data, isError, refetch } = useQuery({
+    queryKey: ['admin-audit-logs'],
+    queryFn: () => adminApi.auditLogs(50),
+  });
+
+  if (isError) {
+    return <QueryErrorState message="Không tải được nhật ký" onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="space-y-3">

@@ -1,9 +1,9 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
 import type { Banner } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { SafeNavLink } from '@/components/ui/safe-nav-link';
 import { sanitizeLinkUrl, sanitizeImageUrl } from '@langdaihoc/shared';
 
 const STORAGE_PREFIX = 'ldh-popup-dismissed:';
@@ -129,11 +129,11 @@ export function PromoPopup({ banners }: { banners?: Banner[] | null }) {
             {banner.subtitle && !imageUrl && (
               <p className="text-sm text-[var(--color-muted)]">{banner.subtitle}</p>
             )}
-            <Link to={href} onClick={close} className="block">
+            <SafeNavLink to={href} onClick={close} className="block">
               <Button className="w-full" size="lg">
                 {banner.ctaLabel || 'Xem ngay'}
               </Button>
-            </Link>
+            </SafeNavLink>
             <button
               type="button"
               onClick={close}

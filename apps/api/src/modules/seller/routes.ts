@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import {
@@ -17,7 +18,7 @@ import {
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
-import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
+import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { loadFoodItemExtras, mapFoodItemExtras } from '../../services/commerce.js';
 import { paramId } from '../../lib/params.js';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
@@ -25,6 +26,14 @@ import { isSafeLinkUrl } from '@langdaihoc/shared';
 export const sellerRouter = Router();
 
 sellerRouter.use(requireAuth, requireRole('seller'));
+
+/** Upload ảnh menu/post — 40 lần/5 phút/IP (prod) */
+const uploadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 40 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const optionGroupInput = z.object({
   name: z.string().min(1),
@@ -156,6 +165,7 @@ sellerRouter.patch(
 
 sellerRouter.post(
   '/upload',
+  uploadLimiter,
   requireApprovedSeller,
   asyncHandler(async (req, res) => {
     const seller = await getMySeller(req);
@@ -286,6 +296,12 @@ sellerRouter.patch(
     const imageUrl = imageUrls !== undefined ? (imageUrls[0] ?? null) : undefined;
     const db = req.app.locals.db;
     const itemId = paramId(req);
+    const [existing] = await db
+      .select({ imageUrl: foodItems.imageUrl, imageUrls: foodItems.imageUrls })
+      .from(foodItems)
+      .where(and(eq(foodItems.id, itemId), eq(foodItems.sellerId, seller.id)))
+      .limit(1);
+    if (!existing) throw new AppError(404, 'Không tìm thấy món', 'NOT_FOUND');
     const [updated] = await db
       .update(foodItems)
       .set({
@@ -305,6 +321,13 @@ sellerRouter.patch(
       .where(and(eq(foodItems.id, itemId), eq(foodItems.sellerId, seller.id)))
       .returning();
     if (!updated) throw new AppError(404, 'Không tìm thấy món', 'NOT_FOUND');
+    if (imageUrls !== undefined) {
+      void removeReplacedPublicImages(
+        req.app.locals.supabaseAdmin,
+        [existing.imageUrl, ...(existing.imageUrls ?? [])],
+        [updated.imageUrl, ...(updated.imageUrls ?? [])],
+      );
+    }
     if (body.optionGroups !== undefined) {
       await replaceOptionGroups(db, itemId, body.optionGroups);
     }
@@ -401,6 +424,12 @@ sellerRouter.patch(
     const imageUrl =
       body.imageUrl !== undefined ? assertUploadedImageUrl(body.imageUrl, 'Ảnh dịch vụ') : undefined;
     const svcId = paramId(req);
+    const [existing] = await req.app.locals.db
+      .select({ imageUrl: laundryServices.imageUrl })
+      .from(laundryServices)
+      .where(and(eq(laundryServices.id, svcId), eq(laundryServices.sellerId, seller.id)))
+      .limit(1);
+    if (!existing) throw new AppError(404, 'Không tìm thấy dịch vụ', 'NOT_FOUND');
     const [updated] = await req.app.locals.db
       .update(laundryServices)
       .set({
@@ -416,6 +445,13 @@ sellerRouter.patch(
       .where(and(eq(laundryServices.id, svcId), eq(laundryServices.sellerId, seller.id)))
       .returning();
     if (!updated) throw new AppError(404, 'Không tìm thấy dịch vụ', 'NOT_FOUND');
+    if (imageUrl !== undefined) {
+      void removeReplacedPublicImages(
+        req.app.locals.supabaseAdmin,
+        [existing.imageUrl],
+        [updated.imageUrl],
+      );
+    }
     res.json({ data: updated });
   }),
 );
@@ -695,6 +731,13 @@ sellerRouter.patch(
       .set(patch)
       .where(eq(posts.id, postId))
       .returning();
+    if (input.imageUrls !== undefined || input.imageUrl !== undefined) {
+      void removeReplacedPublicImages(
+        req.app.locals.supabaseAdmin,
+        [existing.imageUrl, ...(existing.imageUrls ?? [])],
+        [updated?.imageUrl, ...((updated?.imageUrls as string[] | null) ?? [])],
+      );
+    }
     res.json({ data: updated });
   }),
 );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi, ordersApi, ApiError } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
@@ -32,7 +32,7 @@ const RETURN_DAYS_AHEAD = 30;
 function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: string }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isActiveBuyer } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ['sellers', 'ship_proxy'],
     queryFn: () => catalogApi.sellers('ship_proxy'),
@@ -112,6 +112,31 @@ function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: string }) {
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Không thể tạo đơn'),
   });
+
+  if (!isAuthenticated) {
+    return (
+      <Card className="mx-auto max-w-md py-10 text-center">
+        <p>Vui lòng đăng nhập để đặt nhận hộ.</p>
+        <Link to="/auth/login" className="mt-2 inline-block font-semibold text-brand-orange">
+          Đăng nhập
+        </Link>
+      </Card>
+    );
+  }
+
+  if (!isActiveBuyer) {
+    return (
+      <Card className="mx-auto max-w-md space-y-2 py-10 text-center">
+        <p className="font-semibold">Chưa thể đặt nhận hộ</p>
+        <p className="text-sm text-[var(--color-muted)]">
+          Xác minh email hoặc chuyển sang chế độ Người mua.
+        </p>
+        <Link to="/auth/check-email">
+          <Button className="mt-2">Hướng dẫn xác minh</Button>
+        </Link>
+      </Card>
+    );
+  }
 
   if (isLoading) {
     return (
