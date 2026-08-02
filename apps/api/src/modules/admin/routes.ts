@@ -308,17 +308,22 @@ adminRouter.delete(
       newValue: null,
     });
 
+    // Auth trước — nếu fail thì profile/shop còn nguyên; tránh orphan Auth.
+    const supabase = createSupabaseAdmin();
+    const { error: authErr } = await supabase.auth.admin.deleteUser(existing.userId);
+    if (authErr) {
+      throw new AppError(
+        502,
+        `Không xóa được tài khoản đăng nhập: ${authErr.message}`,
+        'AUTH_DELETE_FAILED',
+      );
+    }
+
     // Gỡ tham chiếu giỏ hàng (FK không cascade) trước khi xóa seller.
     await db.update(carts).set({ sellerId: null }).where(eq(carts.sellerId, sellerId));
 
     // Xóa profile → cascade sellers (+ món, dịch vụ giặt, STK, posts…).
     await db.delete(profiles).where(eq(profiles.id, existing.userId));
-
-    const supabase = createSupabaseAdmin();
-    const { error: authErr } = await supabase.auth.admin.deleteUser(existing.userId);
-    if (authErr) {
-      console.error('[admin] delete auth user failed', existing.userId, authErr.message);
-    }
 
     res.json({ data: { id: sellerId, deleted: true } });
   }),

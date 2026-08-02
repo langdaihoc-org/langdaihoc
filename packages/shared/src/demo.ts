@@ -8,15 +8,19 @@
  */
 function isDemoMode(): boolean {
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-  // Production luôn tắt — kể cả khi ai đó set DEMO_MODE=true nhầm.
+  // Production / live luôn tắt — kể cả khi ai đó set DEMO_MODE=true nhầm.
   if (env?.NODE_ENV === 'production') return false;
+  if (env?.RAILWAY_ENVIRONMENT === 'production') return false;
+  const meta = typeof import.meta !== 'undefined'
+    ? (import.meta as ImportMeta & { env?: { DEV?: boolean; PROD?: boolean } }).env
+    : undefined;
+  if (meta?.PROD) return false;
+
   if (env?.DEMO_MODE === 'true') return true;
   if (env?.DEMO_MODE === 'false') return false;
 
   // Vite dev server (chỉ đúng lúc `vite dev`, build production = false).
-  if (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) {
-    return true;
-  }
+  if (meta?.DEV) return true;
 
   // Không suy ra demo từ việc thiếu NODE_ENV — mặc định TẮT cho an toàn.
   return false;

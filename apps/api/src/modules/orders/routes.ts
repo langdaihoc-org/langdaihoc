@@ -28,12 +28,13 @@ import {
   transitionOrder,
   getOrdersForUser,
   enrichOrdersList,
+  isPgUniqueViolation,
 } from '../../services/commerce.js';
 import { formatOrderSummary } from '@langdaihoc/shared';
 import { paramId } from '../../lib/params.js';
 import {
-  assertPrivateProofUrl,
-  assertPrivateProofUrls,
+  assertPrivateProofUrlForOrder,
+  assertPrivateProofUrlsForOrder,
   resignPrivateUrl,
   resignPrivateUrls,
 } from '../../lib/storage.js';
@@ -582,10 +583,10 @@ ordersRouter.post(
   asyncHandler(async (req, res) => {
     const orderId = paramId(req);
     const { imageUrl: raw } = z.object({ imageUrl: z.string().min(5) }).parse(req.body);
-    const imageUrl = assertPrivateProofUrl(raw, 'Ảnh biên lai');
-    if (!imageUrl) throw new AppError(400, 'Ảnh biên lai bắt buộc', 'INVALID_IMAGE_URL');
     const db: Database = req.app.locals.db;
     const { order } = await loadOrderForActor(db, orderId, req.user!);
+    const imageUrl = assertPrivateProofUrlForOrder(raw, req.user!.id, orderId, 'Ảnh biên lai');
+    if (!imageUrl) throw new AppError(400, 'Ảnh biên lai bắt buộc', 'INVALID_IMAGE_URL');
     if (order.paymentMethod !== 'bank_transfer') {
       throw new AppError(400, 'Đơn này không thanh toán chuyển khoản', 'INVALID_PAYMENT_METHOD');
     }
@@ -609,8 +610,14 @@ ordersRouter.post(
         .returning();
       await tx
         .update(orders)
-        .set({ paymentStatus: 'proof_uploaded' })
-        .where(eq(orders.id, orderId));
+        .set({ paymentStatus: 'proof_uploaded', updatedAt: new Date() })
+        .where(
+          and(
+            eq(orders.id, orderId),
+            eq(orders.version, order.version),
+            sql`${orders.paymentStatus} not in ('verified', 'paid')`,
+          ),
+        );
       return row;
     });
     res.status(201).json({ data: proof });
@@ -632,18 +639,26 @@ ordersRouter.post(
     if (order.paymentMethod !== 'bank_transfer') {
       throw new AppError(400, 'Đơn này không thanh toán chuyển khoản', 'INVALID_PAYMENT_METHOD');
     }
-    const [proof] = await db
-      .select()
-      .from(paymentProofs)
-      .where(eq(paymentProofs.orderId, id))
-      .limit(1);
-    if (!proof) throw new AppError(409, 'Chưa có minh chứng thanh toán', 'NO_PAYMENT_PROOF');
+    const proofs = await db.select({ id: paymentProofs.id }).from(paymentProofs).where(eq(paymentProofs.orderId, id));
+    if (!proofs.length) throw new AppError(409, 'Chưa có minh chứng thanh toán', 'NO_PAYMENT_PROOF');
 
-    await db.transaction(async (tx) => {
-      await tx
+    const updated = await db.transaction(async (tx) => {
+      const [ord] = await tx
         .update(orders)
-        .set({ paymentStatus: approved ? 'verified' : 'rejected' })
-        .where(eq(orders.id, id));
+        .set({
+          paymentStatus: approved ? 'verified' : 'rejected',
+          updatedAt: new Date(),
+          version: order.version + 1,
+        })
+        .where(
+          and(
+            eq(orders.id, id),
+            eq(orders.version, order.version),
+            sql`${orders.paymentStatus} not in ('verified', 'paid')`,
+          ),
+        )
+        .returning({ id: orders.id });
+      if (!ord) throw new AppError(409, 'Trạng thái thanh toán đã đổi — tải lại trang', 'CONFLICT');
       await tx
         .update(paymentProofs)
         .set({
@@ -652,8 +667,10 @@ ordersRouter.post(
           reviewedAt: new Date(),
           reviewedBy: req.user!.id,
         })
-        .where(eq(paymentProofs.id, proof.id));
+        .where(eq(paymentProofs.orderId, id));
+      return ord;
     });
+    void updated;
     res.json({ message: approved ? 'Đã xác nhận thanh toán' : 'Đã từ chối minh chứng' });
   }),
 );
@@ -673,7 +690,18 @@ ordersRouter.post(
     if (order.status === 'cancelled' || order.status === 'rejected') {
       throw new AppError(409, 'Đơn đã hủy, không thể thu tiền', 'ORDER_CLOSED');
     }
-    await db.update(orders).set({ paymentStatus: 'paid' }).where(eq(orders.id, id));
+    const [updated] = await db
+      .update(orders)
+      .set({ paymentStatus: 'paid', updatedAt: new Date(), version: order.version + 1 })
+      .where(
+        and(
+          eq(orders.id, id),
+          eq(orders.version, order.version),
+          sql`${orders.paymentStatus} <> 'paid'`,
+        ),
+      )
+      .returning({ id: orders.id });
+    if (!updated) throw new AppError(409, 'Trạng thái thanh toán đã đổi — tải lại trang', 'CONFLICT');
     res.json({ message: 'Đã xác nhận thu tiền mặt' });
   }),
 );
@@ -695,26 +723,25 @@ ordersRouter.post(
     if (!order || order.buyerId !== req.user!.id || order.status !== 'completed') {
       throw new AppError(400, 'Không thể đánh giá đơn này', 'INVALID_REVIEW');
     }
-    const [existingReview] = await db
-      .select({ id: reviews.id })
-      .from(reviews)
-      .where(eq(reviews.orderId, order.id))
-      .limit(1);
-    if (existingReview) {
-      throw new AppError(409, 'Đơn này đã được đánh giá', 'ALREADY_REVIEWED');
+    try {
+      const [review] = await db
+        .insert(reviews)
+        .values({
+          orderId: order.id,
+          buyerId: req.user!.id,
+          sellerId: order.sellerId,
+          rating: body.rating,
+          comment: body.comment,
+          tags: body.tags,
+        })
+        .returning();
+      res.status(201).json({ data: review });
+    } catch (err) {
+      if (isPgUniqueViolation(err)) {
+        throw new AppError(409, 'Đơn này đã được đánh giá', 'ALREADY_REVIEWED');
+      }
+      throw err;
     }
-    const [review] = await db
-      .insert(reviews)
-      .values({
-        orderId: order.id,
-        buyerId: req.user!.id,
-        sellerId: order.sellerId,
-        rating: body.rating,
-        comment: body.comment,
-        tags: body.tags,
-      })
-      .returning();
-    res.status(201).json({ data: review });
   }),
 );
 
@@ -761,40 +788,44 @@ ordersRouter.post(
         evidenceUrls: z.array(z.string()).optional(),
       })
       .parse(req.body);
-    const evidenceUrls = assertPrivateProofUrls(body.evidenceUrls, 'Ảnh bằng chứng');
     const db = req.app.locals.db;
     const orderId = paramId(req);
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order || order.buyerId !== req.user!.id) {
       throw new AppError(403, 'Không có quyền', 'FORBIDDEN');
     }
-    const [existing] = await db
-      .select({ id: complaints.id })
-      .from(complaints)
-      .where(eq(complaints.orderId, order.id))
-      .limit(1);
-    if (existing) {
-      throw new AppError(409, 'Đơn này đã có khiếu nại', 'ALREADY_COMPLAINED');
+    const evidenceUrls = assertPrivateProofUrlsForOrder(
+      body.evidenceUrls,
+      req.user!.id,
+      orderId,
+      'Ảnh bằng chứng',
+    );
+    try {
+      const [complaint] = await db
+        .insert(complaints)
+        .values({
+          orderId: order.id,
+          buyerId: req.user!.id,
+          sellerId: order.sellerId,
+          reason: body.reason,
+          description: body.description,
+          evidenceUrls: evidenceUrls.length ? evidenceUrls : null,
+          status: 'waiting_seller',
+        })
+        .returning();
+      await db.insert(complaintMessages).values({
+        complaintId: complaint.id,
+        authorId: req.user!.id,
+        authorRole: 'buyer',
+        body: body.description,
+      });
+      res.status(201).json({ data: complaint });
+    } catch (err) {
+      if (isPgUniqueViolation(err)) {
+        throw new AppError(409, 'Đơn này đã có khiếu nại', 'ALREADY_COMPLAINED');
+      }
+      throw err;
     }
-    const [complaint] = await db
-      .insert(complaints)
-      .values({
-        orderId: order.id,
-        buyerId: req.user!.id,
-        sellerId: order.sellerId,
-        reason: body.reason,
-        description: body.description,
-        evidenceUrls: evidenceUrls.length ? evidenceUrls : null,
-        status: 'waiting_seller',
-      })
-      .returning();
-    await db.insert(complaintMessages).values({
-      complaintId: complaint.id,
-      authorId: req.user!.id,
-      authorRole: 'buyer',
-      body: body.description,
-    });
-    res.status(201).json({ data: complaint });
   }),
 );
 

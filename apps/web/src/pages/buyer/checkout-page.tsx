@@ -99,7 +99,7 @@ export function CheckoutPage() {
   if (errCart) {
     return <QueryErrorState message="Không tải được giỏ hàng" onRetry={() => refetchCart()} className="mx-auto max-w-md" />;
   }
-  if (!cartData?.data?.items.length) {
+  if (!cartData?.data?.items?.length) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <p className="text-[var(--color-muted)]">Giỏ hàng trống.</p>

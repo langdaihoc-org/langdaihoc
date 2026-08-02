@@ -10,7 +10,8 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   isActiveBuyer: boolean;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
+  setSessionUser: (user: AuthUser | null) => void;
   logout: () => Promise<void>;
 }
 
@@ -43,9 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = data?.user ?? null;
 
+  const setSessionUser = useCallback(
+    (next: AuthUser | null) => {
+      queryClient.setQueryData(['auth', 'me'], next ? { user: next } : null);
+    },
+    [queryClient],
+  );
+
   const logout = useCallback(async () => {
-    await authApi.logout();
-    queryClient.clear();
+    // Xóa cache local trước — tránh PII còn lại nếu logout API fail/treo.
+    queryClient.setQueryData(['auth', 'me'], null);
+    queryClient.removeQueries({
+      predicate: (q) => {
+        const key = q.queryKey[0];
+        return key !== 'catalog' && key !== 'auth';
+      },
+    });
+    try {
+      await authApi.logout();
+    } catch {
+      // đã clear session local
+    }
+    queryClient.removeQueries({ queryKey: ['auth'] });
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
@@ -58,12 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user.status === 'active' &&
           (user.emailVerified || DEMO_MODE),
       ),
-      refetch: () => {
-        void refetch();
-      },
+      refetch: () => refetch(),
+      setSessionUser,
       logout,
     }),
-    [user, bootstrapped, refetch, logout],
+    [user, bootstrapped, refetch, setSessionUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

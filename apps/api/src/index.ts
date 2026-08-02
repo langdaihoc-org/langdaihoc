@@ -45,7 +45,7 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '6mb' }));
 app.use(cookieParser());
 app.use(requireTrustedOrigin);
 

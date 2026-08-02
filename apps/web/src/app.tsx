@@ -21,7 +21,11 @@ function lazyNamed<T extends Record<string, ComponentType>>(
 ) {
   return lazy(async () => {
     const mod = await loader();
-    return { default: mod[name] as ComponentType };
+    const Comp = mod[name];
+    if (!Comp) {
+      throw new Error(`Lazy export missing: ${name}`);
+    }
+    return { default: Comp as ComponentType };
   });
 }
 
@@ -93,12 +97,12 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ToastProvider>
-        <BrowserRouter>
-          <ErrorBoundary>
-          <Suspense fallback={<RouteFallback />}>
-          <Routes>
+      <ErrorBoundary>
+        <AuthProvider>
+          <ToastProvider>
+            <BrowserRouter>
+              <Suspense fallback={<RouteFallback />}>
+                <Routes>
             {/* Buyer zone — seller/admin bị chặn */}
             <Route element={<BuyerOnlyLayout />}>
               <Route index element={<HomePage />} />
@@ -153,11 +157,11 @@ export function App() {
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-          </Suspense>
-          </ErrorBoundary>
-        </BrowserRouter>
-        </ToastProvider>
-      </AuthProvider>
+              </Suspense>
+            </BrowserRouter>
+          </ToastProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }

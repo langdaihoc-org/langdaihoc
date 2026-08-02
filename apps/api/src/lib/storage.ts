@@ -325,6 +325,26 @@ export function assertPrivateProofUrl(
   return url.trim();
 }
 
+/**
+ * Biên lai/bằng chứng phải thuộc path `{userId}/{orderId}/...`
+ * (đúng format upload buyer) — chặn gắn URL lệch đơn/user.
+ */
+export function assertPrivateProofUrlForOrder(
+  url: string | null | undefined,
+  userId: string,
+  orderId: string,
+  label = 'Ảnh biên lai',
+): string | null {
+  const trimmed = assertPrivateProofUrl(url, label);
+  if (!trimmed) return null;
+  const ref = parseSupabaseStorageUrl(trimmed);
+  const prefix = `${userId}/${orderId}/`;
+  if (!ref || !ref.path.startsWith(prefix)) {
+    throw new AppError(400, `${label} không khớp đơn hàng`, 'INVALID_IMAGE_URL');
+  }
+  return trimmed;
+}
+
 export function assertPrivateProofUrls(
   urls: string[] | null | undefined,
   label = 'Ảnh bằng chứng',
@@ -332,6 +352,20 @@ export function assertPrivateProofUrls(
   if (!urls?.length) return [];
   return urls.map((u) => {
     const v = assertPrivateProofUrl(u, label);
+    if (v == null) throw new AppError(400, `${label} không hợp lệ`, 'INVALID_IMAGE_URL');
+    return v;
+  });
+}
+
+export function assertPrivateProofUrlsForOrder(
+  urls: string[] | null | undefined,
+  userId: string,
+  orderId: string,
+  label = 'Ảnh bằng chứng',
+): string[] {
+  if (!urls?.length) return [];
+  return urls.map((u) => {
+    const v = assertPrivateProofUrlForOrder(u, userId, orderId, label);
     if (v == null) throw new AppError(400, `${label} không hợp lệ`, 'INVALID_IMAGE_URL');
     return v;
   });

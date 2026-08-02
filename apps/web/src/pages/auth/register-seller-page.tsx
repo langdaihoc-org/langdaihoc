@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 import { authApi, ApiError } from '@/lib/api';
+import { isSafeInternalPath } from '@langdaihoc/shared';
 
 export function SellerRegisterPage() {
   const navigate = useNavigate();
@@ -28,7 +29,11 @@ export function SellerRegisterPage() {
     try {
       const result = await authApi.registerSeller(data);
       toast(result.message, 'success');
-      navigate(result.redirectTo, {
+      const dest =
+        typeof result.redirectTo === 'string' && isSafeInternalPath(result.redirectTo)
+          ? result.redirectTo
+          : '/auth/check-email';
+      navigate(dest, {
         replace: true,
         state: { authNotice: result.message, registeredEmail: data.email },
       });

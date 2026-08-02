@@ -2,11 +2,26 @@
 
 export const isProd = process.env.NODE_ENV === 'production';
 
-/** Chặn DEMO_MODE trên production — fail boot nếu cấu hình sai. */
+/** Host/env trông như môi trường live (kể cả khi NODE_ENV bị set sai). */
+export function looksLikeLiveDeploy(): boolean {
+  if (isProd) return true;
+  if (process.env.RAILWAY_ENVIRONMENT === 'production') return true;
+  const frontend = (process.env.FRONTEND_URL ?? '').replace(/\/$/, '').toLowerCase();
+  if (
+    frontend === 'https://langdaihoc.com.vn' ||
+    frontend === 'https://www.langdaihoc.com.vn' ||
+    frontend.endsWith('.vercel.app')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Chặn DEMO_MODE trên môi trường live — fail boot nếu cấu hình sai. */
 export function assertDemoModeSafe() {
-  if (isProd && process.env.DEMO_MODE === 'true') {
+  if (process.env.DEMO_MODE === 'true' && looksLikeLiveDeploy()) {
     throw new Error(
-      'DEMO_MODE=true bị cấm khi NODE_ENV=production. Tắt DEMO_MODE hoặc dùng staging riêng.',
+      'DEMO_MODE=true bị cấm trên môi trường live (production / Railway production / FRONTEND_URL production). Tắt DEMO_MODE hoặc dùng staging riêng.',
     );
   }
 }

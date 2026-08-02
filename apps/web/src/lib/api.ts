@@ -1,4 +1,9 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const rawApiBase = import.meta.env.VITE_API_URL ?? '';
+const API_BASE = String(rawApiBase).replace(/\/$/, '');
+
+if (import.meta.env.PROD && !API_BASE) {
+  throw new Error('VITE_API_URL is required in production builds');
+}
 
 export class ApiError extends Error {
   constructor(
@@ -13,6 +18,14 @@ export class ApiError extends Error {
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {
+  const ct = res.headers.get('content-type') ?? '';
+  if (!ct.includes('application/json')) {
+    throw new ApiError(
+      'Phản hồi API không hợp lệ — kiểm tra VITE_API_URL / proxy',
+      res.status || 502,
+      'INVALID_API_RESPONSE',
+    );
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new ApiError(

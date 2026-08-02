@@ -19,7 +19,7 @@ export function StickyCartBar({ bottomOffset = 'bottom-16' }: { bottomOffset?: s
     setDismissedFp(null);
   }, [fingerprint]);
 
-  if (!isAuthenticated || !cart?.items.length) return null;
+  if (!isAuthenticated || !cart?.items?.length) return null;
   if (dismissedFp === fingerprint) return null;
 
   return (

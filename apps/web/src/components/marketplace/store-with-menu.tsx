@@ -123,7 +123,7 @@ export function StoreWithMenu({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [preview, setPreview] = useState<{ item: FoodItem; i: number } | null>(null);
-  const rating = formatRating(store.rating.average, store.rating.count);
+  const rating = formatRating(store.rating?.average, store.rating?.count);
   const avgMins = store.avgDeliveryMinutes != null ? Number(store.avgDeliveryMinutes) : null;
   const areas = store.serviceAreas?.filter(Boolean) ?? [];
 

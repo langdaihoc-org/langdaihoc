@@ -49,9 +49,11 @@ export function getLaundryImage(index: number) {
   return LAUNDRY_IMAGES[index % LAUNDRY_IMAGES.length];
 }
 
-export function formatRating(avg: number, count: number) {
-  if (count === 0) return { text: 'Mới', stars: '—' };
-  return { text: avg.toFixed(1), stars: '★' };
+export function formatRating(avg?: number | null, count?: number | null) {
+  const c = Number(count ?? 0);
+  if (!c) return { text: 'Mới', stars: '—' };
+  const a = Number(avg ?? 0);
+  return { text: a.toFixed(1), stars: '★' };
 }
 
 export function laundryUnitLabel(unit?: string | null) {

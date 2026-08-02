@@ -40,7 +40,7 @@ function toggleOption(
   optId: string,
   selected: string[],
 ): string[] {
-  const inGroup = group.options.map((o) => o.id);
+  const inGroup = (group.options ?? []).map((o) => o.id);
   const pickedInGroup = selected.filter((id) => inGroup.includes(id));
   const isSelected = selected.includes(optId);
 
@@ -327,7 +327,7 @@ export function FoodItemSheet({
           ? [{ id: 'optional', name: 'Tùy chọn thêm', required: false, minSelect: 0, maxSelect: item.options.length, options: item.options }]
           : []);
 
-  const allOptions = groups.flatMap((g) => g.options);
+  const allOptions = groups.flatMap((g) => g.options ?? []);
   const optionTotal = allOptions.filter((o) => selected.includes(o.id)).reduce((s, o) => s + o.priceDelta, 0);
   const unitPrice = Number(item?.price ?? 0) + optionTotal;
   const total = unitPrice * qty;
@@ -342,7 +342,7 @@ export function FoodItemSheet({
     setError(null);
     setPendingAction(action);
     // Gửi đúng thứ tự nhóm → option trên menu (không theo lúc bấm)
-    const ordered = groups.flatMap((g) => g.options.map((o) => o.id)).filter((id) => selected.includes(id));
+    const ordered = groups.flatMap((g) => (g.options ?? []).map((o) => o.id)).filter((id) => selected.includes(id));
     onAdd({ quantity: qty, options: ordered, note }, action);
   };
 
@@ -421,7 +421,7 @@ export function FoodItemSheet({
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    {group.options.map((opt) => {
+                    {(group.options ?? []).map((opt) => {
                       const isSelected = selected.includes(opt.id);
                       return (
                         <button

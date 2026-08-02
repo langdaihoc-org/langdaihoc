@@ -223,7 +223,7 @@ export function HomePage() {
         ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {topStores.map((s) => {
-            const rating = formatRating(s.rating.average, s.rating.count);
+            const rating = formatRating(s.rating?.average, s.rating?.count);
             return (
               <Link key={s.id} to={`/store/${s.id}`}>
                 <Card className="flex items-center gap-3 p-3 transition-shadow hover:shadow-[var(--shadow-hover)]">

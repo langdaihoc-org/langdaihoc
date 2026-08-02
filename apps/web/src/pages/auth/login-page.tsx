@@ -32,7 +32,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { refetch } = useAuth();
+  const { refetch, setSessionUser } = useAuth();
   const locationState = location.state as AuthLocationState;
   const [error, setError] = useState('');
   const [info, setInfo] = useState(() => initialAuthInfo(location.search, locationState));
@@ -67,7 +67,8 @@ export function LoginPage() {
     setNeedsVerify(false);
     try {
       const result = await authApi.login(data);
-      refetch();
+      if (result.user) setSessionUser(result.user);
+      await refetch();
 
       if (result.requiresEmailVerification) {
         setNeedsVerify(true);

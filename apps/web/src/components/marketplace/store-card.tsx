@@ -6,7 +6,7 @@ import { FoodImage, StoreAvatar } from './food-image';
 import { StatusBadge } from '@/components/ui/brand';
 
 export function StoreCard({ store }: { store: Seller; index?: number }) {
-  const rating = formatRating(store.rating.average, store.rating.count);
+  const rating = formatRating(store.rating?.average, store.rating?.count);
   const avgMins = store.avgDeliveryMinutes != null ? Number(store.avgDeliveryMinutes) : null;
   const areas = store.serviceAreas?.filter(Boolean) ?? [];
 

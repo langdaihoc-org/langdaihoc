@@ -1,6 +1,6 @@
 import type { ReactNode, MouseEventHandler } from 'react';
 import { Link } from 'react-router-dom';
-import { isSafeInternalPath } from '@langdaihoc/shared';
+import { isSafeHttpsUrl, isSafeInternalPath } from '@langdaihoc/shared';
 
 type Props = {
   to: string;
@@ -9,19 +9,24 @@ type Props = {
   onClick?: MouseEventHandler<HTMLAnchorElement>;
 };
 
-/** Internal `/path` → React Router; http(s) → thẻ `<a>` mới tab. */
+/** Internal `/path` → React Router; http(s) → `<a>` tab mới; scheme khác → không render link. */
 export function SafeNavLink({ to, className, children, onClick }: Props) {
-  if (isSafeInternalPath(to)) {
+  const href = to?.trim() ?? '';
+  if (href && isSafeInternalPath(href)) {
     return (
-      <Link to={to} className={className} onClick={onClick}>
+      <Link to={href} className={className} onClick={onClick}>
         {children}
       </Link>
     );
   }
 
-  return (
-    <a href={to} className={className} onClick={onClick} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
+  if (href && isSafeHttpsUrl(href) && !href.startsWith('/')) {
+    return (
+      <a href={href} className={className} onClick={onClick} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  }
+
+  return <span className={className}>{children}</span>;
 }

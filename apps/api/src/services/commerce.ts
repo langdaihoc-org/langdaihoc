@@ -48,6 +48,8 @@ function isPgUniqueViolation(err: unknown): boolean {
   return Boolean(err && typeof err === 'object' && (err as { code?: string }).code === '23505');
 }
 
+export { isPgUniqueViolation };
+
 /** Race: unique key → transaction rollback; đọc lại đơn đã thắng. */
 async function resolveIdempotentOrder(db: Database, buyerId: string, idempotencyKey: string) {
   const [existingKey] = await db
@@ -356,10 +358,16 @@ export async function getLaundryCatalog(db: Database, sellerId?: string, opts?: 
 
 export async function getOrCreateCart(db: DbConn, userId: string) {
   let [cart] = await db.select().from(carts).where(eq(carts.userId, userId)).limit(1);
-  if (!cart) {
+  if (cart) return cart;
+  try {
     [cart] = await db.insert(carts).values({ userId }).returning();
+    return cart;
+  } catch (err) {
+    if (!isPgUniqueViolation(err)) throw err;
+    [cart] = await db.select().from(carts).where(eq(carts.userId, userId)).limit(1);
+    if (!cart) throw err;
+    return cart;
   }
-  return cart;
 }
 
 export async function getCartWithItems(db: DbConn, userId: string) {

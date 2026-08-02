@@ -4,7 +4,7 @@
  */
 
 export function isSafeInternalPath(url: string | null | undefined): boolean {
-  if (!url?.trim()) return true;
+  if (!url?.trim()) return false;
   const t = url.trim();
   if (!t.startsWith('/')) return false;
   if (t.startsWith('//')) return false;

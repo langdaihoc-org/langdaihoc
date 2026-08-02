@@ -91,7 +91,7 @@ export function StorePage() {
   ) => {
     if (!selectedItem) return;
     if (!force) setPendingAdd({ ...p, action });
-    const catalogOptions = (selectedItem.optionGroups ?? []).flatMap((g) => g.options);
+    const catalogOptions = (selectedItem.optionGroups ?? []).flatMap((g) => g.options ?? []);
     const fallback = selectedItem.options ?? [];
     const allOptions = catalogOptions.length ? catalogOptions : fallback;
     const seen = new Set<string>();
@@ -108,7 +108,7 @@ export function StorePage() {
     });
   };
 
-  const rating = store ? formatRating(store.rating.average, store.rating.count) : null;
+  const rating = store ? formatRating(store.rating?.average, store.rating?.count) : null;
 
   const categorySidebar = (
     <div className="space-y-1">

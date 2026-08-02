@@ -43,6 +43,12 @@ const authLimiter = rateLimit({
   message: { error: { message: 'Quá nhiều yêu cầu, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
 });
 
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 120 : 500,
+  message: { error: { message: 'Quá nhiều yêu cầu, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
+});
+
 const resendLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -315,6 +321,7 @@ authRouter.post(
 
 authRouter.post(
   '/refresh',
+  refreshLimiter,
   asyncHandler(async (req, res) => {
     const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE];
     if (!refreshToken) {

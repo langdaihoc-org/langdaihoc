@@ -122,7 +122,6 @@ buyerRouter.patch(
       await ensurePhoneNotUsed(db, body.phone, userId);
     }
 
-    let emailChanged = false;
     let emailVerified = req.user!.emailVerified;
 
     if (body.email && body.email !== req.user!.email.toLowerCase()) {
@@ -150,6 +149,12 @@ buyerRouter.patch(
         throw new AppError(400, error.message || 'Không đổi được email', 'EMAIL_UPDATE_FAILED');
       }
 
+      const rollbackAuthEmail = async () => {
+        await supabaseAdmin.auth.admin
+          .updateUserById(userId, { email: oldEmail, email_confirm: true })
+          .catch((e: unknown) => console.error('[buyer] rollback email failed', userId, e));
+      };
+
       if (!DEMO_MODE) {
         const frontendUrl = getFrontendUrl();
         const { error: resendError } = await supabaseAdmin.auth.resend({
@@ -160,11 +165,7 @@ buyerRouter.patch(
           },
         });
         if (resendError) {
-          await supabaseAdmin.auth.admin
-            .updateUserById(userId, { email: oldEmail, email_confirm: true })
-            .catch((e: unknown) =>
-              console.error('[buyer] rollback email failed', userId, e),
-            );
+          await rollbackAuthEmail();
           throw new AppError(
             502,
             'Không gửi được email xác minh. Email chưa đổi — thử lại sau.',
@@ -173,8 +174,36 @@ buyerRouter.patch(
         }
       }
 
-      emailChanged = true;
       emailVerified = DEMO_MODE;
+
+      try {
+        const [updatedEmail] = await db
+          .update(profiles)
+          .set({
+            ...(body.fullName !== undefined ? { fullName: body.fullName } : {}),
+            ...(body.phone !== undefined ? { phone: body.phone } : {}),
+            email: body.email!,
+            status: emailVerified ? 'active' : 'pending_email_verification',
+            updatedAt: new Date(),
+          })
+          .where(eq(profiles.id, userId))
+          .returning();
+        if (!updatedEmail) {
+          await rollbackAuthEmail();
+          throw new AppError(500, 'Không cập nhật được hồ sơ', 'PROFILE_UPDATE_FAILED');
+        }
+        res.json({
+          data: updatedEmail,
+          emailChanged: true,
+          message: DEMO_MODE
+            ? 'Đã cập nhật hồ sơ và email'
+            : 'Đã đổi email. Vui lòng kiểm tra hộp thư để xác minh email mới.',
+        });
+        return;
+      } catch (err) {
+        if (!(err instanceof AppError)) await rollbackAuthEmail();
+        throw err;
+      }
     }
 
     const [updated] = await db
@@ -182,12 +211,6 @@ buyerRouter.patch(
       .set({
         ...(body.fullName !== undefined ? { fullName: body.fullName } : {}),
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
-        ...(emailChanged
-          ? {
-              email: body.email!,
-              status: emailVerified ? 'active' : 'pending_email_verification',
-            }
-          : {}),
         updatedAt: new Date(),
       })
       .where(eq(profiles.id, userId))
@@ -195,12 +218,8 @@ buyerRouter.patch(
 
     res.json({
       data: updated,
-      emailChanged,
-      message: emailChanged
-        ? DEMO_MODE
-          ? 'Đã cập nhật hồ sơ và email'
-          : 'Đã đổi email. Vui lòng kiểm tra hộp thư để xác minh email mới.'
-        : 'Đã cập nhật hồ sơ',
+      emailChanged: false,
+      message: 'Đã cập nhật hồ sơ',
     });
   }),
 );

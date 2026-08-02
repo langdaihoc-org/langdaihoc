@@ -132,7 +132,7 @@ export function FoodPage() {
   ) => {
     if (!selectedItem) return;
     if (!force) setPendingAdd({ ...p, action });
-    const catalogOptions = (selectedItem.optionGroups ?? []).flatMap((g) => g.options);
+    const catalogOptions = (selectedItem.optionGroups ?? []).flatMap((g) => g.options ?? []);
     const fallback = selectedItem.options ?? [];
     const allOptions = catalogOptions.length ? catalogOptions : fallback;
     const seen = new Set<string>();
@@ -309,7 +309,7 @@ export function CartPage() {
   if (isLoading) return <p className="py-12 text-center text-sm text-[var(--color-muted)]">Đang tải...</p>;
   if (isError) return <QueryErrorState message="Không tải được giỏ hàng" onRetry={() => refetch()} className="mx-auto max-w-md" />;
 
-  if (!cart?.items.length) {
+  if (!cart?.items?.length) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-orange-50">

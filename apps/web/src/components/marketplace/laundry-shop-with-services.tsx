@@ -75,7 +75,7 @@ export function LaundryShopWithServices({
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [expanded, setExpanded] = useState(false);
-  const rating = formatRating(store.rating.average, store.rating.count);
+  const rating = formatRating(store.rating?.average, store.rating?.count);
   const avgMins = store.avgDeliveryMinutes != null ? Number(store.avgDeliveryMinutes) : null;
   const areas = store.serviceAreas?.filter(Boolean) ?? [];
 
