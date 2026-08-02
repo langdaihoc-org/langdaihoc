@@ -32,6 +32,9 @@ import {
   getSellerByUserId,
   ensureUserRole,
   roleHomePath,
+  createAuthUserForRegister,
+  resendSignupConfirmation,
+  formatAuthError,
 } from './service.js';
 import type { UserRole } from '@langdaihoc/shared';
 import type { Database } from '@langdaihoc/database';
@@ -101,20 +104,18 @@ authRouter.post(
     validateBuyerEmail(input.email);
     if (input.phone) await ensurePhoneNotUsed(db, input.phone);
 
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    const { userId } = await createAuthUserForRegister({
       email: input.email,
       password: input.password,
-      email_confirm: DEMO_MODE,
-      user_metadata: { full_name: input.fullName, role: 'buyer' },
+      fullName: input.fullName,
+      role: 'buyer',
+      emailRedirectTo: `${frontendUrl}/auth/verify-email`,
+      supabaseAdmin,
     });
-
-    if (error || !data.user) {
-      throw new AppError(400, 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
-    }
 
     try {
       await db.insert(profiles).values({
-        id: data.user.id,
+        id: userId,
         email: input.email,
         role: 'buyer',
         status: DEMO_MODE ? 'active' : 'pending_email_verification',
@@ -122,30 +123,10 @@ authRouter.post(
         phone: input.phone ?? null,
       });
 
-      await ensureUserRole(db, data.user.id, 'buyer');
+      await ensureUserRole(db, userId, 'buyer');
     } catch (e) {
-      await supabaseAdmin.auth.admin.deleteUser(data.user.id).catch(() => undefined);
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
       throw e;
-    }
-
-    if (!DEMO_MODE) {
-      const { error: mailError } = await supabaseAdmin.auth.resend({
-        type: 'signup',
-        email: input.email,
-        options: {
-          emailRedirectTo: `${frontendUrl}/auth/verify-email`,
-        },
-      });
-      if (mailError) {
-        console.error('[auth] buyer register mail failed', input.email, mailError.message);
-        res.status(201).json({
-          message:
-            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
-          redirectTo: '/auth/check-email',
-          emailSendFailed: true,
-        });
-        return;
-      }
     }
 
     res.status(201).json({
@@ -169,20 +150,18 @@ authRouter.post(
     await ensureEmailNotUsed(db, input.email);
     await ensurePhoneNotUsed(db, input.phone);
 
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    const { userId } = await createAuthUserForRegister({
       email: input.email,
       password: input.password,
-      email_confirm: DEMO_MODE,
-      user_metadata: { full_name: input.fullName, role: 'seller' },
+      fullName: input.fullName,
+      role: 'seller',
+      emailRedirectTo: `${frontendUrl}/auth/verify-email`,
+      supabaseAdmin,
     });
-
-    if (error || !data.user) {
-      throw new AppError(400, 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
-    }
 
     try {
       await db.insert(profiles).values({
-        id: data.user.id,
+        id: userId,
         email: input.email,
         role: 'seller',
         status: DEMO_MODE ? 'active' : 'pending_email_verification',
@@ -192,7 +171,7 @@ authRouter.post(
 
       // Luôn pending — kể cả DEMO: admin phải bấm duyệt trước khi mở bán.
       await db.insert(sellers).values({
-        userId: data.user.id,
+        userId,
         shopName: `${input.fullName} — chờ duyệt`,
         serviceTypes: input.intendedService,
         businessAddress: `Liên hệ: ${input.phone}`,
@@ -203,30 +182,10 @@ authRouter.post(
         approvedAt: null,
       });
 
-      await ensureUserRole(db, data.user.id, 'seller');
+      await ensureUserRole(db, userId, 'seller');
     } catch (e) {
-      await supabaseAdmin.auth.admin.deleteUser(data.user.id).catch(() => undefined);
+      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
       throw e;
-    }
-
-    if (!DEMO_MODE) {
-      const { error: mailError } = await supabaseAdmin.auth.resend({
-        type: 'signup',
-        email: input.email,
-        options: {
-          emailRedirectTo: `${frontendUrl}/auth/verify-email`,
-        },
-      });
-      if (mailError) {
-        console.error('[auth] seller register mail failed', input.email, mailError.message);
-        res.status(201).json({
-          message:
-            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
-          redirectTo: '/auth/check-email',
-          emailSendFailed: true,
-        });
-        return;
-      }
     }
 
     res.status(201).json({
@@ -505,15 +464,12 @@ authRouter.post(
     const email = await resolveAuthEmail(db, identifier);
     if (email) {
       const frontendUrl = getFrontendUrl();
-      const { error: mailError } = await req.app.locals.supabaseAdmin.auth.resend({
-        type: 'signup',
+      const { error: mailError } = await resendSignupConfirmation(
         email,
-        options: {
-          emailRedirectTo: `${frontendUrl}/auth/verify-email`,
-        },
-      });
+        `${frontendUrl}/auth/verify-email`,
+      );
       if (mailError) {
-        console.error('[auth] resend-verification failed', email, mailError.message);
+        console.error('[auth] resend-verification failed', email, formatAuthError(mailError));
       }
     }
 

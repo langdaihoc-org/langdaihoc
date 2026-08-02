@@ -2,8 +2,10 @@ import { eq, and } from 'drizzle-orm';
 import type { Database } from '@langdaihoc/database';
 import { profiles, sellers, userRoles } from '@langdaihoc/database';
 import type { UserRole } from '@langdaihoc/shared';
-import { extractEmailDomain, normalizePhoneVN } from '@langdaihoc/shared';
+import { DEMO_MODE, extractEmailDomain, normalizePhoneVN } from '@langdaihoc/shared';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../../middleware/error-handler.js';
+import { createSupabaseAnon } from '../../lib/supabase.js';
 
 
 const DISPOSABLE_DOMAINS = new Set([
@@ -13,6 +15,83 @@ const DISPOSABLE_DOMAINS = new Set([
   '10minutemail.com',
   'yopmail.com',
 ]);
+
+export function formatAuthError(err: unknown): string {
+  if (!err) return 'unknown';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error && err.message) {
+    const extra = err as Error & { status?: number; code?: string };
+    return JSON.stringify({
+      message: err.message,
+      status: extra.status,
+      code: extra.code,
+      name: err.name,
+    });
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+/**
+ * Tạo user Auth.
+ * - DEMO: admin.createUser + email_confirm (không gửi mail).
+ * - Prod: anon.signUp — Supabase mailer tự gửi xác minh (createUser+resend thường fail).
+ */
+export async function createAuthUserForRegister(opts: {
+  email: string;
+  password: string;
+  fullName: string;
+  role: 'buyer' | 'seller';
+  emailRedirectTo: string;
+  supabaseAdmin: SupabaseClient;
+}): Promise<{ userId: string }> {
+  if (DEMO_MODE) {
+    const { data, error } = await opts.supabaseAdmin.auth.admin.createUser({
+      email: opts.email,
+      password: opts.password,
+      email_confirm: true,
+      user_metadata: { full_name: opts.fullName, role: opts.role },
+    });
+    if (error || !data.user) {
+      throw new AppError(400, error?.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
+    }
+    return { userId: data.user.id };
+  }
+
+  const anon = createSupabaseAnon();
+  const { data, error } = await anon.auth.signUp({
+    email: opts.email,
+    password: opts.password,
+    options: {
+      emailRedirectTo: opts.emailRedirectTo,
+      data: { full_name: opts.fullName, role: opts.role },
+    },
+  });
+  if (error) {
+    throw new AppError(400, error.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
+  }
+  if (!data.user) {
+    throw new AppError(400, 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
+  }
+  // Email đã tồn tại: Supabase có thể trả user với identities rỗng (anti-enumeration).
+  if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new AppError(409, 'Email đã được sử dụng', 'EMAIL_EXISTS');
+  }
+  return { userId: data.user.id };
+}
+
+/** Gửi lại mail xác minh — dùng anon client (đúng API public resend). */
+export async function resendSignupConfirmation(email: string, emailRedirectTo: string) {
+  const anon = createSupabaseAnon();
+  return anon.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo },
+  });
+}
 
 export function validateBuyerEmail(email: string) {
   const domain = extractEmailDomain(email);
