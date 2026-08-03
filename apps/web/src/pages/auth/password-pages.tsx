@@ -67,6 +67,45 @@ export function ForgotPasswordPage() {
   );
 }
 
+const RESET_SESSION_KEY = 'ldh_reset_session';
+const RESET_SESSION_TTL_MS = 15 * 60 * 1000;
+/** Dedup verify khi React StrictMode mount 2 lần (token chỉ dùng 1 lần). */
+const recoveryVerifyInflight = new Map<string, Promise<{ accessToken: string; refreshToken: string }>>();
+
+function readCachedResetSession(): { accessToken: string; refreshToken: string } | null {
+  try {
+    const raw = sessionStorage.getItem(RESET_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { accessToken?: string; refreshToken?: string; at?: number };
+    if (!parsed.accessToken || !parsed.at || Date.now() - parsed.at > RESET_SESSION_TTL_MS) {
+      sessionStorage.removeItem(RESET_SESSION_KEY);
+      return null;
+    }
+    return { accessToken: parsed.accessToken, refreshToken: parsed.refreshToken ?? '' };
+  } catch {
+    return null;
+  }
+}
+
+function cacheResetSession(accessToken: string, refreshToken: string) {
+  try {
+    sessionStorage.setItem(
+      RESET_SESSION_KEY,
+      JSON.stringify({ accessToken, refreshToken, at: Date.now() }),
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function clearCachedResetSession() {
+  try {
+    sessionStorage.removeItem(RESET_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -79,6 +118,15 @@ export function ResetPasswordPage() {
     let cancelled = false;
 
     async function boot() {
+      const cached = readCachedResetSession();
+      if (cached) {
+        if (!cancelled) {
+          setTokens(cached);
+          setBooting(false);
+        }
+        return;
+      }
+
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const queryParams = new URLSearchParams(window.location.search);
       const authError =
@@ -99,28 +147,52 @@ export function ResetPasswordPage() {
       let accessToken = hashParams.get('access_token') ?? '';
       let refreshToken = hashParams.get('refresh_token') ?? '';
 
-      // PKCE / verifyOtp — Supabase mới thường trả ?code= hoặc ?token_hash=
+      // Link Resend: ?token_hash=&type=recovery — verify qua API (không phụ thuộc VITE_SUPABASE_*).
+      const tokenHash = queryParams.get('token_hash');
+      const rawType = queryParams.get('type') ?? 'recovery';
+      const otpType =
+        rawType === 'recovery' ||
+        rawType === 'magiclink' ||
+        rawType === 'signup' ||
+        rawType === 'email'
+          ? rawType
+          : 'recovery';
+      if (!accessToken && tokenHash) {
+        const cacheKey = `${otpType}:${tokenHash}`;
+        let pending = recoveryVerifyInflight.get(cacheKey);
+        if (!pending) {
+          pending = authApi
+            .verifyRecovery({
+              tokenHash,
+              type: otpType,
+            })
+            .then((result) => ({
+              accessToken: result.accessToken,
+              refreshToken: result.refreshToken,
+            }))
+            .finally(() => {
+              recoveryVerifyInflight.delete(cacheKey);
+            });
+          recoveryVerifyInflight.set(cacheKey, pending);
+        }
+        try {
+          const result = await pending;
+          accessToken = result.accessToken;
+          refreshToken = result.refreshToken;
+        } catch (err) {
+          console.error(
+            '[reset-password] verify-recovery failed',
+            err instanceof ApiError ? err.message : err,
+          );
+        }
+      }
+
+      // Fallback cũ: PKCE ?code= (cần client Supabase browser).
       if (!accessToken && supabase) {
         const code = queryParams.get('code');
         if (code) {
           const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
           if (!exchangeErr && data.session) {
-            accessToken = data.session.access_token;
-            refreshToken = data.session.refresh_token;
-          }
-        }
-
-        const tokenHash = queryParams.get('token_hash');
-        const otpType = queryParams.get('type');
-        if (!accessToken && tokenHash && (otpType === 'recovery' || otpType === 'magiclink' || otpType === 'signup' || otpType === 'email')) {
-          const { data, error: otpErr } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: otpType,
-          });
-          if (otpErr) {
-            console.error('[reset-password] verifyOtp failed', otpErr.message);
-          }
-          if (!otpErr && data.session) {
             accessToken = data.session.access_token;
             refreshToken = data.session.refresh_token;
           }
@@ -133,10 +205,11 @@ export function ResetPasswordPage() {
 
       if (cancelled) return;
       if (!accessToken) {
-        setError('Liên kết đặt lại mật khẩu không hợp lệ.');
+        setError('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.');
         setBooting(false);
         return;
       }
+      cacheResetSession(accessToken, refreshToken);
       setTokens({ accessToken, refreshToken });
       setBooting(false);
     }
@@ -165,6 +238,7 @@ export function ResetPasswordPage() {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       });
+      clearCachedResetSession();
       setMessage(result.message);
       toast(result.message, 'success');
       navigate('/auth/login?reset=1', {

@@ -67,6 +67,11 @@ export const authApi = {
     }),
   forgotPassword: (body: unknown) =>
     api<{ message: string; accountExists?: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
+  verifyRecovery: (body: { tokenHash: string; type?: string }) =>
+    api<{ accessToken: string; refreshToken: string }>('/api/auth/verify-recovery', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   resetPassword: (body: unknown) =>
     api<{ message: string; redirectTo: string }>('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   changePassword: (body: unknown) =>

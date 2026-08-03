@@ -8,6 +8,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  verifyRecoverySchema,
   changePasswordSchema,
   DEMO_MODE,
   normalizePhoneVN,
@@ -455,6 +456,33 @@ authRouter.post(
     res.json({
       message: 'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn',
       accountExists: true,
+    });
+  }),
+);
+
+authRouter.post(
+  '/verify-recovery',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const input = verifyRecoverySchema.parse(req.body);
+    const supabaseAnon = createSupabaseAnon();
+    const { data, error } = await supabaseAnon.auth.verifyOtp({
+      token_hash: input.tokenHash,
+      type: input.type,
+    });
+
+    if (error || !data.session?.access_token) {
+      console.error('[auth] verify-recovery failed', formatAuthError(error));
+      throw new AppError(
+        400,
+        'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn',
+        'INVALID_TOKEN',
+      );
+    }
+
+    res.json({
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token ?? '',
     });
   }),
 );

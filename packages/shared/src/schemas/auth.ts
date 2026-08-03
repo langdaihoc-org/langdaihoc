@@ -146,6 +146,12 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   });
 
+/** Xác minh link đặt lại mật khẩu (?token_hash=&type=recovery) phía API. */
+export const verifyRecoverySchema = z.object({
+  tokenHash: z.string().trim().min(20).max(2048),
+  type: z.enum(['recovery', 'magiclink', 'signup', 'email']).default('recovery'),
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Nhập mật khẩu hiện tại'),
@@ -176,5 +182,6 @@ export type BuyerRegisterInput = z.infer<typeof buyerRegisterSchema>;
 export type SellerRegisterInput = z.infer<typeof sellerRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type VerifyRecoveryInput = z.infer<typeof verifyRecoverySchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
