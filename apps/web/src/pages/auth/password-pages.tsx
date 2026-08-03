@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 import { authApi, ApiError } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
+import { loadSupabase } from '@/lib/supabase';
 
 export function ForgotPasswordPage() {
   const { toast } = useToast();
@@ -72,12 +72,25 @@ const RESET_SESSION_TTL_MS = 15 * 60 * 1000;
 /** Dedup verify khi React StrictMode mount 2 lần (token chỉ dùng 1 lần). */
 const recoveryVerifyInflight = new Map<string, Promise<{ accessToken: string; refreshToken: string }>>();
 
-function readCachedResetSession(): { accessToken: string; refreshToken: string } | null {
+function readCachedResetSession(
+  tokenKey: string,
+): { accessToken: string; refreshToken: string } | null {
   try {
     const raw = sessionStorage.getItem(RESET_SESSION_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { accessToken?: string; refreshToken?: string; at?: number };
-    if (!parsed.accessToken || !parsed.at || Date.now() - parsed.at > RESET_SESSION_TTL_MS) {
+    const parsed = JSON.parse(raw) as {
+      accessToken?: string;
+      refreshToken?: string;
+      at?: number;
+      tokenKey?: string;
+    };
+    if (
+      !parsed.accessToken ||
+      !parsed.at ||
+      !parsed.tokenKey ||
+      parsed.tokenKey !== tokenKey ||
+      Date.now() - parsed.at > RESET_SESSION_TTL_MS
+    ) {
       sessionStorage.removeItem(RESET_SESSION_KEY);
       return null;
     }
@@ -87,11 +100,11 @@ function readCachedResetSession(): { accessToken: string; refreshToken: string }
   }
 }
 
-function cacheResetSession(accessToken: string, refreshToken: string) {
+function cacheResetSession(tokenKey: string, accessToken: string, refreshToken: string) {
   try {
     sessionStorage.setItem(
       RESET_SESSION_KEY,
-      JSON.stringify({ accessToken, refreshToken, at: Date.now() }),
+      JSON.stringify({ tokenKey, accessToken, refreshToken, at: Date.now() }),
     );
   } catch {
     /* ignore quota */
@@ -118,17 +131,34 @@ export function ResetPasswordPage() {
     let cancelled = false;
 
     async function boot() {
-      const cached = readCachedResetSession();
-      if (cached) {
-        if (!cancelled) {
-          setTokens(cached);
-          setBooting(false);
-        }
-        return;
-      }
-
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const queryParams = new URLSearchParams(window.location.search);
+      const tokenHash = queryParams.get('token_hash');
+      const code = queryParams.get('code');
+      const tokenKey = tokenHash
+        ? `hash:${tokenHash}`
+        : code
+          ? `code:${code}`
+          : hashParams.get('access_token')
+            ? `access:${hashParams.get('access_token')}`
+            : '';
+
+      if (tokenKey) {
+        const cached = readCachedResetSession(tokenKey);
+        if (cached) {
+          if (!cancelled) {
+            setTokens(cached);
+            setBooting(false);
+          }
+          window.history.replaceState(
+            null,
+            '',
+            window.location.pathname.replace(/\/auth\/reset_password$/i, '/auth/reset-password'),
+          );
+          return;
+        }
+      }
+
       const authError =
         hashParams.get('error_description') ||
         hashParams.get('error') ||
@@ -148,7 +178,6 @@ export function ResetPasswordPage() {
       let refreshToken = hashParams.get('refresh_token') ?? '';
 
       // Link Resend: ?token_hash=&type=recovery — verify qua API (không phụ thuộc VITE_SUPABASE_*).
-      const tokenHash = queryParams.get('token_hash');
       const rawType = queryParams.get('type') ?? 'recovery';
       const otpType =
         rawType === 'recovery' ||
@@ -187,10 +216,10 @@ export function ResetPasswordPage() {
         }
       }
 
-      // Fallback cũ: PKCE ?code= (cần client Supabase browser).
-      if (!accessToken && supabase) {
-        const code = queryParams.get('code');
-        if (code) {
+      // Fallback cũ: PKCE ?code= (lazy-load client Supabase browser).
+      if (!accessToken && code) {
+        const supabase = await loadSupabase();
+        if (supabase) {
           const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
           if (!exchangeErr && data.session) {
             accessToken = data.session.access_token;
@@ -199,8 +228,8 @@ export function ResetPasswordPage() {
         }
       }
 
-      if (accessToken) {
-        cacheResetSession(accessToken, refreshToken);
+      if (accessToken && tokenKey) {
+        cacheResetSession(tokenKey, accessToken, refreshToken);
       }
 
       if (window.location.hash || window.location.search) {

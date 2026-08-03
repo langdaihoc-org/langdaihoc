@@ -31,6 +31,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
   const [estimatedTimeHours, setEstimatedTimeHours] = useState('24');
   const [serviceAreasText, setServiceAreasText] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const items = data?.data ?? [];
 
@@ -104,6 +105,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
     mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
       sellerApi.updateLaundry(id, { isAvailable }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['seller-laundry'] }),
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được dịch vụ', 'error'),
   });
 
   const deleteMut = useMutation({
@@ -113,6 +115,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
       toast('Đã xóa dịch vụ', 'info');
       setDeleteId(null);
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không xóa được dịch vụ', 'error'),
   });
 
   const deleteTarget = items.find((i) => i.id === deleteId);
@@ -165,13 +168,14 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
             label="Ảnh dịch vụ"
             value={imageUrl}
             onChange={setImageUrl}
+            onUploadingChange={setImageUploading}
             onUpload={(file) => uploadSellerImage(sellerApi.uploadImage, file, 'laundry-images')}
           />
           <div className="flex gap-2">
             <Button
               onClick={() => saveMut.mutate()}
-              loading={saveMut.isPending}
-              disabled={name.trim().length < 2 || !basePrice || Number(basePrice) <= 0}
+              loading={saveMut.isPending || imageUploading}
+              disabled={name.trim().length < 2 || !basePrice || Number(basePrice) <= 0 || imageUploading}
             >
               {editingId ? 'Lưu thay đổi' : 'Thêm dịch vụ'}
             </Button>

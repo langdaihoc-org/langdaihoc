@@ -1,12 +1,18 @@
 /**
  * Create cloud admin only (no seed catalog).
- * Usage: set env from Railway, then node scripts/create-cloud-admin.mjs
+ * Usage: set env from Railway, then:
+ *   ALLOW_DESTRUCTIVE=1 CONFIRM_DESTRUCTIVE=I_UNDERSTAND ADMIN_PASSWORD='...' \
+ *   railway run --service api -- node scripts/create-cloud-admin.mjs
  */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertLocalDestructive, loadApiEnv } from './lib/assert-local.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+loadApiEnv(root);
+assertLocalDestructive('create-cloud-admin');
+
 const require = createRequire(join(root, 'packages/database/package.json'));
 const postgres = require('postgres');
 const { createClient } = require('@supabase/supabase-js');
@@ -14,13 +20,17 @@ const { createClient } = require('@supabase/supabase-js');
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'Demo1234';
-
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com').trim().toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim();
 const ADMIN_NAME = 'Quản trị viên';
 
 if (!DATABASE_URL || !SUPABASE_URL || !SERVICE_KEY) {
   console.error('Need DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
+
+if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 8) {
+  console.error('ADMIN_PASSWORD is required (min 8 chars). No default password.');
   process.exit(1);
 }
 
@@ -70,7 +80,7 @@ async function main() {
 
   const rows = await sql`select email, role, status from profiles where email = ${ADMIN_EMAIL}`;
   console.log('Profile:', rows[0]);
-  console.log(`Login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(`Login: ${ADMIN_EMAIL} / (password from ADMIN_PASSWORD)`);
   await sql.end({ timeout: 5 });
 }
 

@@ -34,8 +34,11 @@ export function StorePage() {
   const [conflictOpen, setConflictOpen] = useState(false);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
-  const { data: sellers } = useQuery({ queryKey: ['sellers', 'food'], queryFn: () => catalogApi.sellers('food') });
-  const store = sellers?.data.find((s) => s.id === sellerId);
+  const { data: store, isLoading: loadingStore } = useQuery({
+    queryKey: ['seller', sellerId],
+    queryFn: async () => (await catalogApi.seller(sellerId!)).data,
+    enabled: !!sellerId,
+  });
   const { data: menu, isLoading } = useQuery({
     queryKey: ['food', sellerId],
     queryFn: () => catalogApi.food(`sellerId=${sellerId}&limit=100`),
@@ -54,7 +57,7 @@ export function StorePage() {
   const avgMins = store?.avgDeliveryMinutes != null ? Number(store.avgDeliveryMinutes) : null;
   const areas = store?.serviceAreas?.filter(Boolean) ?? [];
   const deliveryLabel = avgMins != null ? `~${avgMins} phút` : '—';
-
+  const pageLoading = loadingStore || isLoading;
   const addMut = useMutation({
     mutationFn: (p: {
       foodItemId: string;
@@ -224,7 +227,7 @@ export function StorePage() {
     </div>
   );
 
-  if (isLoading) return <p className="py-12 text-center font-bold text-[var(--color-muted)]">Đang tải...</p>;
+  if (pageLoading) return <p className="py-12 text-center font-bold text-[var(--color-muted)]">Đang tải...</p>;
   if (!store) return <EmptyMsg />;
 
   return (

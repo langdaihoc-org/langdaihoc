@@ -51,15 +51,20 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       'API_URL_MISSING',
     );
   }
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.', 0, 'NETWORK_ERROR');
+  }
   return parseResponse<T>(res);
 }
 
@@ -117,6 +122,7 @@ export const catalogApi = {
   post: (id: string) => api<{ data: FeedPost }>(`/api/catalog/posts/${id}`),
   sellers: (serviceType?: 'food' | 'laundry' | 'ship_proxy') =>
     api<{ data: Seller[] }>(`/api/catalog/sellers${serviceType ? `?serviceType=${serviceType}` : ''}`),
+  seller: (sellerId: string) => api<{ data: Seller }>(`/api/catalog/sellers/${sellerId}`),
   sellerReviews: (sellerId: string) => api<{ data: Review[] }>(`/api/catalog/sellers/${sellerId}/reviews`),
   food: (params?: string) =>
     api<{ data: FoodItem[]; meta?: { page: number; limit: number; total: number } }>(

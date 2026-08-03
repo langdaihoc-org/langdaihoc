@@ -7,6 +7,7 @@ import {
   getFoodCatalog,
   getLaundryCatalog,
   getApprovedSellers,
+  getApprovedSellerById,
   getSellerRatingsMap,
   getActiveBanners,
   getSellerReviews,
@@ -113,6 +114,23 @@ catalogRouter.get(
     }));
     setPublicCatalogCache(res, 60);
     res.json({ data: withRating });
+  }),
+);
+
+catalogRouter.get(
+  '/sellers/:id',
+  asyncHandler(async (req, res) => {
+    const sellerId = String(req.params.id);
+    const seller = await getApprovedSellerById(req.app.locals.db, sellerId);
+    if (!seller) throw new AppError(404, 'Không tìm thấy cửa hàng', 'NOT_FOUND');
+    const ratings = await getSellerRatingsMap(req.app.locals.db, [seller.id]);
+    setPublicCatalogCache(res, 60);
+    res.json({
+      data: {
+        ...seller,
+        rating: ratings.get(seller.id) ?? { average: 0, count: 0 },
+      },
+    });
   }),
 );
 

@@ -143,6 +143,8 @@ adminRouter.post(
 adminRouter.get(
   '/sellers',
   asyncHandler(async (req, res) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
     const data = await req.app.locals.db
       .select({
         seller: sellers,
@@ -152,7 +154,9 @@ adminRouter.get(
       })
       .from(sellers)
       .innerJoin(profiles, eq(sellers.userId, profiles.id))
-      .orderBy(desc(sellers.createdAt));
+      .orderBy(desc(sellers.createdAt))
+      .limit(limit)
+      .offset(offset);
     res.json({ data });
   }),
 );
@@ -740,6 +744,8 @@ adminRouter.get(
 adminRouter.get(
   '/complaints',
   asyncHandler(async (req, res) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
     const data = await req.app.locals.db
       .select({
         complaint: complaints,
@@ -751,7 +757,9 @@ adminRouter.get(
       .from(complaints)
       .innerJoin(profiles, eq(complaints.buyerId, profiles.id))
       .innerJoin(sellers, eq(complaints.sellerId, sellers.id))
-      .orderBy(desc(complaints.createdAt));
+      .orderBy(desc(complaints.createdAt))
+      .limit(limit)
+      .offset(offset);
     res.json({
       data: data.map((row: (typeof data)[number]) => ({
         ...row.complaint,
@@ -882,7 +890,8 @@ adminRouter.get(
 adminRouter.get(
   '/banners',
   asyncHandler(async (req, res) => {
-    const data = await req.app.locals.db.select().from(banners);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const data = await req.app.locals.db.select().from(banners).limit(limit);
     res.json({ data });
   }),
 );
@@ -1011,8 +1020,8 @@ adminRouter.get(
       .leftJoin(sellers, eq(posts.sellerId, sellers.id));
 
     const rows = status
-      ? await base.where(eq(posts.status, status)).orderBy(desc(posts.createdAt))
-      : await base.orderBy(desc(posts.createdAt));
+      ? await base.where(eq(posts.status, status)).orderBy(desc(posts.createdAt)).limit(100)
+      : await base.orderBy(desc(posts.createdAt)).limit(100);
     res.json({ data: rows });
   }),
 );

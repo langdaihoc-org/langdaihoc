@@ -31,7 +31,7 @@ export function FoodPage() {
     if (category) p.set('category', category);
     if (qParam) p.set('q', qParam);
     p.set('page', '1');
-    p.set('limit', '200');
+    p.set('limit', '100');
     return p.toString();
   }, [category, qParam]);
 

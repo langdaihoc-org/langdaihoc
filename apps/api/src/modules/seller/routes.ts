@@ -556,7 +556,7 @@ sellerRouter.patch(
         ...(body.isDefault !== undefined ? { isDefault: body.isDefault } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
       })
-      .where(eq(sellerBankAccounts.id, accountId))
+      .where(and(eq(sellerBankAccounts.id, accountId), eq(sellerBankAccounts.sellerId, seller.id)))
       .returning();
 
     res.json({ data: updated });

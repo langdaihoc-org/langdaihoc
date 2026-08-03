@@ -371,6 +371,22 @@ export function assertPrivateProofUrlsForOrder(
   });
 }
 
+export async function assertPrivateProofObjectExists(
+  supabase: SupabaseClient,
+  url: string,
+  label = 'Ảnh biên lai',
+): Promise<void> {
+  const ref = parseSupabaseStorageUrl(url);
+  if (!ref || ref.bucket !== 'payment-proofs') {
+    throw new AppError(400, `${label} không hợp lệ`, 'INVALID_IMAGE_URL');
+  }
+  // createSignedUrl fails when object missing — chặn URL giả chỉ đúng hình dạng path.
+  const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 60);
+  if (error || !data?.signedUrl) {
+    throw new AppError(400, `${label} không tồn tại trên máy chủ`, 'INVALID_IMAGE_URL');
+  }
+}
+
 /** Cấp lại signed URL (24h) — dùng khi trả chi tiết đơn/khiếu nại. */
 export async function resignPrivateUrl(
   supabase: SupabaseClient,

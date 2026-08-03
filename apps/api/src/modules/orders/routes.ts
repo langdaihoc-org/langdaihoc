@@ -35,6 +35,7 @@ import { paramId } from '../../lib/params.js';
 import {
   assertPrivateProofUrlForOrder,
   assertPrivateProofUrlsForOrder,
+  assertPrivateProofObjectExists,
   resignPrivateUrl,
   resignPrivateUrls,
 } from '../../lib/storage.js';
@@ -237,15 +238,22 @@ ordersRouter.get(
       includeDetails: true,
     });
     const supabaseAdmin = req.app.locals.supabaseAdmin;
+    const allProofUrls: string[] = [];
+    for (const row of data) {
+      const proofs = (row as { proofs?: { id: string; imageUrl: string; status: string }[] }).proofs;
+      if (proofs?.length) allProofUrls.push(...proofs.map((p) => p.imageUrl));
+    }
+    const resigned = allProofUrls.length
+      ? await resignPrivateUrls(supabaseAdmin, allProofUrls)
+      : [];
+    let proofCursor = 0;
     for (const row of data) {
       const proofs = (row as { proofs?: { id: string; imageUrl: string; status: string }[] }).proofs;
       if (!proofs?.length) continue;
-      (row as { proofs: typeof proofs }).proofs = await Promise.all(
-        proofs.map(async (p) => ({
-          ...p,
-          imageUrl: await resignPrivateUrl(supabaseAdmin, p.imageUrl),
-        })),
-      );
+      (row as { proofs: typeof proofs }).proofs = proofs.map((p) => ({
+        ...p,
+        imageUrl: resigned[proofCursor++] ?? p.imageUrl,
+      }));
     }
     res.json({ data, meta: { page, limit, hasMore } });
   }),
@@ -587,6 +595,7 @@ ordersRouter.post(
     const { order } = await loadOrderForActor(db, orderId, req.user!);
     const imageUrl = assertPrivateProofUrlForOrder(raw, req.user!.id, orderId, 'Ảnh biên lai');
     if (!imageUrl) throw new AppError(400, 'Ảnh biên lai bắt buộc', 'INVALID_IMAGE_URL');
+    await assertPrivateProofObjectExists(req.app.locals.supabaseAdmin, imageUrl, 'Ảnh biên lai');
     if (order.paymentMethod !== 'bank_transfer') {
       throw new AppError(400, 'Đơn này không thanh toán chuyển khoản', 'INVALID_PAYMENT_METHOD');
     }

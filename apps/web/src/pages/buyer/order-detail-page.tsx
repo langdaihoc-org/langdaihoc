@@ -47,6 +47,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Cảm ơn bạn đã đánh giá!', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được đánh giá', 'error'),
   });
   const updateReviewMut = useMutation({
     mutationFn: () => ordersApi.updateReview(id!, { rating }),
@@ -54,6 +55,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Đã cập nhật đánh giá', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được đánh giá', 'error'),
   });
   const escalateMut = useMutation({
     mutationFn: () => ordersApi.escalateComplaint(id!),
@@ -61,6 +63,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast(res.message ?? 'Đã gửi lên admin', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được khiếu nại lên admin', 'error'),
   });
   const confirmMut = useMutation({
     mutationFn: () => ordersApi.confirmPrice(id!),
@@ -68,6 +71,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Đã xác nhận báo giá. Cửa hàng sẽ bắt đầu giặt.', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không xác nhận được báo giá', 'error'),
   });
   const rejectMut = useMutation({
     mutationFn: () => ordersApi.rejectPrice(id!),
@@ -76,6 +80,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Đã từ chối báo giá. Đơn hàng đã hủy.', 'info');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không từ chối được báo giá', 'error'),
   });
   const complaintMut = useMutation({
     mutationFn: () => ordersApi.complaint(id!, {
@@ -90,6 +95,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Đã gửi khiếu nại tới người bán. Nếu cần, bạn có thể gửi tiếp lên admin.', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được khiếu nại', 'error'),
   });
   const complaintReplyMut = useMutation({
     mutationFn: (body: string) => ordersApi.complaintMessage(id!, body),
@@ -106,6 +112,7 @@ export function OrderDetailPage() {
       invalidateBuyerLive(qc);
       toast('Đã hủy đơn hàng', 'info');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không hủy được đơn', 'error'),
   });
   const proofMut = useMutation({
     mutationFn: () => ordersApi.paymentProof(id!, proofUrl!),
@@ -114,6 +121,7 @@ export function OrderDetailPage() {
       setProofUrl(null);
       toast('Đã gửi biên lai. Chờ quán xác nhận.', 'success');
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được biên lai', 'error'),
   });
 
   const orderPreview = data?.data?.order;

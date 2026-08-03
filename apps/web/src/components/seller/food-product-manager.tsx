@@ -107,6 +107,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
   const [prepTimeMinutes, setPrepTimeMinutes] = useState('20');
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageUploading, setImageUploading] = useState(false);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [offerUtensils, setOfferUtensils] = useState(false);
 
@@ -214,6 +215,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
     mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
       sellerApi.updateFood(id, { isAvailable }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['seller-food'] }),
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được món', 'error'),
   });
 
   const deleteMut = useMutation({
@@ -223,6 +225,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
       toast('Đã xóa món', 'info');
       setDeleteId(null);
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không xóa được món', 'error'),
   });
 
   const deleteTarget = items.find((i) => i.id === deleteId);
@@ -293,6 +296,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
             label="Ảnh món (có thể tải nhiều)"
             value={imageUrls}
             onChange={setImageUrls}
+            onUploadingChange={setImageUploading}
             max={6}
             onUpload={(file) => uploadSellerImage(sellerApi.uploadImage, file, 'food-images')}
           />
@@ -420,8 +424,8 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
           <div className="flex gap-2">
             <Button
               onClick={() => saveMut.mutate()}
-              loading={saveMut.isPending}
-              disabled={name.trim().length < 2 || !price || Number(price) <= 0}
+              loading={saveMut.isPending || imageUploading}
+              disabled={name.trim().length < 2 || !price || Number(price) <= 0 || imageUploading}
             >
               {editingId ? 'Lưu thay đổi' : 'Thêm món'}
             </Button>

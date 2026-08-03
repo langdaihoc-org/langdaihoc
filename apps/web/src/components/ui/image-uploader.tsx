@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const MAX_EDGE_PX = 1600;
+const JPEG_QUALITY = 0.82;
 
 function assertAllowedImage(file: File): string | null {
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
@@ -15,22 +17,62 @@ function assertAllowedImage(file: File): string | null {
   return null;
 }
 
+/** Nén/resize phía client trước khi upload (giảm payload, giữ GIF nguyên). */
+async function optimizeImageForUpload(file: File): Promise<File> {
+  if (file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, outType, outType === 'image/jpeg' ? JPEG_QUALITY : undefined);
+    });
+    if (!blob || blob.size >= file.size) return file;
+
+    const base = file.name.replace(/\.[^.]+$/, '') || 'image';
+    const ext = outType === 'image/png' ? 'png' : 'jpg';
+    return new File([blob], `${base}.${ext}`, { type: outType, lastModified: Date.now() });
+  } catch {
+    return file;
+  }
+}
+
 export function ImageUploader({
   label = 'Ảnh món',
   value,
   onChange,
   onUpload,
+  onUploadingChange,
   disabled,
 }: {
   label?: string;
   value?: string | null;
   onChange: (url: string | null) => void;
   onUpload: (file: File) => Promise<string>;
+  onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onUploadingChange?.(loading);
+  }, [loading, onUploadingChange]);
 
   const handleFile = async (file: File) => {
     const invalid = assertAllowedImage(file);
@@ -41,7 +83,8 @@ export function ImageUploader({
     setError(null);
     setLoading(true);
     try {
-      const url = await onUpload(file);
+      const optimized = await optimizeImageForUpload(file);
+      const url = await onUpload(optimized);
       onChange(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload thất bại');
@@ -111,6 +154,7 @@ export function MultiImageUploader({
   value,
   onChange,
   onUpload,
+  onUploadingChange,
   disabled,
   max = 10,
 }: {
@@ -118,12 +162,17 @@ export function MultiImageUploader({
   value: string[];
   onChange: (urls: string[]) => void;
   onUpload: (file: File) => Promise<string>;
+  onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
   max?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onUploadingChange?.(loading);
+  }, [loading, onUploadingChange]);
 
   const handleFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
@@ -145,7 +194,8 @@ export function MultiImageUploader({
     try {
       const uploaded: string[] = [];
       for (const file of picked) {
-        uploaded.push(await onUpload(file));
+        const optimized = await optimizeImageForUpload(file);
+        uploaded.push(await onUpload(optimized));
       }
       onChange([...value, ...uploaded].slice(0, max));
     } catch (e) {

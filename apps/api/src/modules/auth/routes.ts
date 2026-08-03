@@ -45,9 +45,26 @@ import type { Database } from '@langdaihoc/database';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  // Local/QA chạy nhiều smoke login — production vẫn 20/15 phút
   max: process.env.NODE_ENV === 'production' ? 20 : 200,
   message: { error: { message: 'Quá nhiều yêu cầu, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 30 : 200,
+  message: { error: { message: 'Quá nhiều lần đăng nhập, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
+});
+
+const forgotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 10 : 100,
+  message: { error: { message: 'Quá nhiều yêu cầu đặt lại mật khẩu', code: 'RATE_LIMIT' } },
+});
+
+const recoveryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 20 : 100,
+  message: { error: { message: 'Quá nhiều yêu cầu xác minh liên kết', code: 'RATE_LIMIT' } },
 });
 
 const refreshLimiter = rateLimit({
@@ -239,7 +256,7 @@ authRouter.post(
 
 authRouter.post(
   '/login',
-  authLimiter,
+  loginLimiter,
   asyncHandler(async (req, res) => {
     const input = loginSchema.parse(req.body);
     const db = req.app.locals.db;
@@ -248,14 +265,15 @@ authRouter.post(
     const supabaseAnon = createSupabaseAnon();
 
     const email = await resolveAuthEmail(db, input.identifier);
+    // Luôn gọi Supabase để tránh timing side-channel (tài khoản có/không tồn tại).
+    const { data, error } = await supabaseAnon.auth.signInWithPassword({
+      email: email ?? '__no_such_user__@langdaihoc.invalid',
+      password: input.password,
+    });
+
     if (!email) {
       throw new AppError(401, 'Email/SĐT hoặc mật khẩu không đúng', 'INVALID_CREDENTIALS');
     }
-
-    const { data, error } = await supabaseAnon.auth.signInWithPassword({
-      email,
-      password: input.password,
-    });
 
     // Supabase (Confirm email bật): chưa xác minh → lỗi riêng, không nhầm “sai mật khẩu”.
     const authErrMsg = (error?.message ?? '').toLowerCase();
@@ -426,7 +444,7 @@ authRouter.patch(
 
 authRouter.post(
   '/forgot-password',
-  authLimiter,
+  forgotLimiter,
   asyncHandler(async (req, res) => {
     const input = forgotPasswordSchema.parse(req.body);
     const db = req.app.locals.db;
@@ -462,7 +480,7 @@ authRouter.post(
 
 authRouter.post(
   '/verify-recovery',
-  authLimiter,
+  recoveryLimiter,
   asyncHandler(async (req, res) => {
     const input = verifyRecoverySchema.parse(req.body);
     // Anon client — cùng đường verifyOtp như browser Supabase.

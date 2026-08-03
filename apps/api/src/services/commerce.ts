@@ -94,7 +94,35 @@ export async function getApprovedSellers(db: Database, serviceType?: 'food' | 'l
       shipProxyFee: sellers.shipProxyFee,
     })
     .from(sellers)
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .limit(200);
+}
+
+export async function getApprovedSellerById(db: Database, sellerId: string) {
+  const [row] = await db
+    .select({
+      id: sellers.id,
+      shopName: sellers.shopName,
+      serviceTypes: sellers.serviceTypes,
+      businessAddress: sellers.businessAddress,
+      description: sellers.description,
+      avatarUrl: sellers.avatarUrl,
+      phone: sellers.phone,
+      openHours: sellers.openHours,
+      serviceAreas: sellers.serviceAreas,
+      avgDeliveryMinutes: sellers.avgDeliveryMinutes,
+      shipProxyFee: sellers.shipProxyFee,
+    })
+    .from(sellers)
+    .where(
+      and(
+        eq(sellers.id, sellerId),
+        eq(sellers.status, 'approved'),
+        eq(sellers.acceptingOrders, true),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 export async function loadFoodItemExtras(db: DbConn, itemIds: string[]) {
@@ -253,7 +281,7 @@ function normalizeFoodImages(imageUrl: string | null, imageUrls: unknown): strin
 export async function getFoodCatalog(db: Database, params: FoodCatalogParams = {}) {
   const { sellerId, categorySlug, q } = params;
   const page = Math.max(1, params.page ?? 1);
-  const limit = Math.min(50, Math.max(1, params.limit ?? 20));
+  const limit = Math.min(100, Math.max(1, params.limit ?? 20));
   const offset = (page - 1) * limit;
 
   let categoryId: string | undefined;

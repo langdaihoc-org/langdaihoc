@@ -41,7 +41,7 @@ async function resolveAccessToken(req: Request, res: Response): Promise<string |
   const rawAuth = req.headers.authorization;
   const bearer =
     rawAuth && /^Bearer\s+/i.test(rawAuth) ? rawAuth.replace(/^Bearer\s+/i, '').trim() : undefined;
-  let accessToken = (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer;
+  const accessToken = (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer;
   const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
 
   if (accessToken) {
