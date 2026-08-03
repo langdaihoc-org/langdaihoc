@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, type ComponentType } from 'react';
+import { Suspense, lazy, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/contexts/auth-context';
@@ -6,6 +6,7 @@ import { ToastProvider } from '@/components/ui/toast';
 import { ProtectedRoute, GuestOnlyRoute, BuyerOnlyLayout } from '@/components/layout/buyer-layout';
 import { HomePage } from '@/pages/home-page';
 import { NotFoundPage } from '@/pages/not-found-page';
+import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/password-pages';
 import { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
@@ -31,8 +32,6 @@ const CheckEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'Check
 const VerifyEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'VerifyEmailPage');
 const BuyerRegisterPage = lazyNamed(() => import('@/pages/auth/register-buyer-page'), 'BuyerRegisterPage');
 const SellerRegisterPage = lazyNamed(() => import('@/pages/auth/register-seller-page'), 'SellerRegisterPage');
-const ForgotPasswordPage = lazyNamed(() => import('@/pages/auth/password-pages'), 'ForgotPasswordPage');
-const ResetPasswordPage = lazyNamed(() => import('@/pages/auth/password-pages'), 'ResetPasswordPage');
 
 const FoodPage = lazyNamed(() => import('@/pages/buyer/food-page'), 'FoodPage');
 const LaundryPage = lazyNamed(() => import('@/pages/buyer/laundry-page'), 'LaundryPage');
@@ -94,10 +93,6 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
-  useEffect(() => {
-    sessionStorage.removeItem('langdaihoc:chunk-reload');
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>

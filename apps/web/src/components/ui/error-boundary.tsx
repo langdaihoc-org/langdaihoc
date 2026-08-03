@@ -5,14 +5,26 @@ type Props = { children: ReactNode };
 type State = { hasError: boolean };
 
 const CHUNK_ERROR_RE = /fetch dynamically imported module|importing a module script failed|loading chunk/i;
-const RELOAD_FLAG = 'langdaihoc:chunk-reload';
+const RELOAD_AT_KEY = 'langdaihoc:chunk-reload-at';
+const RELOAD_COOLDOWN_MS = 15_000;
 
-/** Sau khi deploy, hash chunk cũ hết hiệu lực → lazy import() lỗi. Tự reload 1 lần thay vì trắng trang. */
+/** Sau khi deploy, hash chunk cũ hết hiệu lực → lazy import() lỗi. Reload tối đa 1 lần / 15s. */
 function isChunkLoadError(error: Error): boolean {
   return CHUNK_ERROR_RE.test(error.message ?? '');
 }
 
-/** Bắt lỗi render — tránh trắng toàn trang. */
+function tryReloadOnceForChunkError(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_AT_KEY) || '0');
+    if (last && Date.now() - last < RELOAD_COOLDOWN_MS) return false;
+    sessionStorage.setItem(RELOAD_AT_KEY, String(Date.now()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Bắt lỗi render — tránh trắng toàn trang / reload vô hạn. */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
@@ -22,8 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
-    if (isChunkLoadError(error) && !sessionStorage.getItem(RELOAD_FLAG)) {
-      sessionStorage.setItem(RELOAD_FLAG, '1');
+    if (isChunkLoadError(error) && tryReloadOnceForChunkError()) {
       window.location.reload();
     }
   }

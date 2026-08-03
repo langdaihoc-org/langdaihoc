@@ -465,6 +465,7 @@ authRouter.post(
   authLimiter,
   asyncHandler(async (req, res) => {
     const input = verifyRecoverySchema.parse(req.body);
+    // Anon client — cùng đường verifyOtp như browser Supabase.
     const supabaseAnon = createSupabaseAnon();
     const { data, error } = await supabaseAnon.auth.verifyOtp({
       token_hash: input.tokenHash,
@@ -472,7 +473,12 @@ authRouter.post(
     });
 
     if (error || !data.session?.access_token) {
-      console.error('[auth] verify-recovery failed', formatAuthError(error));
+      console.error('[auth] verify-recovery failed', {
+        type: input.type,
+        tokenLen: input.tokenHash.length,
+        err: formatAuthError(error),
+        hasSession: Boolean(data.session),
+      });
       throw new AppError(
         400,
         'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn',
