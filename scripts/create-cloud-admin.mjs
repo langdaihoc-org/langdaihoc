@@ -14,8 +14,9 @@ const { createClient } = require('@supabase/supabase-js');
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@demo.local';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'Demo1234';
+
 const ADMIN_NAME = 'Quản trị viên';
 
 if (!DATABASE_URL || !SUPABASE_URL || !SERVICE_KEY) {

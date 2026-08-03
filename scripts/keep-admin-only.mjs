@@ -20,7 +20,7 @@ const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:55322/postgres';
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:55321';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_EMAIL = process.env.KEEP_ADMIN_EMAIL ?? 'admin@demo.local';
+const ADMIN_EMAIL = process.env.KEEP_ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com';
 const ADMIN_PASSWORD = process.env.SEED_PASSWORD ?? 'Demo1234';
 const ADMIN_NAME = 'Quản trị viên';
 

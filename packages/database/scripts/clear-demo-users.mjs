@@ -20,7 +20,10 @@ const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:55322/postgres';
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:55321';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const KEEP_EMAILS = new Set(['admin@demo.local']);
+const KEEP_EMAILS = new Set([
+  process.env.KEEP_ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com',
+  'admin@demo.local',
+]);
 
 const sql = postgres(DATABASE_URL, { max: 4, prepare: false });
 
