@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 import { authApi, ApiError } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export function ForgotPasswordPage() {
   const { toast } = useToast();
@@ -71,17 +72,77 @@ export function ResetPasswordPage() {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [booting, setBooting] = useState(true);
+  const [tokens, setTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
 
-  const [tokens] = useState(() => {
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const accessToken = hashParams.get('access_token') ?? '';
-    const refreshToken = hashParams.get('refresh_token') ?? '';
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function boot() {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const queryParams = new URLSearchParams(window.location.search);
+      const authError =
+        hashParams.get('error_description') ||
+        hashParams.get('error') ||
+        queryParams.get('error_description') ||
+        queryParams.get('error');
+
+      if (authError) {
+        if (!cancelled) {
+          setError('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.');
+          setBooting(false);
+        }
+        window.history.replaceState(null, '', window.location.pathname);
+        return;
+      }
+
+      let accessToken = hashParams.get('access_token') ?? '';
+      let refreshToken = hashParams.get('refresh_token') ?? '';
+
+      // PKCE / verifyOtp — Supabase mới thường trả ?code= hoặc ?token_hash=
+      if (!accessToken && supabase) {
+        const code = queryParams.get('code');
+        if (code) {
+          const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (!exchangeErr && data.session) {
+            accessToken = data.session.access_token;
+            refreshToken = data.session.refresh_token;
+          }
+        }
+
+        const tokenHash = queryParams.get('token_hash');
+        const otpType = queryParams.get('type');
+        if (!accessToken && tokenHash && otpType) {
+          const { data, error: otpErr } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType as 'recovery' | 'magiclink' | 'signup' | 'email',
+          });
+          if (!otpErr && data.session) {
+            accessToken = data.session.access_token;
+            refreshToken = data.session.refresh_token;
+          }
+        }
+      }
+
+      if (window.location.hash || window.location.search) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (cancelled) return;
+      if (!accessToken) {
+        setError('Liên kết đặt lại mật khẩu không hợp lệ.');
+        setBooting(false);
+        return;
+      }
+      setTokens({ accessToken, refreshToken });
+      setBooting(false);
     }
-    return { accessToken, refreshToken };
-  });
-  const { accessToken, refreshToken } = tokens;
+
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     register,
@@ -93,12 +154,13 @@ export function ResetPasswordPage() {
   });
 
   const onSubmit = handleSubmit(async (data) => {
+    if (!tokens?.accessToken) return;
     setError('');
     try {
       const result = await authApi.resetPassword({
         ...data,
-        accessToken,
-        refreshToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
       });
       setMessage(result.message);
       toast(result.message, 'success');
@@ -111,10 +173,18 @@ export function ResetPasswordPage() {
     }
   });
 
-  if (!accessToken) {
+  if (booting) {
+    return (
+      <AuthLayout title="Đặt lại mật khẩu" subtitle="Đang kiểm tra liên kết…">
+        <Alert variant="info">Vui lòng chờ trong giây lát.</Alert>
+      </AuthLayout>
+    );
+  }
+
+  if (!tokens?.accessToken) {
     return (
       <AuthLayout title="Đặt lại mật khẩu">
-        <Alert variant="error">Liên kết đặt lại mật khẩu không hợp lệ.</Alert>
+        <Alert variant="error">{error || 'Liên kết đặt lại mật khẩu không hợp lệ.'}</Alert>
         <Link to="/auth/forgot-password" className="mt-4 block text-center text-brand-orange-dark">
           Yêu cầu liên kết mới
         </Link>
