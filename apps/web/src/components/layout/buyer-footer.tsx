@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { BrandLogo } from '@/components/ui/brand';
 
 const SITE_URL = 'https://langdaihoc.xyz';
-const SUPPORT_EMAIL = 'info@langdaihoc.xyz';
+const SUPPORT_EMAIL = 'langdaihoc.work@gmail.com';
 
 export function BuyerFooter() {
   return (
