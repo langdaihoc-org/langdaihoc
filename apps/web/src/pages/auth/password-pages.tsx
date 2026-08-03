@@ -12,6 +12,7 @@ import { authApi, ApiError } from '@/lib/api';
 export function ForgotPasswordPage() {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
+  const [accountExists, setAccountExists] = useState<boolean | null>(null);
 
   const {
     register,
@@ -26,6 +27,7 @@ export function ForgotPasswordPage() {
     try {
       const result = await authApi.forgotPassword(data);
       setMessage(result.message);
+      setAccountExists(result.accountExists !== false);
       toast(result.message, result.accountExists === false ? 'info' : 'success');
     } catch (err) {
       const fallback =
@@ -33,6 +35,7 @@ export function ForgotPasswordPage() {
           ? err.message
           : 'Không gửi được hướng dẫn. Vui lòng thử lại sau.';
       setMessage(fallback);
+      setAccountExists(null);
       toast(fallback, 'error');
     }
   });
@@ -43,7 +46,11 @@ export function ForgotPasswordPage() {
       subtitle="Nhập email hoặc SĐT — hướng dẫn đặt lại mật khẩu sẽ gửi qua email đăng ký"
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        {message && <Alert variant="success">{message}</Alert>}
+        {message && (
+          <Alert variant={accountExists === false ? 'warning' : accountExists ? 'success' : 'error'}>
+            {message}
+          </Alert>
+        )}
         <Input
           label="Email hoặc số điện thoại"
           type="text"
