@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '@/components/ui/brand';
 
-const SITE_URL = 'https://langdaihoc.com.vn';
-const SUPPORT_EMAIL = 'hotro@langdaihoc.com.vn';
+const SITE_URL = 'https://langdaihoc.xyz';
+const SUPPORT_EMAIL = 'hotro@langdaihoc.xyz';
 
 export function BuyerFooter() {
   return (
@@ -36,7 +36,7 @@ export function BuyerFooter() {
             rel="noreferrer"
             className="text-sm text-[var(--color-muted)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
           >
-            langdaihoc.com.vn
+            langdaihoc.xyz
           </a>
           <p className="text-sm text-[var(--color-muted)]">
             Khiếu nại đơn:{' '}
@@ -49,7 +49,7 @@ export function BuyerFooter() {
       <div className="border-t border-[var(--color-line)] py-4 text-center text-xs text-[var(--color-muted)]">
         © {new Date().getFullYear()} langdaihoc ·{' '}
         <a href={SITE_URL} className="underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-          langdaihoc.com.vn
+          langdaihoc.xyz
         </a>
       </div>
     </footer>

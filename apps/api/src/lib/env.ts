@@ -10,6 +10,8 @@ export function looksLikeLiveDeploy(): boolean {
   if (
     frontend === 'https://langdaihoc.com.vn' ||
     frontend === 'https://www.langdaihoc.com.vn' ||
+    frontend === 'https://langdaihoc.xyz' ||
+    frontend === 'https://www.langdaihoc.xyz' ||
     frontend.endsWith('.vercel.app')
   ) {
     return true;
@@ -62,6 +64,13 @@ export function buildCorsOrigins(frontendUrl: string, extra: string[]): string[]
   ) {
     origins.add('https://langdaihoc.com.vn');
     origins.add('https://www.langdaihoc.com.vn');
+  }
+  if (
+    frontendUrl === 'https://langdaihoc.xyz' ||
+    frontendUrl === 'https://www.langdaihoc.xyz'
+  ) {
+    origins.add('https://langdaihoc.xyz');
+    origins.add('https://www.langdaihoc.xyz');
   }
   if (!isProd) {
     origins.add('http://localhost:5173');
