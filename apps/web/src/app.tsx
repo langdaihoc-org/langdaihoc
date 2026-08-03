@@ -130,6 +130,8 @@ export function App() {
                   <Route path="auth/register/seller" element={<GuestOnlyRoute><SellerRegisterPage /></GuestOnlyRoute>} />
                   <Route path="auth/forgot-password" element={<GuestOnlyRoute><ForgotPasswordPage /></GuestOnlyRoute>} />
                   <Route path="auth/reset-password" element={<ResetPasswordPage />} />
+                  {/* Alias: một số client/email đổi "-" thành "_" */}
+                  <Route path="auth/reset_password" element={<ResetPasswordPage />} />
 
                   <Route path="seller" element={<ProtectedRoute roles={['seller']}><SellerLayout /></ProtectedRoute>}>
                     <Route index element={<SellerDashboard />} />

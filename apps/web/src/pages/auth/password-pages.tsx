@@ -199,8 +199,14 @@ export function ResetPasswordPage() {
         }
       }
 
+      if (accessToken) {
+        cacheResetSession(accessToken, refreshToken);
+      }
+
       if (window.location.hash || window.location.search) {
-        window.history.replaceState(null, '', window.location.pathname);
+        // Chuẩn hóa underscore → hyphen khi xóa query khỏi URL.
+        const path = window.location.pathname.replace(/\/auth\/reset_password$/i, '/auth/reset-password');
+        window.history.replaceState(null, '', path);
       }
 
       if (cancelled) return;
@@ -209,7 +215,6 @@ export function ResetPasswordPage() {
         setBooting(false);
         return;
       }
-      cacheResetSession(accessToken, refreshToken);
       setTokens({ accessToken, refreshToken });
       setBooting(false);
     }
