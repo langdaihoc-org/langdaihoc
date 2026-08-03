@@ -310,6 +310,28 @@ export async function resolveAuthEmail(db: Database, identifier: string): Promis
   return row?.email ?? null;
 }
 
+/** Chỉ trả email nếu đã có profile đăng ký (dùng quên mật khẩu / tồn tại tài khoản). */
+export async function findRegisteredAuthEmail(
+  db: Database,
+  identifier: string,
+): Promise<string | null> {
+  if (identifier.includes('@')) {
+    const [row] = await db
+      .select({ email: profiles.email })
+      .from(profiles)
+      .where(eq(profiles.email, identifier.toLowerCase()))
+      .limit(1);
+    return row?.email ?? null;
+  }
+
+  const [row] = await db
+    .select({ email: profiles.email })
+    .from(profiles)
+    .where(eq(profiles.phone, identifier))
+    .limit(1);
+  return row?.email ?? null;
+}
+
 export async function syncProfileStatusOnLogin(db: Database, userId: string, emailVerified: boolean) {
   if (!emailVerified) return;
 

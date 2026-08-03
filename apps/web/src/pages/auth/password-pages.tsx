@@ -7,7 +7,7 @@ import { AuthLayout, AuthFooterLinks, SubmitRow } from '@/components/layout/auth
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
-import { authApi } from '@/lib/api';
+import { authApi, ApiError } from '@/lib/api';
 
 export function ForgotPasswordPage() {
   const { toast } = useToast();
@@ -26,12 +26,14 @@ export function ForgotPasswordPage() {
     try {
       const result = await authApi.forgotPassword(data);
       setMessage(result.message);
-      toast(result.message, 'success');
-    } catch {
+      toast(result.message, result.accountExists === false ? 'info' : 'success');
+    } catch (err) {
       const fallback =
-        'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn hoặc tài khoản chưa được tạo.';
+        err instanceof ApiError
+          ? err.message
+          : 'Không gửi được hướng dẫn. Vui lòng thử lại sau.';
       setMessage(fallback);
-      toast(fallback, 'success');
+      toast(fallback, 'error');
     }
   });
 

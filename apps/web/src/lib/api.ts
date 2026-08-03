@@ -66,7 +66,7 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
   forgotPassword: (body: unknown) =>
-    api<{ message: string }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
+    api<{ message: string; accountExists?: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
   resetPassword: (body: unknown) =>
     api<{ message: string; redirectTo: string }>('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   changePassword: (body: unknown) =>

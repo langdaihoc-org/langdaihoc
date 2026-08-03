@@ -28,6 +28,7 @@ import {
   ensureEmailNotUsed,
   ensurePhoneNotUsed,
   resolveAuthEmail,
+  findRegisteredAuthEmail,
   syncProfileStatusOnLogin,
   getSellerByUserId,
   ensureUserRole,
@@ -430,22 +431,31 @@ authRouter.post(
     const db = req.app.locals.db;
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const frontendUrl = getFrontendUrl();
-    const notice =
-      'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn hoặc tài khoản chưa được tạo.';
 
-    const email = await resolveAuthEmail(db, input.identifier);
-    if (email) {
-      const mail = await sendPasswordResetEmail(
-        supabaseAdmin,
-        email,
-        `${frontendUrl}/auth/reset-password`,
-      );
-      if (!mail.ok) {
-        console.error('[auth] forgot-password mail failed', email, mail.error);
-      }
+    const email = await findRegisteredAuthEmail(db, input.identifier);
+    if (!email) {
+      res.json({ message: 'Tài khoản chưa được tạo', accountExists: false });
+      return;
     }
 
-    res.json({ message: notice });
+    const mail = await sendPasswordResetEmail(
+      supabaseAdmin,
+      email,
+      `${frontendUrl}/auth/reset-password`,
+    );
+    if (!mail.ok) {
+      console.error('[auth] forgot-password mail failed', email, mail.error);
+      throw new AppError(
+        502,
+        'Không gửi được email đặt lại mật khẩu. Vui lòng thử lại sau.',
+        'MAIL_SEND_FAILED',
+      );
+    }
+
+    res.json({
+      message: 'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn',
+      accountExists: true,
+    });
   }),
 );
 
