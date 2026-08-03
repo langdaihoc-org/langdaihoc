@@ -207,7 +207,7 @@ export async function sendSignupVerificationEmail(
   };
 }
 
-/** Gửi mail đặt lại mật khẩu — generateLink recovery + Resend (cùng pipeline xác minh). */
+/** Gửi mail đặt lại mật khẩu — link thẳng về app (?token_hash=) để tránh lệch redirect Supabase. */
 export async function sendPasswordResetEmail(
   supabaseAdmin: SupabaseClient,
   email: string,
@@ -218,9 +218,10 @@ export async function sendPasswordResetEmail(
     email,
     options: { redirectTo: emailRedirectTo },
   });
-  const actionLink = linkData?.properties?.action_link;
-  if (!linkErr && actionLink) {
-    const sent = await sendViaResendApi(email, actionLink, emailRedirectTo, {
+  const hashedToken = linkData?.properties?.hashed_token;
+  if (!linkErr && hashedToken) {
+    const appLink = `${emailRedirectTo}?token_hash=${encodeURIComponent(hashedToken)}&type=recovery`;
+    const sent = await sendViaResendApi(email, appLink, emailRedirectTo, {
       subject: 'Đặt lại mật khẩu — langdaihoc',
       eyebrow: 'Khôi phục tài khoản',
       body: 'Nhấn nút bên dưới để đặt lại mật khẩu tài khoản langdaihoc của bạn.',
@@ -238,7 +239,7 @@ export async function sendPasswordResetEmail(
   return {
     ok: false,
     error: [
-      `hasLink=${Boolean(actionLink)}`,
+      `hasToken=${Boolean(hashedToken)}`,
       `linkErr=${formatAuthError(linkErr)}`,
       `supabaseReset=${formatAuthError(resetErr)}`,
     ].join('; '),

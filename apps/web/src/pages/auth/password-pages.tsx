@@ -112,11 +112,14 @@ export function ResetPasswordPage() {
 
         const tokenHash = queryParams.get('token_hash');
         const otpType = queryParams.get('type');
-        if (!accessToken && tokenHash && otpType) {
+        if (!accessToken && tokenHash && (otpType === 'recovery' || otpType === 'magiclink' || otpType === 'signup' || otpType === 'email')) {
           const { data, error: otpErr } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
-            type: otpType as 'recovery' | 'magiclink' | 'signup' | 'email',
+            type: otpType,
           });
+          if (otpErr) {
+            console.error('[reset-password] verifyOtp failed', otpErr.message);
+          }
           if (!otpErr && data.session) {
             accessToken = data.session.access_token;
             refreshToken = data.session.refresh_token;
