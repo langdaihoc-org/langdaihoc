@@ -29,7 +29,7 @@ export function ForgotPasswordPage() {
       toast(result.message, 'success');
     } catch {
       const fallback =
-        'Nếu tài khoản tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email đăng ký.';
+        'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn hoặc tài khoản chưa được tạo.';
       setMessage(fallback);
       toast(fallback, 'success');
     }

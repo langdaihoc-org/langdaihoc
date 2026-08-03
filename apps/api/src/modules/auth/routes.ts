@@ -34,6 +34,7 @@ import {
   roleHomePath,
   createAuthUserForRegister,
   sendSignupVerificationEmail,
+  sendPasswordResetEmail,
   resendSignupConfirmation,
   formatAuthError,
 } from './service.js';
@@ -427,19 +428,24 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const input = forgotPasswordSchema.parse(req.body);
     const db = req.app.locals.db;
-    const supabaseAnon = createSupabaseAnon();
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
     const frontendUrl = getFrontendUrl();
+    const notice =
+      'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn hoặc tài khoản chưa được tạo.';
 
     const email = await resolveAuthEmail(db, input.identifier);
     if (email) {
-      await supabaseAnon.auth.resetPasswordForEmail(email, {
-        redirectTo: `${frontendUrl}/auth/reset-password`,
-      });
+      const mail = await sendPasswordResetEmail(
+        supabaseAdmin,
+        email,
+        `${frontendUrl}/auth/reset-password`,
+      );
+      if (!mail.ok) {
+        console.error('[auth] forgot-password mail failed', email, mail.error);
+      }
     }
 
-    res.json({
-      message: 'Nếu tài khoản tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email đăng ký.',
-    });
+    res.json({ message: notice });
   }),
 );
 
