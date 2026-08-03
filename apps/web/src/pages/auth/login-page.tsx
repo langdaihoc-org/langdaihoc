@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,6 +38,12 @@ export function LoginPage() {
   const [info, setInfo] = useState(() => initialAuthInfo(location.search, locationState));
   const [needsVerify, setNeedsVerify] = useState(false);
   const [emailForResend, setEmailForResend] = useState(locationState?.registeredEmail ?? '');
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('verified') === '1' && !locationState?.authNotice) {
+      toast('Xác thực email thành công. Vui lòng đăng nhập.', 'success');
+    }
+  }, [location.search, locationState?.authNotice, toast]);
 
   const afterLoginPath = () => {
     const from = locationState?.from;
@@ -230,14 +236,76 @@ export function CheckEmailPage() {
 
 export function VerifyEmailPage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [status, setStatus] = useState<'ok' | 'error' | 'pending'>('pending');
+
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const queryParams = new URLSearchParams(window.location.search);
+    const error =
+      hashParams.get('error_description') ||
+      hashParams.get('error') ||
+      queryParams.get('error_description') ||
+      queryParams.get('error');
+
+    if (window.location.hash || queryParams.has('error')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
+    if (error) {
+      setStatus('error');
+      toast('Liên kết xác minh không hợp lệ hoặc đã hết hạn', 'error');
+      return;
+    }
+
+    setStatus('ok');
+    toast('Xác thực email thành công', 'success');
+    const t = window.setTimeout(() => {
+      navigate('/auth/login?verified=1', {
+        replace: true,
+        state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
+      });
+    }, 1600);
+    return () => window.clearTimeout(t);
+  }, [navigate, toast]);
+
+  if (status === 'error') {
+    return (
+      <AuthLayout title="Xác minh email" subtitle="Không xác minh được">
+        <Alert variant="error">
+          Liên kết xác minh không hợp lệ hoặc đã hết hạn. Hãy đăng nhập và dùng “Gửi lại email xác minh”.
+        </Alert>
+        <div className="mt-6 space-y-3">
+          <Link to="/auth/check-email">
+            <Button className="w-full">Gửi lại email xác minh</Button>
+          </Link>
+          <Link to="/auth/login">
+            <Button className="w-full" variant="outline">
+              Về trang đăng nhập
+            </Button>
+          </Link>
+        </div>
+      </AuthLayout>
+    );
+  }
 
   return (
-    <AuthLayout title="Xác minh email" subtitle="Đang xử lý...">
-      <Alert variant="info">
-        Email của bạn đã được xác minh. Vui lòng đăng nhập để tiếp tục.
+    <AuthLayout title="Xác minh email" subtitle="Thành công">
+      <Alert variant="success">
+        <span className="font-semibold">Xác thực thành công.</span>
+        {' '}
+        Email của bạn đã được xác minh. Đang chuyển tới trang đăng nhập…
       </Alert>
       <div className="mt-6">
-        <Button className="w-full" onClick={() => navigate('/auth/login?verified=1')}>
+        <Button
+          className="w-full"
+          onClick={() =>
+            navigate('/auth/login?verified=1', {
+              replace: true,
+              state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
+            })
+          }
+        >
           Đăng nhập ngay
         </Button>
       </div>
