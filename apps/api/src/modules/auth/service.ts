@@ -76,6 +76,12 @@ async function sendViaResendApi(to: string, actionLink: string): Promise<boolean
   const from = process.env.RESEND_FROM_EMAIL?.trim();
   if (!apiKey || !from) return false;
 
+  const senderName = process.env.RESEND_SENDER_NAME?.trim() || 'langdaihoc';
+  // Không để lộ / redirect về vercel.app trong mail xác minh.
+  const link = actionLink
+    .replaceAll('https://langdaihoc.vercel.app', 'https://langdaihoc.xyz')
+    .replaceAll('http://langdaihoc.vercel.app', 'https://langdaihoc.xyz');
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -83,15 +89,42 @@ async function sendViaResendApi(to: string, actionLink: string): Promise<boolean
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: process.env.RESEND_SENDER_NAME?.trim()
-        ? `${process.env.RESEND_SENDER_NAME.trim()} <${from}>`
-        : from,
+      from: `${senderName} <${from}>`,
       to: [to],
       subject: 'Xác minh email — langdaihoc',
-      html: `<p>Chào bạn,</p>
-<p>Nhấn liên kết dưới đây để xác minh tài khoản langdaihoc:</p>
-<p><a href="${actionLink}">${actionLink}</a></p>
-<p>Nếu bạn không đăng ký, hãy bỏ qua email này.</p>`,
+      html: `<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eef6fb;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef6fb;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #c5e4f5;">
+        <tr><td style="padding:28px 28px 8px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;color:#0b3a6b;">langdaihoc</div>
+          <div style="margin-top:6px;font-size:13px;color:#64748b;">Xác minh tài khoản</div>
+        </td></tr>
+        <tr><td style="padding:8px 28px 28px;">
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.55;">Chào bạn,</p>
+          <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#334155;">
+            Nhấn nút bên dưới để xác minh email và kích hoạt tài khoản trên langdaihoc.
+          </p>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
+            <tr><td style="border-radius:999px;background:#2eb7e5;">
+              <a href="${link}" style="display:inline-block;padding:12px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">
+                Xác minh email
+              </a>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:12px;line-height:1.5;color:#94a3b8;">
+            Nếu bạn không đăng ký, hãy bỏ qua email này. Nút chỉ dùng một lần.
+          </p>
+        </td></tr>
+      </table>
+      <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">© langdaihoc · langdaihoc.xyz</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
     }),
   });
   if (!res.ok) {

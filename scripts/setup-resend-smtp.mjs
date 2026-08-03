@@ -13,7 +13,7 @@
 const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
 const apiKey = process.env.RESEND_API_KEY?.trim();
 const fromEmail = process.env.RESEND_FROM_EMAIL?.trim();
-const senderName = process.env.RESEND_SENDER_NAME?.trim() || 'Làng Đại Học';
+const senderName = process.env.RESEND_SENDER_NAME?.trim() || 'langdaihoc';
 const projectRef = process.env.SUPABASE_PROJECT_REF?.trim() || 'gzietvaysffjizasmyfy';
 
 if (!token || !apiKey || !fromEmail) {
