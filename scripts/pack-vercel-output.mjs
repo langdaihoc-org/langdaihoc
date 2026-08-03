@@ -38,6 +38,18 @@ const config = {
   version: 3,
   routes: [
     {
+      src: '/(.*)',
+      has: [{ type: 'host', value: 'langdaihoc.vercel.app' }],
+      status: 308,
+      headers: { Location: 'https://langdaihoc.xyz/$1' },
+    },
+    {
+      src: '/(.*)',
+      has: [{ type: 'host', value: 'langdaihoc-langdaihoc.vercel.app' }],
+      status: 308,
+      headers: { Location: 'https://langdaihoc.xyz/$1' },
+    },
+    {
       src: '/sw.js',
       headers: {
         'Cache-Control': 'public, max-age=0, must-revalidate',
