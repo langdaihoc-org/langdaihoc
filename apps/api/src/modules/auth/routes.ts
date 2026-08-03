@@ -16,7 +16,7 @@ import {
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { setSessionCookies, clearSessionCookies } from '../../lib/session.js';
+import { setSessionCookies, clearSessionCookies, wantsRememberMe } from '../../lib/session.js';
 import { assertUploadedImageUrl } from '../../lib/storage.js';
 import {
   ACCESS_TOKEN_COOKIE,
@@ -364,7 +364,7 @@ authRouter.post(
       throw new AppError(401, 'Phiên đăng nhập hết hạn', 'SESSION_EXPIRED');
     }
 
-    setSessionCookies(res, data.session);
+    setSessionCookies(res, data.session, wantsRememberMe(req));
     res.json({ message: 'Phiên đăng nhập đã được gia hạn' });
   }),
 );

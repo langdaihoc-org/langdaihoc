@@ -3,7 +3,12 @@ import type { UserRole } from '@langdaihoc/shared';
 import { eq } from 'drizzle-orm';
 import { profiles } from '@langdaihoc/database';
 import { DEMO_MODE } from '@langdaihoc/shared';
-import { createSupabaseAnon, ACCESS_TOKEN_COOKIE } from '../lib/supabase.js';
+import {
+  createSupabaseAnon,
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from '../lib/supabase.js';
+import { setSessionCookies, wantsRememberMe, clearSessionCookies } from '../lib/session.js';
 import { AppError } from './error-handler.js';
 import { syncProfileStatusOnLogin } from '../modules/auth/service.js';
 
@@ -32,12 +37,36 @@ declare global {
   }
 }
 
-export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
+async function resolveAccessToken(req: Request, res: Response): Promise<string | null> {
+  const rawAuth = req.headers.authorization;
+  const bearer =
+    rawAuth && /^Bearer\s+/i.test(rawAuth) ? rawAuth.replace(/^Bearer\s+/i, '').trim() : undefined;
+  let accessToken = (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer;
+  const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
+
+  if (accessToken) {
+    const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
+    if (!error && data.user) return accessToken;
+  }
+
+  // Access hết hạn / thiếu — gia hạn bằng refresh cookie (giữ “ghi nhớ đăng nhập”).
+  if (!refreshToken) return null;
+
+  const { data, error } = await getSupabaseAnon().auth.refreshSession({
+    refresh_token: refreshToken,
+  });
+  if (error || !data.session?.access_token) {
+    clearSessionCookies(res);
+    return null;
+  }
+
+  setSessionCookies(res, data.session, wantsRememberMe(req));
+  return data.session.access_token;
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const rawAuth = req.headers.authorization;
-    const bearer =
-      rawAuth && /^Bearer\s+/i.test(rawAuth) ? rawAuth.replace(/^Bearer\s+/i, '').trim() : undefined;
-    const accessToken = req.cookies[ACCESS_TOKEN_COOKIE] ?? bearer;
+    const accessToken = await resolveAccessToken(req, res);
 
     if (!accessToken) {
       throw new AppError(401, 'Bạn cần đăng nhập', 'UNAUTHORIZED');
