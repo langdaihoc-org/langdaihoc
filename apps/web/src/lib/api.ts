@@ -1,8 +1,12 @@
 const rawApiBase = import.meta.env.VITE_API_URL ?? '';
 const API_BASE = String(rawApiBase).replace(/\/$/, '');
 
-if (import.meta.env.PROD && !API_BASE) {
-  throw new Error('VITE_API_URL is required in production builds');
+/** Không throw lúc import — tránh trắng toàn trang nếu thiếu env khi build. */
+export function getApiBaseUrl(): string {
+  if (import.meta.env.PROD && !API_BASE) {
+    console.error('[api] VITE_API_URL missing in production build');
+  }
+  return API_BASE;
 }
 
 export class ApiError extends Error {
@@ -39,7 +43,15 @@ async function parseResponse<T>(res: Response): Promise<T> {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = getApiBaseUrl();
+  if (import.meta.env.PROD && !base) {
+    throw new ApiError(
+      'Cấu hình API bị thiếu. Vui lòng tải lại trang hoặc liên hệ hỗ trợ.',
+      503,
+      'API_URL_MISSING',
+    );
+  }
+  const res = await fetch(`${base}${path}`, {
     ...options,
     credentials: 'include',
     headers: {
