@@ -71,16 +71,31 @@ export async function createAuthUserForRegister(opts: {
   return { userId: data.user.id };
 }
 
-async function sendViaResendApi(to: string, actionLink: string): Promise<boolean> {
+/** Ép redirect mail xác minh về FRONTEND_URL (không để vercel.app). */
+function withForcedRedirect(actionLink: string, redirectTo: string): string {
+  try {
+    const u = new URL(actionLink);
+    if (u.searchParams.has('redirect_to')) {
+      u.searchParams.set('redirect_to', redirectTo);
+    }
+    return u
+      .toString()
+      .replace(/https?:\/\/langdaihoc\.vercel\.app/gi, 'https://langdaihoc.xyz')
+      .replace(/https%3A%2F%2Flangdaihoc\.vercel\.app/gi, encodeURIComponent('https://langdaihoc.xyz'));
+  } catch {
+    return actionLink
+      .replace(/https?:\/\/langdaihoc\.vercel\.app/gi, 'https://langdaihoc.xyz')
+      .replace(/https%3A%2F%2Flangdaihoc\.vercel\.app/gi, encodeURIComponent('https://langdaihoc.xyz'));
+  }
+}
+
+async function sendViaResendApi(to: string, actionLink: string, redirectTo: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM_EMAIL?.trim();
   if (!apiKey || !from) return false;
 
   const senderName = process.env.RESEND_SENDER_NAME?.trim() || 'langdaihoc';
-  // Không để lộ / redirect về vercel.app trong mail xác minh.
-  const link = actionLink
-    .replaceAll('https://langdaihoc.vercel.app', 'https://langdaihoc.xyz')
-    .replaceAll('http://langdaihoc.vercel.app', 'https://langdaihoc.xyz');
+  const link = withForcedRedirect(actionLink, redirectTo);
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -152,7 +167,7 @@ export async function sendSignupVerificationEmail(
   });
   const actionLink = linkData?.properties?.action_link;
   if (!linkErr && actionLink) {
-    const sent = await sendViaResendApi(email, actionLink);
+    const sent = await sendViaResendApi(email, actionLink, emailRedirectTo);
     if (sent) return { ok: true };
   }
 
