@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { StickyCartBar } from '@/components/marketplace/sticky-cart-bar';
 import { BuyerFooter } from '@/components/layout/buyer-footer';
 import { EmailVerifyBanner } from '@/components/layout/email-verify-banner';
+import { InstallAppBanner } from '@/components/layout/install-app-banner';
 import { localizeNotificationText } from '@/lib/format';
 import { useBuyerLive } from '@/hooks/use-buyer-live';
 import { useRealtimeNotifications } from '@/hooks/use-realtime-notifications';
@@ -285,6 +286,7 @@ export function ResponsiveBuyerLayout() {
     <div className="min-h-screen pb-20 lg:pb-8">
       <Topbar />
       <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
+        <InstallAppBanner />
         <EmailVerifyBanner />
         <Outlet />
       </main>
