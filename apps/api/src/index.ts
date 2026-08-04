@@ -15,10 +15,9 @@ import { buyerRouter } from './modules/buyer/routes.js';
 import { sellerRouter } from './modules/seller/routes.js';
 import { healthRouter } from './modules/health/routes.js';
 import { scheduleDataRetention } from './jobs/data-retention.js';
-import { assertDemoModeSafe, buildCorsOrigins, getDatabaseUrl, getFrontendUrl, isProd } from './lib/env.js';
+import { buildCorsOrigins, getDatabaseUrl, getFrontendUrl, isProd } from './lib/env.js';
 import { requireTrustedOrigin } from './middleware/csrf-origin.js';
 
-assertDemoModeSafe();
 
 const PORT = Number(process.env.PORT ?? 3001);
 const FRONTEND_URL = getFrontendUrl();

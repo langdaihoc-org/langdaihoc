@@ -12,7 +12,6 @@ import {
   verifyEmailSchema,
   changePasswordSchema,
   profileUpdateSchema,
-  DEMO_MODE,
   normalizePhoneVN,
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
@@ -152,7 +151,7 @@ authRouter.post(
         id: userId,
         email: input.email,
         role: 'buyer',
-        status: DEMO_MODE ? 'active' : 'pending_email_verification',
+        status: 'pending_email_verification',
         fullName: input.fullName,
         phone: input.phone ?? null,
       });
@@ -163,29 +162,25 @@ authRouter.post(
       throw e;
     }
 
-    if (!DEMO_MODE) {
-      const mail = await sendSignupVerificationEmail(
-        supabaseAdmin,
-        input.email,
-        `${frontendUrl}/auth/verify-email`,
-      );
-      if (!mail.ok) {
-        console.error('[auth] buyer register mail failed', input.email, mail.error);
-        res.status(201).json({
-          message:
-            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
-          redirectTo: '/auth/check-email',
-          emailSendFailed: true,
-        });
-        return;
-      }
+    const mail = await sendSignupVerificationEmail(
+      supabaseAdmin,
+      input.email,
+      `${frontendUrl}/auth/verify-email`,
+    );
+    if (!mail.ok) {
+      console.error('[auth] buyer register mail failed', input.email, mail.error);
+      res.status(201).json({
+        message:
+          'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+        redirectTo: '/auth/check-email',
+        emailSendFailed: true,
+      });
+      return;
     }
 
     res.status(201).json({
-      message: DEMO_MODE
-        ? 'Đăng ký thành công. Bạn có thể đăng nhập ngay.'
-        : 'Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản.',
-      redirectTo: DEMO_MODE ? '/auth/login' : '/auth/check-email',
+      message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản.',
+      redirectTo: '/auth/check-email',
     });
   }),
 );
@@ -216,12 +211,12 @@ authRouter.post(
         id: userId,
         email: input.email,
         role: 'seller',
-        status: DEMO_MODE ? 'active' : 'pending_email_verification',
+        status: 'pending_email_verification',
         fullName: input.fullName,
         phone: input.phone,
       });
 
-      // Luôn pending — kể cả DEMO: admin phải bấm duyệt trước khi mở bán.
+      // Admin phải bấm duyệt trước khi mở bán.
       await db.insert(sellers).values({
         userId,
         shopName: `${input.fullName} — chờ duyệt`,
@@ -240,29 +235,25 @@ authRouter.post(
       throw e;
     }
 
-    if (!DEMO_MODE) {
-      const mail = await sendSignupVerificationEmail(
-        supabaseAdmin,
-        input.email,
-        `${frontendUrl}/auth/verify-email`,
-      );
-      if (!mail.ok) {
-        console.error('[auth] seller register mail failed', input.email, mail.error);
-        res.status(201).json({
-          message:
-            'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
-          redirectTo: '/auth/check-email',
-          emailSendFailed: true,
-        });
-        return;
-      }
+    const mail = await sendSignupVerificationEmail(
+      supabaseAdmin,
+      input.email,
+      `${frontendUrl}/auth/verify-email`,
+    );
+    if (!mail.ok) {
+      console.error('[auth] seller register mail failed', input.email, mail.error);
+      res.status(201).json({
+        message:
+          'Đăng ký thành công nhưng gửi email xác minh thất bại. Vui lòng dùng "Gửi lại email xác minh".',
+        redirectTo: '/auth/check-email',
+        emailSendFailed: true,
+      });
+      return;
     }
 
     res.status(201).json({
-      message: DEMO_MODE
-        ? 'Đăng ký đối tác thành công. Bạn có thể đăng nhập — cửa hàng chờ admin duyệt.'
-        : 'Đăng ký thành công. Vui lòng xác minh email — admin sẽ liên hệ để duyệt cửa hàng.',
-      redirectTo: DEMO_MODE ? '/auth/login' : '/auth/check-email',
+      message: 'Đăng ký thành công. Vui lòng xác minh email — admin sẽ liên hệ để duyệt cửa hàng.',
+      redirectTo: '/auth/check-email',
     });
   }),
 );
@@ -321,7 +312,7 @@ authRouter.post(
       throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
     }
 
-    const emailVerified = Boolean(data.user.email_confirmed_at) || DEMO_MODE;
+    const emailVerified = Boolean(data.user.email_confirmed_at);
 
     // Prod: Auth chưa xác minh → không tạo phiên.
     if (!emailVerified) {

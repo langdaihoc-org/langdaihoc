@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from 'express';
 import type { UserRole } from '@langdaihoc/shared';
 import { eq } from 'drizzle-orm';
 import { profiles } from '@langdaihoc/database';
-import { DEMO_MODE } from '@langdaihoc/shared';
 import {
   createSupabaseAnon,
   ACCESS_TOKEN_COOKIE,
@@ -93,7 +92,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
     }
 
-    const emailVerified = Boolean(data.user.email_confirmed_at) || DEMO_MODE;
+    const emailVerified = Boolean(data.user.email_confirmed_at);
     let status = profile.status;
     if (emailVerified && status === 'pending_email_verification') {
       await syncProfileStatusOnLogin(db, profile.id, emailVerified);

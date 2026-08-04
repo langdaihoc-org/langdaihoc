@@ -2,7 +2,6 @@ export * from './enums.js';
 export * from './schemas/auth.js';
 export * from './utils.js';
 export * from './pricing.js';
-export * from './demo.js';
 export * from './labels.js';
 export * from './order-summary.js';
 export * from './phone.js';

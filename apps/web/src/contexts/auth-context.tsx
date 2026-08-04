@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi, ApiError, type AuthUser } from '@/lib/api';
-import { DEMO_MODE } from '@langdaihoc/shared';
 
 export type { AuthUser };
 
@@ -74,9 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: !bootstrapped,
       isAuthenticated: Boolean(user),
       isActiveBuyer: Boolean(
-        user?.role === 'buyer' &&
-          user.status === 'active' &&
-          (user.emailVerified || DEMO_MODE),
+        user?.role === 'buyer' && user.status === 'active' && user.emailVerified,
       ),
       refetch: () => refetch(),
       setSessionUser,

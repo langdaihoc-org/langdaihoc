@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import type { Database } from '@langdaihoc/database';
 import { profiles, sellers, userRoles } from '@langdaihoc/database';
 import type { UserRole } from '@langdaihoc/shared';
-import { DEMO_MODE, extractEmailDomain, normalizePhoneVN } from '@langdaihoc/shared';
+import { extractEmailDomain, normalizePhoneVN } from '@langdaihoc/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../../middleware/error-handler.js';
 import { createSupabaseAnon } from '../../lib/supabase.js';
@@ -51,15 +51,15 @@ export async function createAuthUserForRegister(opts: {
   const { data, error } = await opts.supabaseAdmin.auth.admin.createUser({
     email: opts.email,
     password: opts.password,
-    email_confirm: DEMO_MODE,
+    email_confirm: false,
     user_metadata: { full_name: opts.fullName, role: opts.role },
   });
   if (error || !data.user) {
     throw new AppError(400, error?.message || 'Không thể tạo tài khoản', 'SIGNUP_FAILED');
   }
 
-  // Phòng hờ dashboard/SMTP auto-confirm: ép lại chưa xác minh trên prod.
-  if (!DEMO_MODE && data.user.email_confirmed_at) {
+  // Phòng hờ dashboard/SMTP auto-confirm: ép lại chưa xác minh.
+  if (data.user.email_confirmed_at) {
     const { error: unconfirmErr } = await opts.supabaseAdmin.auth.admin.updateUserById(data.user.id, {
       email_confirm: false,
     });

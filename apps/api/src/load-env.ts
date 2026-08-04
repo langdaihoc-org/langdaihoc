@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Load .env trước mọi import dùng DEMO_MODE / secrets.
+ * Load .env trước mọi import dùng secrets / config.
  * Production: không override biến môi trường cloud (Railway/Vercel).
  */
 const isProd = process.env.NODE_ENV === 'production';

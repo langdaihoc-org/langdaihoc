@@ -31,11 +31,8 @@ git push -u origin main
 
 ```bash
 $env:DATABASE_URL="postgresql://..."
-$env:ALLOW_DEMO_SEED="0"
 pnpm db:migrate
 ```
-
-**Không** chạy `pnpm db:seed` lên DB cloud trừ khi cố ý (`ALLOW_DEMO_SEED=1`).
 
 4. Authentication → URL configuration (sau khi có Vercel):
    - Site URL: `https://<project>.vercel.app`
@@ -51,7 +48,6 @@ Variables:
 
 ```env
 NODE_ENV=production
-DEMO_MODE=false
 COOKIE_SECURE=true
 COOKIE_SAMESITE=none
 TRUST_PROXY=1
@@ -72,8 +68,7 @@ R2_PUBLIC_BASE_URL=https://pub-xxxxx.r2.dev
 
 Ghi chú:
 
-- `DEMO_MODE=false` mặc định (bắt verify email).
-- **Không** bật `DEMO_MODE=true` khi `NODE_ENV=production` — API **fail boot**. Test bỏ verify → staging `NODE_ENV=development` hoặc project riêng.
+- Email verification luôn bắt buộc (không còn DEMO_MODE).
 - `COOKIE_SAMESITE=none` cần khi web (Vercel) ≠ API (Railway). API có kiểm tra Origin trên request mutating.
 - Health: `https://<railway>/api/health`
 
@@ -99,8 +94,6 @@ Sau deploy: cập nhật Railway `FRONTEND_URL` + Supabase Auth URLs.
 Health:
 - Liveness: `GET /api/health`
 - Readiness (DB): `GET /api/health/ready`
-
-**Lưu ý:** `DEMO_MODE=true` bị **cấm** khi `NODE_ENV=production` (API không boot). Test nội bộ bỏ verify email → staging riêng hoặc tạm `NODE_ENV` không phải production (không khuyến nghị).
 
 ---
 

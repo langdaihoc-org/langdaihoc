@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-shot local setup: Supabase → env → migrate → seed
+ * One-shot local setup: Supabase → env → migrate
  * Usage: pnpm setup:local
  */
 import { spawnSync } from 'node:child_process';
@@ -89,21 +89,8 @@ tryInjectSupabaseKeys();
 
 run('pnpm', ['db:migrate']);
 
-const apiEnv = join(root, 'apps/api/.env');
-if (existsSync(apiEnv)) {
-  const envContent = readFileSync(apiEnv, 'utf8');
-  const env = {};
-  for (const line of envContent.split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
-    if (m) env[m[1]] = m[2];
-  }
-  run('pnpm', ['db:seed'], { env });
-} else {
-  run('pnpm', ['db:seed']);
-}
-
 console.log('\n✅ Setup complete!');
 console.log('   pnpm dev');
 console.log('   Web: http://localhost:5173');
 console.log('   API: http://localhost:3001/api/health');
-console.log('   Tài khoản local: xem output của pnpm db:seed');
+console.log('   Tạo admin: node scripts/create-cloud-admin.mjs (cần env + ALLOW_DESTRUCTIVE)');

@@ -12,8 +12,9 @@ import {
 
 export const cartRouter = Router();
 
-/** DEMO chỉ nới email verify — vẫn bắt role buyer. */
+/** Buyer đã đăng nhập + active — bắt role buyer. */
 const buyerGuard = [requireAuth, requireActiveBuyer];
+
 
 cartRouter.get(
   '/',

@@ -5,8 +5,8 @@
  *   railway run --service api -- node scripts/rename-admin-email.mjs
  *
  * Env:
- *   FROM_ADMIN_EMAIL (default admin@demo.local)
- *   TO_ADMIN_EMAIL   (default langdaihoc.work@gmail.com)
+ *   FROM_ADMIN_EMAIL (required)
+ *   TO_ADMIN_EMAIL   (required)
  *   ALLOW_DESTRUCTIVE=1 CONFIRM_DESTRUCTIVE=I_UNDERSTAND (bắt buộc trên prod)
  */
 import { createRequire } from 'node:module';
@@ -22,11 +22,16 @@ const require = createRequire(join(root, 'packages/database/package.json'));
 const postgres = require('postgres');
 const { createClient } = require('@supabase/supabase-js');
 
-const FROM_EMAIL = (process.env.FROM_ADMIN_EMAIL ?? 'admin@demo.local').trim().toLowerCase();
-const TO_EMAIL = (process.env.TO_ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com').trim().toLowerCase();
+const FROM_EMAIL = (process.env.FROM_ADMIN_EMAIL ?? '').trim().toLowerCase();
+const TO_EMAIL = (process.env.TO_ADMIN_EMAIL ?? '').trim().toLowerCase();
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!FROM_EMAIL || !TO_EMAIL) {
+  console.error('FROM_ADMIN_EMAIL and TO_ADMIN_EMAIL are required');
+  process.exit(1);
+}
 
 if (!DATABASE_URL || !SUPABASE_URL || !SERVICE_KEY) {
   console.error('Thiếu DATABASE_URL / SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');

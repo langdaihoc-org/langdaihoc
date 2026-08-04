@@ -21,20 +21,6 @@ export function EmailVerifyBanner() {
             gửi lại email xác minh
           </Link>
           .
-          {import.meta.env.DEV && (
-            <>
-              {' '}
-              Dev:{' '}
-              <a
-                href="http://127.0.0.1:54324"
-                target="_blank"
-                rel="noreferrer"
-                className="font-semibold text-brand-orange underline"
-              >
-                mở Mailpit
-              </a>
-            </>
-          )}
         </p>
       </div>
     </Alert>

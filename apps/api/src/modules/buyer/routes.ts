@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { eq, and, isNull, gte, sql } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
-import { profileUpdateSchema, DEMO_MODE } from '@langdaihoc/shared';
+import { profileUpdateSchema } from '@langdaihoc/shared';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole, requireActiveBuyer } from '../../middleware/auth.js';
 import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
@@ -143,7 +143,7 @@ buyerRouter.patch(
       const oldEmail = req.user!.email;
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         email: body.email,
-        email_confirm: DEMO_MODE,
+        email_confirm: false,
       });
       if (error) {
         throw new AppError(400, error.message || 'Không đổi được email', 'EMAIL_UPDATE_FAILED');
@@ -155,26 +155,24 @@ buyerRouter.patch(
           .catch((e: unknown) => console.error('[buyer] rollback email failed', userId, e));
       };
 
-      if (!DEMO_MODE) {
-        const frontendUrl = getFrontendUrl();
-        const { error: resendError } = await supabaseAdmin.auth.resend({
-          type: 'signup',
-          email: body.email,
-          options: {
-            emailRedirectTo: `${frontendUrl}/auth/verify-email`,
-          },
-        });
-        if (resendError) {
-          await rollbackAuthEmail();
-          throw new AppError(
-            502,
-            'Không gửi được email xác minh. Email chưa đổi — thử lại sau.',
-            'EMAIL_SEND_FAILED',
-          );
-        }
+      const frontendUrl = getFrontendUrl();
+      const { error: resendError } = await supabaseAdmin.auth.resend({
+        type: 'signup',
+        email: body.email,
+        options: {
+          emailRedirectTo: `${frontendUrl}/auth/verify-email`,
+        },
+      });
+      if (resendError) {
+        await rollbackAuthEmail();
+        throw new AppError(
+          502,
+          'Không gửi được email xác minh. Email chưa đổi — thử lại sau.',
+          'EMAIL_SEND_FAILED',
+        );
       }
 
-      emailVerified = DEMO_MODE;
+      emailVerified = false;
 
       try {
         const [updatedEmail] = await db
@@ -183,7 +181,7 @@ buyerRouter.patch(
             ...(body.fullName !== undefined ? { fullName: body.fullName } : {}),
             ...(body.phone !== undefined ? { phone: body.phone } : {}),
             email: body.email!,
-            status: emailVerified ? 'active' : 'pending_email_verification',
+            status: 'pending_email_verification',
             updatedAt: new Date(),
           })
           .where(eq(profiles.id, userId))
@@ -195,9 +193,7 @@ buyerRouter.patch(
         res.json({
           data: updatedEmail,
           emailChanged: true,
-          message: DEMO_MODE
-            ? 'Đã cập nhật hồ sơ và email'
-            : 'Đã đổi email. Vui lòng kiểm tra hộp thư để xác minh email mới.',
+          message: 'Đã đổi email. Vui lòng kiểm tra hộp thư để xác minh email mới.',
         });
         return;
       } catch (err) {

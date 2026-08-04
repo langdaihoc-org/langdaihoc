@@ -19,15 +19,6 @@ export function looksLikeLiveDeploy(): boolean {
   return false;
 }
 
-/** Chặn DEMO_MODE trên môi trường live — fail boot nếu cấu hình sai. */
-export function assertDemoModeSafe() {
-  if (process.env.DEMO_MODE === 'true' && looksLikeLiveDeploy()) {
-    throw new Error(
-      'DEMO_MODE=true bị cấm trên môi trường live (production / Railway production / FRONTEND_URL production). Tắt DEMO_MODE hoặc dùng staging riêng.',
-    );
-  }
-}
-
 export function requireEnv(name: string): string {
   const v = process.env[name]?.trim();
   if (!v) throw new Error(`${name} is required`);

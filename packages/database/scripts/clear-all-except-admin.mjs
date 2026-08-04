@@ -1,8 +1,9 @@
 /**
- * Xóa toàn bộ user/data app, giữ admin@demo.local (+ Auth tương ứng).
- * Production: ALLOW_DESTRUCTIVE=1 CONFIRM_DESTRUCTIVE=I_UNDERSTAND
+ * Xóa toàn bộ user/data app, giữ đúng một admin (KEEP_ADMIN_EMAIL).
+ * Production/remote: ALLOW_DESTRUCTIVE=1 CONFIRM_DESTRUCTIVE=I_UNDERSTAND
  *
  * Usage:
+ *   KEEP_ADMIN_EMAIL=... ALLOW_DESTRUCTIVE=1 \
  *   railway run --service api -- node packages/database/scripts/clear-all-except-admin.mjs
  */
 import { createRequire } from 'node:module';
@@ -18,7 +19,10 @@ assertLocalDestructive('clear-all-except-admin');
 const require = createRequire(join(root, 'packages/database/package.json'));
 const postgres = require('postgres');
 
-const KEEP_EMAIL = process.env.KEEP_ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com';
+const KEEP_EMAIL = (process.env.KEEP_ADMIN_EMAIL ?? '').trim().toLowerCase();
+if (!KEEP_EMAIL) {
+  throw new Error('KEEP_ADMIN_EMAIL is required');
+}
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
