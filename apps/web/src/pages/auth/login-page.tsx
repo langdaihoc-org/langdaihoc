@@ -234,6 +234,9 @@ export function CheckEmailPage() {
   );
 }
 
+/** Dedup verify khi React StrictMode mount 2 lần (token chỉ dùng 1 lần). */
+const verifyEmailInflight = new Map<string, Promise<unknown>>();
+
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -269,8 +272,16 @@ export function VerifyEmailPage() {
       }
 
       if (tokenHash) {
+        const cacheKey = `verify-email:${otpType}:${tokenHash}`;
+        let pending = verifyEmailInflight.get(cacheKey);
+        if (!pending) {
+          pending = authApi.verifyEmail({ tokenHash, type: otpType }).finally(() => {
+            verifyEmailInflight.delete(cacheKey);
+          });
+          verifyEmailInflight.set(cacheKey, pending);
+        }
         try {
-          await authApi.verifyEmail({ tokenHash, type: otpType });
+          await pending;
         } catch {
           if (!cancelled) {
             setStatus('error');

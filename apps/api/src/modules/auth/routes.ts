@@ -541,14 +541,31 @@ authRouter.post(
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const supabaseAnon = createSupabaseAnon();
 
-    const { data, error } = await supabaseAnon.auth.verifyOtp({
-      token_hash: input.tokenHash,
-      type: input.type,
-    });
+    // Mail mới: type=magiclink. Mail cũ (lệch): type=signup — thử cả hai.
+    const typesToTry =
+      input.type === 'magiclink'
+        ? (['magiclink', 'signup', 'email'] as const)
+        : input.type === 'signup'
+          ? (['signup', 'magiclink', 'email'] as const)
+          : ([input.type, 'magiclink', 'signup', 'email'] as const);
 
-    if (error || !data.user?.id) {
+    let data: Awaited<ReturnType<typeof supabaseAnon.auth.verifyOtp>>['data'] | null = null;
+    let error: Awaited<ReturnType<typeof supabaseAnon.auth.verifyOtp>>['error'] | null = null;
+
+    for (const otpType of typesToTry) {
+      const result = await supabaseAnon.auth.verifyOtp({
+        token_hash: input.tokenHash,
+        type: otpType,
+      });
+      data = result.data;
+      error = result.error;
+      if (!error && data.user?.id) break;
+    }
+
+    if (error || !data?.user?.id) {
       console.error('[auth] verify-email failed', {
         type: input.type,
+        tried: typesToTry,
         tokenLen: input.tokenHash.length,
         err: formatAuthError(error),
       });
