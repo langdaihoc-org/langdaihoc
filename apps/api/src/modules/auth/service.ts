@@ -171,14 +171,17 @@ export async function sendSignupVerificationEmail(
   email: string,
   emailRedirectTo: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Dùng magiclink chỉ để lấy hashed_token — app verify rồi revoke session ngay,
+  // không để link trở thành đăng nhập không mật khẩu trên client.
   const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email,
     options: { redirectTo: emailRedirectTo },
   });
-  const actionLink = linkData?.properties?.action_link;
-  if (!linkErr && actionLink) {
-    const sent = await sendViaResendApi(email, actionLink, emailRedirectTo, {
+  const hashedToken = linkData?.properties?.hashed_token;
+  if (!linkErr && hashedToken) {
+    const appLink = `${emailRedirectTo}?token_hash=${encodeURIComponent(hashedToken)}&type=signup`;
+    const sent = await sendViaResendApi(email, appLink, emailRedirectTo, {
       subject: 'Xác minh email — langdaihoc',
       eyebrow: 'Xác minh tài khoản',
       body: 'Nhấn nút bên dưới để xác minh email và kích hoạt tài khoản trên langdaihoc.',
@@ -199,7 +202,7 @@ export async function sendSignupVerificationEmail(
   return {
     ok: false,
     error: [
-      `hasLink=${Boolean(actionLink)}`,
+      `hasToken=${Boolean(hashedToken)}`,
       `linkErr=${formatAuthError(linkErr)}`,
       `resendApiConfigured=${hasResendKey}`,
       `supabaseResend=${formatAuthError(resendErr)}`,

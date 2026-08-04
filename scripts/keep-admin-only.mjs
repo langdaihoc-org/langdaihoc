@@ -1,7 +1,7 @@
 /**
- * Giữ đúng admin@demo.local — xóa hết user/data còn lại.
- * Nếu chưa có admin thì tạo lại (password Demo1234 / SEED_PASSWORD).
- * Usage: node scripts/keep-admin-only.mjs
+ * Giữ đúng một admin — xóa hết user/data còn lại.
+ * Bắt buộc KEEP_ADMIN_EMAIL + SEED_PASSWORD (không default Demo1234).
+ * Usage: ALLOW_DESTRUCTIVE=1 node scripts/keep-admin-only.mjs
  */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -20,12 +20,20 @@ const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:55322/postgres';
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:55321';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_EMAIL = process.env.KEEP_ADMIN_EMAIL ?? 'langdaihoc.work@gmail.com';
-const ADMIN_PASSWORD = process.env.SEED_PASSWORD ?? 'Demo1234';
+const ADMIN_EMAIL = (process.env.KEEP_ADMIN_EMAIL ?? '').trim().toLowerCase();
+const ADMIN_PASSWORD = process.env.SEED_PASSWORD?.trim();
 const ADMIN_NAME = 'Quản trị viên';
 
 if (!SERVICE_KEY) {
   console.error('Thiếu SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
+if (!ADMIN_EMAIL) {
+  console.error('KEEP_ADMIN_EMAIL is required');
+  process.exit(1);
+}
+if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 8) {
+  console.error('SEED_PASSWORD is required (min 8 chars). No default password.');
   process.exit(1);
 }
 
@@ -96,24 +104,21 @@ async function wipeExceptAdmin(adminId) {
     values (${adminId}, 'admin')
   `;
 
-  // Delete every auth user except admin
+  // Delete every auth user except admin — luôn page 1 vì xóa làm list dịch.
   let deleted = 0;
-  for (let page = 1; page <= 50; page++) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+  for (;;) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
     if (error) throw error;
-    const users = data?.users ?? [];
+    const users = (data?.users ?? []).filter((u) => u.id !== adminId && u.email !== ADMIN_EMAIL);
     if (!users.length) break;
     for (const u of users) {
-      if (u.id === adminId || u.email === ADMIN_EMAIL) continue;
       const { error: delErr } = await supabase.auth.admin.deleteUser(u.id);
       if (delErr) console.warn('auth delete fail', u.email, delErr.message);
       else deleted++;
     }
-    if (users.length < 100) break;
   }
   console.log('Auth users deleted (non-admin):', deleted);
 }
-
 async function main() {
   const adminId = await ensureAdmin();
   await wipeExceptAdmin(adminId);
@@ -126,7 +131,7 @@ async function main() {
     'Auth emails:',
     (data?.users ?? []).map((u) => u.email).join(', ') || '(none)',
   );
-  console.log(`\nPassword admin: ${ADMIN_PASSWORD}`);
+  console.log(`\nAdmin kept: ${ADMIN_EMAIL}`);
   await sql.end({ timeout: 5 });
 }
 

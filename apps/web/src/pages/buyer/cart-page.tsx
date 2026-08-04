@@ -1,21 +1,31 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Minus, Trash2, WashingMachine, UtensilsCrossed, ShoppingBag } from 'lucide-react';
-import { cartApi } from '@/lib/api';
+import { cartApi, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/format';
 import { FoodImage } from '@/components/marketplace/food-image';
 import { QueryErrorState } from '@/components/ui/query-state';
+import { useToast } from '@/components/ui/toast';
 
 export function CartPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['cart'], queryFn: () => cartApi.get() });
   const cart = data?.data;
 
-  const updateMut = useMutation({ mutationFn: ({ id, quantity }: { id: string; quantity: number }) => cartApi.update(id, quantity), onSuccess: () => qc.invalidateQueries({ queryKey: ['cart'] }) });
-  const removeMut = useMutation({ mutationFn: (id: string) => cartApi.remove(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['cart'] }) });
+  const updateMut = useMutation({
+    mutationFn: ({ id, quantity }: { id: string; quantity: number }) => cartApi.update(id, quantity),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cart'] }),
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được số lượng', 'error'),
+  });
+  const removeMut = useMutation({
+    mutationFn: (id: string) => cartApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cart'] }),
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không xóa được món', 'error'),
+  });
 
   if (isLoading) return <p className="py-12 text-center text-sm text-[var(--color-muted)]">Đang tải...</p>;
   if (isError) return <QueryErrorState message="Không tải được giỏ hàng" onRetry={() => refetch()} className="mx-auto max-w-md" />;

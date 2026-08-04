@@ -478,6 +478,7 @@ export async function addToCart(
   options?: { id: string }[],
   forceClear = false,
 ) {
+  const qty = Math.min(Math.max(1, Math.floor(quantity)), 99);
   const [item] = await db
     .select({
       id: foodItems.id,
@@ -498,51 +499,58 @@ export async function addToCart(
   const resolvedOptions = await resolveFoodItemOptions(db, foodItemId, options ?? []);
   const incomingOptionKey = cartOptionIdsKey(resolvedOptions);
 
-  const cart = await getOrCreateCart(db, userId);
-  if (cart.sellerId && cart.sellerId !== item.sellerId && !forceClear) {
-    throw new AppError(
-      409,
-      'Giỏ hàng đang có món từ cửa hàng khác',
-      'CART_SELLER_CONFLICT',
+  await db.transaction(async (tx) => {
+    const cart = await getOrCreateCart(tx, userId);
+    await tx.select({ id: carts.id }).from(carts).where(eq(carts.id, cart.id)).for('update');
+
+    const [locked] = await tx.select().from(carts).where(eq(carts.id, cart.id)).limit(1);
+    if (!locked) throw new AppError(500, 'Không khóa được giỏ hàng', 'CART_LOCK_FAILED');
+
+    if (locked.sellerId && locked.sellerId !== item.sellerId && !forceClear) {
+      throw new AppError(
+        409,
+        'Giỏ hàng đang có món từ cửa hàng khác',
+        'CART_SELLER_CONFLICT',
+      );
+    }
+
+    if (forceClear || (locked.sellerId && locked.sellerId !== item.sellerId)) {
+      await tx.delete(cartItems).where(eq(cartItems.cartId, locked.id));
+    }
+
+    await tx
+      .update(carts)
+      .set({ sellerId: item.sellerId, updatedAt: new Date() })
+      .where(eq(carts.id, locked.id));
+
+    const sameFoodRows = await tx
+      .select()
+      .from(cartItems)
+      .where(and(eq(cartItems.cartId, locked.id), eq(cartItems.foodItemId, foodItemId)));
+
+    const existing = sameFoodRows.find(
+      (row) => cartOptionIdsKey(row.optionsJson as { id?: string }[] | null) === incomingOptionKey,
     );
-  }
 
-  if (forceClear || (cart.sellerId && cart.sellerId !== item.sellerId)) {
-    await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
-  }
-
-  await db
-    .update(carts)
-    .set({ sellerId: item.sellerId, updatedAt: new Date() })
-    .where(eq(carts.id, cart.id));
-
-  // Cùng món + cùng bộ tùy chọn → cộng dồn; khác tùy chọn → dòng riêng
-  const sameFoodRows = await db
-    .select()
-    .from(cartItems)
-    .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.foodItemId, foodItemId)));
-
-  const existing = sameFoodRows.find(
-    (row) => cartOptionIdsKey(row.optionsJson as { id?: string }[] | null) === incomingOptionKey,
-  );
-
-  if (existing) {
-    await db
-      .update(cartItems)
-      .set({
-        quantity: existing.quantity + quantity,
-        ...(note !== undefined && { note: note || null }),
-      })
-      .where(eq(cartItems.id, existing.id));
-  } else {
-    await db.insert(cartItems).values({
-      cartId: cart.id,
-      foodItemId,
-      quantity,
-      note: note || null,
-      optionsJson: resolvedOptions.length ? resolvedOptions : null,
-    });
-  }
+    if (existing) {
+      const nextQty = Math.min(existing.quantity + qty, 99);
+      await tx
+        .update(cartItems)
+        .set({
+          quantity: nextQty,
+          ...(note !== undefined && { note: note || null }),
+        })
+        .where(eq(cartItems.id, existing.id));
+    } else {
+      await tx.insert(cartItems).values({
+        cartId: locked.id,
+        foodItemId,
+        quantity: qty,
+        note: note || null,
+        optionsJson: resolvedOptions.length ? resolvedOptions : null,
+      });
+    }
+  });
 }
 
 export async function checkoutFood(
@@ -1037,6 +1045,18 @@ export async function transitionOrder(
       throw new AppError(
         409,
         'Khách chưa chuyển khoản / biên lai chưa duyệt — không thể đi lấy hàng',
+        'PAYMENT_REQUIRED',
+      );
+    }
+  }
+
+  // Chuyển khoản: không cho hoàn thành khi chưa xác nhận thanh toán
+  if (toStatus === 'completed' && order.paymentMethod === 'bank_transfer') {
+    const paid = order.paymentStatus === 'verified' || order.paymentStatus === 'paid';
+    if (!paid) {
+      throw new AppError(
+        409,
+        'Chưa xác nhận thanh toán chuyển khoản — không thể hoàn thành đơn',
         'PAYMENT_REQUIRED',
       );
     }

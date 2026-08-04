@@ -41,7 +41,7 @@ const optionGroupInput = z.object({
   minSelect: z.number().int().min(0).default(0),
   maxSelect: z.number().int().min(1).default(1),
   options: z
-    .array(z.object({ name: z.string().min(1), priceDelta: z.number().default(0) }))
+    .array(z.object({ name: z.string().min(1), priceDelta: z.number().min(0).default(0) }))
     .min(1),
 });
 

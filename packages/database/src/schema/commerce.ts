@@ -365,6 +365,7 @@ export const reviews = pgTable(
   (t) => [
     index('reviews_seller_idx').on(t.sellerId),
     index('reviews_seller_created_idx').on(t.sellerId, t.createdAt),
+    index('reviews_buyer_idx').on(t.buyerId),
   ],
 );
 
@@ -393,7 +394,9 @@ export const complaints = pgTable(
     index('complaints_seller_idx').on(t.sellerId),
     index('complaints_status_idx').on(t.status),
     index('complaints_order_idx').on(t.orderId),
+    uniqueIndex('complaints_order_unique').on(t.orderId),
     index('complaints_created_idx').on(t.createdAt),
+    index('complaints_buyer_idx').on(t.buyerId),
   ],
 );
 

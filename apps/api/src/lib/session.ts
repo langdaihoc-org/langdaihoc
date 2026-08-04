@@ -35,6 +35,19 @@ export function setSessionCookies(res: Response, session: Session, rememberMe = 
   }
 }
 
+/** Cookie ngắn hạn chỉ để đổi mật khẩu sau verify-recovery — không trả token ra JSON. */
+export function setRecoveryCookies(res: Response, session: Session) {
+  res.cookie(ACCESS_TOKEN_COOKIE, session.access_token, {
+    ...COOKIE_OPTIONS,
+    maxAge: ACCESS_MAX_AGE_MS,
+  });
+  res.cookie(REFRESH_TOKEN_COOKIE, session.refresh_token, {
+    ...COOKIE_OPTIONS,
+    maxAge: ACCESS_MAX_AGE_MS,
+  });
+  res.clearCookie(REMEMBER_COOKIE, COOKIE_OPTIONS);
+}
+
 export function clearSessionCookies(res: Response) {
   res.clearCookie(ACCESS_TOKEN_COOKIE, COOKIE_OPTIONS);
   res.clearCookie(REFRESH_TOKEN_COOKIE, COOKIE_OPTIONS);

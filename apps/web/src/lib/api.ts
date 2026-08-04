@@ -83,9 +83,14 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
   forgotPassword: (body: unknown) =>
-    api<{ message: string; accountExists?: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
-  verifyRecovery: (body: { tokenHash: string; type?: string }) =>
-    api<{ accessToken: string; refreshToken: string }>('/api/auth/verify-recovery', {
+    api<{ message: string }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
+  verifyRecovery: (body: { tokenHash: string; type?: 'recovery' }) =>
+    api<{ ok: boolean }>('/api/auth/verify-recovery', {
+      method: 'POST',
+      body: JSON.stringify({ ...body, type: 'recovery' }),
+    }),
+  verifyEmail: (body: { tokenHash: string; type?: 'signup' | 'email' | 'magiclink' }) =>
+    api<{ ok: boolean; message: string; redirectTo: string }>('/api/auth/verify-email', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

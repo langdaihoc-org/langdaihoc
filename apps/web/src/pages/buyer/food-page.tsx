@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useAuth } from '@/contexts/auth-context';
 import { ListSkeleton } from '@/components/ui/skeleton';
 import { QueryErrorState } from '@/components/ui/query-state';
+import { useToast } from '@/components/ui/toast';
 
 type PendingAdd = { quantity: number; options: string[]; note: string; action: FoodSheetAction };
 
@@ -19,6 +20,7 @@ export function FoodPage() {
   const category = params.get('category');
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const qc = useQueryClient();
 
   const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null);
@@ -106,7 +108,11 @@ export function FoodPage() {
       if (action === 'buy') navigate('/checkout');
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'CART_SELLER_CONFLICT') setConflictOpen(true);
+      if (e instanceof ApiError && e.code === 'CART_SELLER_CONFLICT') {
+        setConflictOpen(true);
+        return;
+      }
+      toast(e instanceof ApiError ? e.message : 'Không thêm được vào giỏ', 'error');
     },
   });
 

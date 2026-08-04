@@ -54,12 +54,18 @@ async function main() {
     user = data.user;
     console.log('Created auth user');
   } else {
+    if (process.env.FORCE_RESET_PASSWORD !== '1') {
+      console.error(
+        `Admin ${ADMIN_EMAIL} already exists. Refusing to reset password. Set FORCE_RESET_PASSWORD=1 to override.`,
+      );
+      process.exit(1);
+    }
     await supabase.auth.admin.updateUserById(user.id, {
       password: ADMIN_PASSWORD,
       email_confirm: true,
       user_metadata: { full_name: ADMIN_NAME, role: 'admin' },
     });
-    console.log('Updated existing auth user');
+    console.log('Updated existing auth user (FORCE_RESET_PASSWORD=1)');
   }
 
   await sql`

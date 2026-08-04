@@ -13,6 +13,7 @@ import { ApiError, type FoodItem } from '@/lib/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { StatusBadge } from '@/components/ui/brand';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ReviewTagList } from '@/components/marketplace/review-tags';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ export function StorePage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const qc = useQueryClient();
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null);
@@ -78,7 +80,11 @@ export function StorePage() {
       if (action === 'buy') navigate('/checkout');
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'CART_SELLER_CONFLICT') setConflictOpen(true);
+      if (e instanceof ApiError && e.code === 'CART_SELLER_CONFLICT') {
+        setConflictOpen(true);
+        return;
+      }
+      toast(e instanceof ApiError ? e.message : 'Không thêm được vào giỏ', 'error');
     },
   });
 

@@ -54,8 +54,8 @@ async function main() {
   }
 
   let deletedAuth = 0;
-  for (let page = 1; page <= 50; page++) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+  for (;;) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
     if (error) throw error;
     const users = data?.users ?? [];
     if (!users.length) break;
@@ -64,7 +64,6 @@ async function main() {
       if (delErr) console.error('auth delete fail', u.email, delErr.message);
       else deletedAuth++;
     }
-    if (users.length < 100) break;
   }
 
   const counts = await sql`

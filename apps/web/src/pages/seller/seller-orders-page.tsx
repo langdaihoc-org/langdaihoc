@@ -78,10 +78,12 @@ export function SellerOrdersPage() {
       invalidateSellerOrders(qc);
       setConfirmAction(null);
     },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được thanh toán', 'error'),
   });
   const paidMut = useMutation({
     mutationFn: (id: string) => ordersApi.markPaid(id),
     onSuccess: () => invalidateSellerOrders(qc),
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không đánh dấu đã thu tiền', 'error'),
   });
   const all = data?.data ?? [];
 

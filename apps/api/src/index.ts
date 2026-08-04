@@ -45,7 +45,8 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '6mb' }));
+// Base64 ảnh tối đa ~5MB → JSON body cần ~7MB; giới hạn theo upload.
+app.use(express.json({ limit: '7mb' }));
 app.use(cookieParser());
 app.use(requireTrustedOrigin);
 

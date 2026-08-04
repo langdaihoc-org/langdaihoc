@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isEmailLike, isPhoneLike, normalizePhoneVN } from '../phone.js';
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(8, 'Mật khẩu tối thiểu 8 ký tự')
   .regex(/[a-zA-Z]/, 'Mật khẩu phải có ít nhất một chữ cái')
@@ -149,7 +149,13 @@ export const resetPasswordSchema = z
 /** Xác minh link đặt lại mật khẩu (?token_hash=&type=recovery) phía API. */
 export const verifyRecoverySchema = z.object({
   tokenHash: z.string().trim().min(20).max(2048),
-  type: z.enum(['recovery', 'magiclink', 'signup', 'email']).default('recovery'),
+  type: z.literal('recovery').default('recovery'),
+});
+
+/** Xác minh email đăng ký (?token_hash=&type=signup|email|magiclink). */
+export const verifyEmailSchema = z.object({
+  tokenHash: z.string().trim().min(20).max(2048),
+  type: z.enum(['signup', 'email', 'magiclink']).default('signup'),
 });
 
 export const changePasswordSchema = z
@@ -183,5 +189,6 @@ export type SellerRegisterInput = z.infer<typeof sellerRegisterSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type VerifyRecoveryInput = z.infer<typeof verifyRecoverySchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

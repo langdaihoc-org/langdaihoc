@@ -613,11 +613,7 @@ ordersRouter.post(
       throw new AppError(409, 'Đơn đã được xác nhận thanh toán', 'ALREADY_PAID');
     }
     const proof = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(paymentProofs)
-        .values({ orderId, imageUrl, status: 'proof_uploaded' })
-        .returning();
-      await tx
+      const [ord] = await tx
         .update(orders)
         .set({ paymentStatus: 'proof_uploaded', updatedAt: new Date() })
         .where(
@@ -626,7 +622,15 @@ ordersRouter.post(
             eq(orders.version, order.version),
             sql`${orders.paymentStatus} not in ('verified', 'paid')`,
           ),
-        );
+        )
+        .returning({ id: orders.id });
+      if (!ord) {
+        throw new AppError(409, 'Trạng thái thanh toán đã đổi — tải lại trang', 'CONFLICT');
+      }
+      const [row] = await tx
+        .insert(paymentProofs)
+        .values({ orderId, imageUrl, status: 'proof_uploaded' })
+        .returning();
       return row;
     });
     res.status(201).json({ data: proof });

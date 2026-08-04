@@ -9,14 +9,21 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyRecoverySchema,
+  verifyEmailSchema,
   changePasswordSchema,
+  profileUpdateSchema,
   DEMO_MODE,
   normalizePhoneVN,
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { setSessionCookies, clearSessionCookies, wantsRememberMe } from '../../lib/session.js';
+import {
+  setSessionCookies,
+  setRecoveryCookies,
+  clearSessionCookies,
+  wantsRememberMe,
+} from '../../lib/session.js';
 import { assertUploadedImageUrl } from '../../lib/storage.js';
 import {
   ACCESS_TOKEN_COOKIE,
@@ -77,6 +84,12 @@ const resendLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
   message: { error: { message: 'Đã vượt giới hạn gửi lại email', code: 'RATE_LIMIT' } },
+});
+
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 10 : 100,
+  message: { error: { message: 'Quá nhiều lần đổi mật khẩu, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
 });
 
 export const authRouter = Router();
@@ -350,6 +363,7 @@ authRouter.post(
   '/logout',
   asyncHandler(async (req, res) => {
     const accessToken = req.cookies[ACCESS_TOKEN_COOKIE];
+    const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE];
     const supabaseAdmin = req.app.locals.supabaseAdmin;
 
     if (accessToken) {
@@ -357,6 +371,17 @@ authRouter.post(
         await supabaseAdmin.auth.admin.signOut(accessToken, 'global');
       } catch {
         /* cookie vẫn xoá bên dưới */
+      }
+    } else if (refreshToken) {
+      // Access hết hạn nhưng refresh còn — cố revoke qua refresh session rồi global signOut.
+      try {
+        const anon = createSupabaseAnon();
+        const { data } = await anon.auth.refreshSession({ refresh_token: refreshToken });
+        if (data.session?.access_token) {
+          await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global');
+        }
+      } catch {
+        /* ignore */
       }
     }
 
@@ -415,10 +440,8 @@ authRouter.patch(
   '/profile',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const body = z
-      .object({
-        fullName: z.string().trim().min(2).max(100).optional(),
-        phone: z.string().trim().min(8).max(20).nullable().optional(),
+    const body = profileUpdateSchema
+      .extend({
         avatarUrl: z.string().url().nullable().optional(),
       })
       .parse(req.body);
@@ -451,9 +474,12 @@ authRouter.post(
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const frontendUrl = getFrontendUrl();
 
+    const genericMessage =
+      'Nếu tài khoản tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email đăng ký.';
+
     const email = await findRegisteredAuthEmail(db, input.identifier);
     if (!email) {
-      res.json({ message: 'Tài khoản chưa được tạo', accountExists: false });
+      res.json({ message: genericMessage });
       return;
     }
 
@@ -463,7 +489,7 @@ authRouter.post(
       `${frontendUrl}/auth/reset-password`,
     );
     if (!mail.ok) {
-      console.error('[auth] forgot-password mail failed', email, mail.error);
+      console.error('[auth] forgot-password mail failed', mail.error);
       throw new AppError(
         502,
         'Không gửi được email đặt lại mật khẩu. Vui lòng thử lại sau.',
@@ -471,10 +497,7 @@ authRouter.post(
       );
     }
 
-    res.json({
-      message: 'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn',
-      accountExists: true,
-    });
+    res.json({ message: genericMessage });
   }),
 );
 
@@ -483,16 +506,25 @@ authRouter.post(
   recoveryLimiter,
   asyncHandler(async (req, res) => {
     const input = verifyRecoverySchema.parse(req.body);
-    // Anon client — cùng đường verifyOtp như browser Supabase.
     const supabaseAnon = createSupabaseAnon();
+    const accessCookie = req.cookies?.[ACCESS_TOKEN_COOKIE] as string | undefined;
+
+    // StrictMode / reload: token OTP chỉ dùng 1 lần — nếu cookie recovery còn hạn thì OK.
+    if (accessCookie) {
+      const { data: existing } = await supabaseAnon.auth.getUser(accessCookie);
+      if (existing.user) {
+        res.json({ ok: true });
+        return;
+      }
+    }
+
     const { data, error } = await supabaseAnon.auth.verifyOtp({
       token_hash: input.tokenHash,
-      type: input.type,
+      type: 'recovery',
     });
 
     if (error || !data.session?.access_token) {
       console.error('[auth] verify-recovery failed', {
-        type: input.type,
         tokenLen: input.tokenHash.length,
         err: formatAuthError(error),
         hasSession: Boolean(data.session),
@@ -504,9 +536,50 @@ authRouter.post(
       );
     }
 
+    setRecoveryCookies(res, data.session);
+    res.json({ ok: true });
+  }),
+);
+
+authRouter.post(
+  '/verify-email',
+  recoveryLimiter,
+  asyncHandler(async (req, res) => {
+    const input = verifyEmailSchema.parse(req.body);
+    const db = req.app.locals.db;
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
+    const supabaseAnon = createSupabaseAnon();
+
+    const { data, error } = await supabaseAnon.auth.verifyOtp({
+      token_hash: input.tokenHash,
+      type: input.type,
+    });
+
+    if (error || !data.user?.id) {
+      console.error('[auth] verify-email failed', {
+        type: input.type,
+        tokenLen: input.tokenHash.length,
+        err: formatAuthError(error),
+      });
+      throw new AppError(
+        400,
+        'Liên kết xác minh không hợp lệ hoặc đã hết hạn',
+        'INVALID_TOKEN',
+      );
+    }
+
+    await syncProfileStatusOnLogin(db, data.user.id, true);
+
+    // Thu hồi session ngay — link xác minh không được dùng như đăng nhập không mật khẩu.
+    if (data.session?.access_token) {
+      await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global').catch(() => undefined);
+    }
+    clearSessionCookies(res);
+
     res.json({
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token ?? '',
+      ok: true,
+      message: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.',
+      redirectTo: '/auth/login?verified=1',
     });
   }),
 );
@@ -516,19 +589,27 @@ authRouter.post(
   authLimiter,
   asyncHandler(async (req, res) => {
     const input = resetPasswordSchema.parse(req.body);
-    const accessToken = req.body.accessToken as string | undefined;
+    const accessToken = req.cookies?.[ACCESS_TOKEN_COOKIE] as string | undefined;
+    const refreshToken = (req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined) ?? '';
 
     if (!accessToken) {
-      throw new AppError(400, 'Token không hợp lệ', 'INVALID_TOKEN');
+      throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
     }
 
     const supabaseAnon = createSupabaseAnon();
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
+    const { data: userData, error: userError } = await supabaseAnon.auth.getUser(accessToken);
+    if (userError || !userData.user) {
+      clearSessionCookies(res);
+      throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
+    }
+
     const { error: sessionError } = await supabaseAnon.auth.setSession({
       access_token: accessToken,
-      refresh_token: req.body.refreshToken ?? '',
+      refresh_token: refreshToken,
     });
-
     if (sessionError) {
+      clearSessionCookies(res);
       throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
     }
 
@@ -537,7 +618,9 @@ authRouter.post(
       throw new AppError(400, 'Không đặt lại được mật khẩu', 'RESET_FAILED');
     }
 
-    await supabaseAnon.auth.signOut();
+    // Thu hồi mọi phiên cũ (kể cả thiết bị khác) sau khi đổi mật khẩu.
+    await supabaseAdmin.auth.admin.signOut(accessToken, 'global').catch(() => undefined);
+    await supabaseAnon.auth.signOut().catch(() => undefined);
     clearSessionCookies(res);
 
     res.json({
@@ -550,6 +633,7 @@ authRouter.post(
 authRouter.post(
   '/change-password',
   requireAuth,
+  changePasswordLimiter,
   asyncHandler(async (req, res) => {
     const input = changePasswordSchema.parse(req.body);
     const supabaseAdmin = req.app.locals.supabaseAdmin;
@@ -596,7 +680,7 @@ authRouter.post(
     const db = req.app.locals.db;
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const identifier = raw.includes('@') ? raw.toLowerCase() : normalizePhoneVN(raw) || raw;
-    const email = await resolveAuthEmail(db, identifier);
+    const email = await findRegisteredAuthEmail(db, identifier);
     if (email) {
       const frontendUrl = getFrontendUrl();
       const mail = await resendSignupConfirmation(
@@ -605,7 +689,7 @@ authRouter.post(
         `${frontendUrl}/auth/verify-email`,
       );
       if (!mail.ok) {
-        console.error('[auth] resend-verification failed', email, mail.error);
+        console.error('[auth] resend-verification failed', mail.error);
       }
     }
 

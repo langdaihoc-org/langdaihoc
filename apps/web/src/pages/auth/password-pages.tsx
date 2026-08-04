@@ -13,7 +13,6 @@ import { loadSupabase } from '@/lib/supabase';
 export function ForgotPasswordPage() {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
-  const [accountExists, setAccountExists] = useState<boolean | null>(null);
 
   const {
     register,
@@ -28,15 +27,13 @@ export function ForgotPasswordPage() {
     try {
       const result = await authApi.forgotPassword(data);
       setMessage(result.message);
-      setAccountExists(result.accountExists !== false);
-      toast(result.message, result.accountExists === false ? 'info' : 'success');
+      toast(result.message, 'success');
     } catch (err) {
       const fallback =
         err instanceof ApiError
           ? err.message
           : 'Không gửi được hướng dẫn. Vui lòng thử lại sau.';
       setMessage(fallback);
-      setAccountExists(null);
       toast(fallback, 'error');
     }
   });
@@ -47,11 +44,7 @@ export function ForgotPasswordPage() {
       subtitle="Nhập email hoặc SĐT — hướng dẫn đặt lại mật khẩu sẽ gửi qua email đăng ký"
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        {message && (
-          <Alert variant={accountExists === false ? 'warning' : accountExists ? 'success' : 'error'}>
-            {message}
-          </Alert>
-        )}
+        {message && <Alert variant="success">{message}</Alert>}
         <Input
           label="Email hoặc số điện thoại"
           type="text"
@@ -67,57 +60,8 @@ export function ForgotPasswordPage() {
   );
 }
 
-const RESET_SESSION_KEY = 'ldh_reset_session';
-const RESET_SESSION_TTL_MS = 15 * 60 * 1000;
 /** Dedup verify khi React StrictMode mount 2 lần (token chỉ dùng 1 lần). */
-const recoveryVerifyInflight = new Map<string, Promise<{ accessToken: string; refreshToken: string }>>();
-
-function readCachedResetSession(
-  tokenKey: string,
-): { accessToken: string; refreshToken: string } | null {
-  try {
-    const raw = sessionStorage.getItem(RESET_SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as {
-      accessToken?: string;
-      refreshToken?: string;
-      at?: number;
-      tokenKey?: string;
-    };
-    if (
-      !parsed.accessToken ||
-      !parsed.at ||
-      !parsed.tokenKey ||
-      parsed.tokenKey !== tokenKey ||
-      Date.now() - parsed.at > RESET_SESSION_TTL_MS
-    ) {
-      sessionStorage.removeItem(RESET_SESSION_KEY);
-      return null;
-    }
-    return { accessToken: parsed.accessToken, refreshToken: parsed.refreshToken ?? '' };
-  } catch {
-    return null;
-  }
-}
-
-function cacheResetSession(tokenKey: string, accessToken: string, refreshToken: string) {
-  try {
-    sessionStorage.setItem(
-      RESET_SESSION_KEY,
-      JSON.stringify({ tokenKey, accessToken, refreshToken, at: Date.now() }),
-    );
-  } catch {
-    /* ignore quota */
-  }
-}
-
-function clearCachedResetSession() {
-  try {
-    sessionStorage.removeItem(RESET_SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
-}
+const recoveryVerifyInflight = new Map<string, Promise<boolean>>();
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -125,7 +69,7 @@ export function ResetPasswordPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [booting, setBooting] = useState(true);
-  const [tokens, setTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,29 +79,6 @@ export function ResetPasswordPage() {
       const queryParams = new URLSearchParams(window.location.search);
       const tokenHash = queryParams.get('token_hash');
       const code = queryParams.get('code');
-      const tokenKey = tokenHash
-        ? `hash:${tokenHash}`
-        : code
-          ? `code:${code}`
-          : hashParams.get('access_token')
-            ? `access:${hashParams.get('access_token')}`
-            : '';
-
-      if (tokenKey) {
-        const cached = readCachedResetSession(tokenKey);
-        if (cached) {
-          if (!cancelled) {
-            setTokens(cached);
-            setBooting(false);
-          }
-          window.history.replaceState(
-            null,
-            '',
-            window.location.pathname.replace(/\/auth\/reset_password$/i, '/auth/reset-password'),
-          );
-          return;
-        }
-      }
 
       const authError =
         hashParams.get('error_description') ||
@@ -174,40 +95,23 @@ export function ResetPasswordPage() {
         return;
       }
 
-      let accessToken = hashParams.get('access_token') ?? '';
-      let refreshToken = hashParams.get('refresh_token') ?? '';
+      let ok = false;
 
-      // Link Resend: ?token_hash=&type=recovery — verify qua API (không phụ thuộc VITE_SUPABASE_*).
-      const rawType = queryParams.get('type') ?? 'recovery';
-      const otpType =
-        rawType === 'recovery' ||
-        rawType === 'magiclink' ||
-        rawType === 'signup' ||
-        rawType === 'email'
-          ? rawType
-          : 'recovery';
-      if (!accessToken && tokenHash) {
-        const cacheKey = `${otpType}:${tokenHash}`;
+      // Link Resend: ?token_hash=&type=recovery — verify qua API, session nằm httpOnly cookie.
+      if (tokenHash) {
+        const cacheKey = `recovery:${tokenHash}`;
         let pending = recoveryVerifyInflight.get(cacheKey);
         if (!pending) {
           pending = authApi
-            .verifyRecovery({
-              tokenHash,
-              type: otpType,
-            })
-            .then((result) => ({
-              accessToken: result.accessToken,
-              refreshToken: result.refreshToken,
-            }))
+            .verifyRecovery({ tokenHash, type: 'recovery' })
+            .then(() => true)
             .finally(() => {
               recoveryVerifyInflight.delete(cacheKey);
             });
           recoveryVerifyInflight.set(cacheKey, pending);
         }
         try {
-          const result = await pending;
-          accessToken = result.accessToken;
-          refreshToken = result.refreshToken;
+          ok = await pending;
         } catch (err) {
           console.error(
             '[reset-password] verify-recovery failed',
@@ -216,35 +120,27 @@ export function ResetPasswordPage() {
         }
       }
 
-      // Fallback cũ: PKCE ?code= (lazy-load client Supabase browser).
-      if (!accessToken && code) {
+      // Fallback cũ: PKCE ?code= — chỉ dùng khi chưa có token_hash.
+      if (!ok && code) {
         const supabase = await loadSupabase();
         if (supabase) {
           const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (!exchangeErr && data.session) {
-            accessToken = data.session.access_token;
-            refreshToken = data.session.refresh_token;
-          }
+          ok = !exchangeErr && Boolean(data.session);
         }
       }
 
-      if (accessToken && tokenKey) {
-        cacheResetSession(tokenKey, accessToken, refreshToken);
-      }
-
       if (window.location.hash || window.location.search) {
-        // Chuẩn hóa underscore → hyphen khi xóa query khỏi URL.
         const path = window.location.pathname.replace(/\/auth\/reset_password$/i, '/auth/reset-password');
         window.history.replaceState(null, '', path);
       }
 
       if (cancelled) return;
-      if (!accessToken) {
+      if (!ok) {
         setError('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.');
         setBooting(false);
         return;
       }
-      setTokens({ accessToken, refreshToken });
+      setReady(true);
       setBooting(false);
     }
 
@@ -264,15 +160,10 @@ export function ResetPasswordPage() {
   });
 
   const onSubmit = handleSubmit(async (data) => {
-    if (!tokens?.accessToken) return;
+    if (!ready) return;
     setError('');
     try {
-      const result = await authApi.resetPassword({
-        ...data,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      });
-      clearCachedResetSession();
+      const result = await authApi.resetPassword(data);
       setMessage(result.message);
       toast(result.message, 'success');
       navigate('/auth/login?reset=1', {
@@ -292,7 +183,7 @@ export function ResetPasswordPage() {
     );
   }
 
-  if (!tokens?.accessToken) {
+  if (!ready) {
     return (
       <AuthLayout title="Đặt lại mật khẩu">
         <Alert variant="error">{error || 'Liên kết đặt lại mật khẩu không hợp lệ.'}</Alert>
@@ -320,13 +211,8 @@ export function ResetPasswordPage() {
           error={errors.confirmPassword?.message as string | undefined}
           {...register('confirmPassword')}
         />
-        <SubmitRow loading={isSubmitting} label="Lưu mật khẩu mới" />
+        <SubmitRow loading={isSubmitting} label="Đặt lại mật khẩu" />
       </form>
-      {message && (
-        <Link to="/auth/login" className="mt-4 block text-center text-sm font-semibold text-brand-orange-dark">
-          Đăng nhập lại
-        </Link>
-      )}
     </AuthLayout>
   );
 }

@@ -106,22 +106,18 @@ async function main() {
   const keys = await sql`delete from checkout_idempotency_keys returning id`.catch(() => []);
   console.log(`Cleared posts=${posts.length} banners=${banners.length} idempotency=${keys.length ?? 0}`);
 
-  // Auth: xóa mọi user trừ admin
-  let page = 1;
+  // Auth: luôn lấy page 1 — xóa làm list dịch lên, page++ sẽ bỏ sót.
   let authDeleted = 0;
   for (;;) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
     if (error) throw error;
-    const users = data?.users ?? [];
+    const users = (data?.users ?? []).filter((u) => (u.email || '').toLowerCase() !== KEEP_EMAIL);
     if (!users.length) break;
     for (const u of users) {
-      if ((u.email || '').toLowerCase() === KEEP_EMAIL) continue;
       const { error: delErr } = await supabase.auth.admin.deleteUser(u.id);
       if (delErr) console.warn(`auth delete ${u.email}: ${delErr.message}`);
       else authDeleted += 1;
     }
-    if (users.length < 100) break;
-    page += 1;
   }
   console.log(`Deleted ${authDeleted} auth users`);
 

@@ -1,7 +1,6 @@
 /**
  * Chặn script phá dữ liệu khi trỏ nhầm DB/API cloud.
- * Override production: ALLOW_DESTRUCTIVE=1 + CONFIRM_DESTRUCTIVE=I_UNDERSTAND
- * Override non-local DB/API (dev): ALLOW_DESTRUCTIVE=1
+ * Override (mọi môi trường, kể cả non-prod remote): ALLOW_DESTRUCTIVE=1 + CONFIRM_DESTRUCTIVE=I_UNDERSTAND
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -29,30 +28,39 @@ function isLocalHost(value) {
   }
 }
 
+function looksLikeLiveTarget() {
+  const db = process.env.DATABASE_URL ?? '';
+  const api = process.env.API_URL ?? '';
+  const supabase = process.env.SUPABASE_URL ?? '';
+  const frontend = (process.env.FRONTEND_URL ?? '').toLowerCase();
+  if (process.env.RAILWAY_ENVIRONMENT === 'production') return true;
+  if (process.env.NODE_ENV === 'production') return true;
+  if (/railway|supabase\.co|langdaihoc\.xyz|vercel\.app/.test(`${db} ${api} ${supabase} ${frontend}`)) {
+    return true;
+  }
+  if ((db && !isLocalHost(db)) || (api && !isLocalHost(api)) || (supabase && !isLocalHost(supabase))) {
+    return true;
+  }
+  return false;
+}
+
 export function assertLocalDestructive(label = 'script') {
   const allow = process.env.ALLOW_DESTRUCTIVE === '1';
   const confirmed = process.env.CONFIRM_DESTRUCTIVE === 'I_UNDERSTAND';
 
-  if (process.env.NODE_ENV === 'production') {
+  if (looksLikeLiveTarget()) {
     if (!(allow && confirmed)) {
       console.error(
-        `[${label}] Từ chối: NODE_ENV=production. Cần ALLOW_DESTRUCTIVE=1 và CONFIRM_DESTRUCTIVE=I_UNDERSTAND`,
+        `[${label}] Từ chối: đang trỏ môi trường live/remote. Cần ALLOW_DESTRUCTIVE=1 và CONFIRM_DESTRUCTIVE=I_UNDERSTAND`,
       );
       process.exit(1);
     }
     return;
   }
 
-  if (allow) return;
-
-  const db = process.env.DATABASE_URL ?? '';
-  const api = process.env.API_URL ?? process.env.SUPABASE_URL ?? '';
-  if (db && !isLocalHost(db)) {
-    console.error(`[${label}] Từ chối: DATABASE_URL không phải localhost. Override: ALLOW_DESTRUCTIVE=1`);
-    process.exit(1);
-  }
-  if (api && !/localhost|127\.0\.0\.1/.test(api)) {
-    console.error(`[${label}] Từ chối: API/Supabase không phải local. Override: ALLOW_DESTRUCTIVE=1`);
+  // Local thuần: vẫn cần ALLOW_DESTRUCTIVE để tránh chạy nhầm.
+  if (!allow) {
+    console.error(`[${label}] Từ chối: set ALLOW_DESTRUCTIVE=1 để chạy script phá dữ liệu (local).`);
     process.exit(1);
   }
 }

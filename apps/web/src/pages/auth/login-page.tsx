@@ -240,33 +240,69 @@ export function VerifyEmailPage() {
   const [status, setStatus] = useState<'ok' | 'error' | 'pending'>('pending');
 
   useEffect(() => {
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const queryParams = new URLSearchParams(window.location.search);
-    const error =
-      hashParams.get('error_description') ||
-      hashParams.get('error') ||
-      queryParams.get('error_description') ||
-      queryParams.get('error');
+    let cancelled = false;
+    let timer: number | undefined;
 
-    if (window.location.hash || queryParams.has('error')) {
-      window.history.replaceState(null, '', window.location.pathname);
+    async function boot() {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const queryParams = new URLSearchParams(window.location.search);
+      const error =
+        hashParams.get('error_description') ||
+        hashParams.get('error') ||
+        queryParams.get('error_description') ||
+        queryParams.get('error');
+      const tokenHash = queryParams.get('token_hash');
+      const rawType = queryParams.get('type') ?? 'signup';
+      const otpType =
+        rawType === 'signup' || rawType === 'email' || rawType === 'magiclink' ? rawType : 'signup';
+
+      if (window.location.hash || window.location.search) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (error) {
+        if (!cancelled) {
+          setStatus('error');
+          toast('Liên kết xác minh không hợp lệ hoặc đã hết hạn', 'error');
+        }
+        return;
+      }
+
+      if (tokenHash) {
+        try {
+          await authApi.verifyEmail({ tokenHash, type: otpType });
+        } catch {
+          if (!cancelled) {
+            setStatus('error');
+            toast('Liên kết xác minh không hợp lệ hoặc đã hết hạn', 'error');
+          }
+          return;
+        }
+      } else if (!hashParams.get('access_token') && !queryParams.get('code')) {
+        // Không có token — không báo thành công giả.
+        if (!cancelled) {
+          setStatus('error');
+          toast('Thiếu liên kết xác minh. Hãy mở đúng link trong email.', 'error');
+        }
+        return;
+      }
+
+      if (cancelled) return;
+      setStatus('ok');
+      toast('Xác thực email thành công', 'success');
+      timer = window.setTimeout(() => {
+        navigate('/auth/login?verified=1', {
+          replace: true,
+          state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
+        });
+      }, 1600);
     }
 
-    if (error) {
-      setStatus('error');
-      toast('Liên kết xác minh không hợp lệ hoặc đã hết hạn', 'error');
-      return;
-    }
-
-    setStatus('ok');
-    toast('Xác thực email thành công', 'success');
-    const t = window.setTimeout(() => {
-      navigate('/auth/login?verified=1', {
-        replace: true,
-        state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
-      });
-    }, 1600);
-    return () => window.clearTimeout(t);
+    void boot();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [navigate, toast]);
 
   if (status === 'error') {
@@ -290,25 +326,30 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <AuthLayout title="Xác minh email" subtitle="Thành công">
-      <Alert variant="success">
-        <span className="font-semibold">Xác thực thành công.</span>
-        {' '}
-        Email của bạn đã được xác minh. Đang chuyển tới trang đăng nhập…
+    <AuthLayout
+      title="Xác minh email"
+      subtitle={status === 'pending' ? 'Đang xác minh…' : 'Thành công'}
+    >
+      <Alert variant={status === 'pending' ? 'info' : 'success'}>
+        {status === 'pending'
+          ? 'Vui lòng chờ trong giây lát.'
+          : 'Email của bạn đã được xác minh. Đang chuyển tới trang đăng nhập…'}
       </Alert>
-      <div className="mt-6">
-        <Button
-          className="w-full"
-          onClick={() =>
-            navigate('/auth/login?verified=1', {
-              replace: true,
-              state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
-            })
-          }
-        >
-          Đăng nhập ngay
-        </Button>
-      </div>
+      {status === 'ok' && (
+        <div className="mt-6">
+          <Button
+            className="w-full"
+            onClick={() =>
+              navigate('/auth/login?verified=1', {
+                replace: true,
+                state: { authNotice: 'Email đã được xác minh. Vui lòng đăng nhập để tiếp tục.' },
+              })
+            }
+          >
+            Đăng nhập ngay
+          </Button>
+        </div>
+      )}
     </AuthLayout>
   );
 }

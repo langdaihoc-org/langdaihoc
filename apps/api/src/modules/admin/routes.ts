@@ -23,6 +23,7 @@ import { writeAudit } from '../../lib/audit.js';
 import { enrichOrdersList } from '../../services/commerce.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { createSupabaseAdmin } from '../../lib/supabase.js';
+import { passwordSchema, normalizePhoneVN } from '@langdaihoc/shared';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
 
 function slugify(name: string) {
@@ -341,8 +342,13 @@ adminRouter.post(
       .object({
         fullName: z.string().trim().min(2).max(100),
         email: z.string().email().toLowerCase(),
-        phone: z.string().trim().min(9).max(15),
-        password: z.string().min(8),
+        phone: z
+          .string()
+          .trim()
+          .min(9)
+          .max(15)
+          .transform((v) => normalizePhoneVN(v) || v),
+        password: passwordSchema,
         shopName: z.string().trim().min(2).max(120),
         businessAddress: z.string().trim().min(3).max(300).optional(),
         description: z.string().trim().max(1000).optional(),
