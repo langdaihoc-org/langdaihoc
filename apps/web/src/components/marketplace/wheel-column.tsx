@@ -48,7 +48,7 @@ export function WheelColumn({ items, value, onChange, className, ariaLabel }: Wh
   return (
     <div className={cn('relative h-[200px] flex-1', className)}>
       <div aria-hidden className="pointer-events-none absolute inset-x-1 top-1/2 z-10 h-10 -translate-y-1/2 rounded-xl bg-black/5" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-b from-white via-transparent to-white" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-grad-fade-y" />
       <div
         ref={ref}
         role="listbox"

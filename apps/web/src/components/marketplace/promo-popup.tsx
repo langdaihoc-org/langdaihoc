@@ -104,7 +104,7 @@ export function PromoPopup({ banners }: { banners?: Banner[] | null }) {
             <X className="size-5" />
           </button>
 
-          <div className="relative flex h-52 items-end bg-gradient-to-br from-brand-orange to-brand-orange-dark p-5 text-white">
+          <div className="relative flex h-52 items-end bg-grad-food p-5 text-white">
             {imageUrl && (
               <img
                 src={imageUrl}

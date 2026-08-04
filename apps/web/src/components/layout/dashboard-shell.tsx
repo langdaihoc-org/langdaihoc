@@ -35,8 +35,8 @@ export function DashboardShell({
   const [moreOpen, setMoreOpen] = useState(false);
   const activeCls =
     accent === 'green'
-      ? 'bg-gradient-to-br from-brand-green to-brand-green-light text-white shadow-[0_8px_20px_rgba(14,116,144,0.25)]'
-      : 'bg-gradient-to-br from-brand-orange-dark to-brand-orange text-white shadow-[0_8px_20px_rgba(46,183,229,0.28)]';
+      ? 'bg-grad-seller text-white shadow-[0_8px_20px_rgba(14,116,144,0.25)]'
+      : 'bg-grad-admin text-white shadow-[0_8px_20px_rgba(46,183,229,0.28)]';
 
   const mobileAccent = accent === 'green' ? 'text-brand-green' : 'text-brand-orange';
   const morePaths = new Set((mobileMore ?? []).map((l) => l.to));

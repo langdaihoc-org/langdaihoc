@@ -35,9 +35,9 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
               fetchPriority="high"
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-brand-orange to-brand-orange-dark" />
+            <div className="absolute inset-0 bg-grad-food" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+          <div className="absolute inset-0 bg-grad-scrim" />
           <div className="relative z-10 p-5 text-white">
             <p className="text-lg font-bold drop-shadow sm:text-xl">{current.title}</p>
             {current.subtitle && (

@@ -11,7 +11,7 @@ export function InstallAppBanner() {
   if (mode === 'android') {
     return (
       <aside
-        className="mb-4 overflow-hidden rounded-2xl border border-[var(--color-line)] bg-gradient-to-br from-[#0b3a6b] to-[#0e7490] text-white shadow-[var(--shadow-card)]"
+        className="mb-4 overflow-hidden rounded-2xl border border-[var(--color-line)] bg-grad-navy text-white shadow-[var(--shadow-card)]"
         role="region"
         aria-label="Cài đặt ứng dụng"
       >

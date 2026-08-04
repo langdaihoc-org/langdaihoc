@@ -30,7 +30,8 @@ body {
   background-image:
     radial-gradient(ellipse 80% 50% at 100% -20%, rgba(46, 183, 229, 0.16), transparent),
     radial-gradient(ellipse 60% 40% at 0% 100%, rgba(11, 58, 107, 0.08), transparent);
-  background-attachment: fixed;
+  /* fixed gãy trên iOS Safari — dùng scroll */
+  background-attachment: scroll;
 }
 
 :focus-visible {
@@ -75,4 +76,36 @@ body {
 
 .badge-green {
   @apply inline-flex items-center rounded-full bg-cyan-50 px-2.5 py-0.5 text-xs font-medium text-brand-green;
+}
+
+/**
+ * Gradients Safari-safe — Tailwind v4 `bg-gradient-to-*` dùng `in oklab`,
+ * iOS Safari bỏ cả background-image → chữ trắng trên nền trong suốt.
+ */
+.bg-grad-food {
+  background-image: linear-gradient(to bottom right, var(--color-brand-orange), var(--color-brand-orange-dark));
+}
+.bg-grad-laundry {
+  background-image: linear-gradient(to bottom right, var(--color-brand-green-light), var(--color-brand-green));
+}
+.bg-grad-ship {
+  background-image: linear-gradient(to bottom right, #5cc8ef, #0b3a6b);
+}
+.bg-grad-navy {
+  background-image: linear-gradient(to bottom right, #0b3a6b, #0e7490);
+}
+.bg-grad-seller {
+  background-image: linear-gradient(to bottom right, var(--color-brand-green), var(--color-brand-green-light));
+}
+.bg-grad-admin {
+  background-image: linear-gradient(to bottom right, var(--color-brand-orange-dark), var(--color-brand-orange));
+}
+.bg-grad-hero {
+  background-image: linear-gradient(to bottom right, #f0f9ff, #ffffff 45%, #eff6ff);
+}
+.bg-grad-scrim {
+  background-image: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.1), transparent);
+}
+.bg-grad-fade-y {
+  background-image: linear-gradient(to bottom, #ffffff, transparent, #ffffff);
 }

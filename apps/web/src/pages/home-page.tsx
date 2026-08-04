@@ -92,7 +92,7 @@ export function HomePage() {
       {/* Quick actions */}
       <section className="grid gap-4 md:grid-cols-3">
         <Link to="/food" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-orange to-brand-orange-dark p-6 text-white shadow-md shadow-sky-500/25">
+          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-food p-6 text-white shadow-md shadow-sky-500/25">
             <div className="relative z-10 flex flex-col gap-2 text-left">
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
                 <UtensilsCrossed className="size-3.5" /> Ăn uống
@@ -109,7 +109,7 @@ export function HomePage() {
         </Link>
 
         <Link to="/laundry" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-green-light to-brand-green p-6 text-white shadow-md shadow-cyan-500/20">
+          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-laundry p-6 text-white shadow-md shadow-cyan-500/20">
             <div className="relative z-10 flex flex-col gap-2 text-left">
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
                 <WashingMachine className="size-3.5" /> Giặt đồ
@@ -126,7 +126,7 @@ export function HomePage() {
         </Link>
 
         <Link to="/ship" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-gradient-to-br from-[#5cc8ef] to-[#0b3a6b] p-6 text-white shadow-md shadow-blue-500/25">
+          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-ship p-6 text-white shadow-md shadow-blue-500/25">
             <div className="relative z-10 flex flex-col gap-2 text-left">
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
                 <Bike className="size-3.5" /> Nhận đồ ship hộ

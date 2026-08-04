@@ -7,7 +7,7 @@ export function HomeHeroSearch() {
   const navigate = useNavigate();
 
   return (
-    <section className="panel overflow-hidden bg-gradient-to-br from-sky-50 via-white to-blue-50/60 p-5 sm:p-6">
+    <section className="panel bg-grad-hero overflow-hidden p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <BrandLogo showSlogan />
