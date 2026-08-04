@@ -20,9 +20,9 @@ export function InstallAppBanner() {
             <Download className="size-5" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold leading-snug">Cài langdaihoc lên điện thoại</p>
+            <p className="font-semibold leading-snug">Cài đặt langdaihoc</p>
             <p className="mt-0.5 text-sm text-white/80">
-              Mở nhanh hơn, như app thật — không cần App Store.
+              Thêm vào màn hình chính để truy cập nhanh và mượt mà hơn
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
