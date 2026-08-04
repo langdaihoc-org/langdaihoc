@@ -272,7 +272,7 @@ const MOB_NAV = [
   { to: '/explore', label: 'Khám phá', icon: Compass },
   { to: '/food', label: 'Ăn uống', icon: UtensilsCrossed },
   { to: '/laundry', label: 'Giặt', icon: WashingMachine },
-  { to: '/ship', label: 'Ship hộ', icon: Bike },
+  { to: '/ship', label: 'Nhận ship', icon: Bike },
   { to: '/orders', label: 'Đơn', icon: ClipboardList },
 ];
 

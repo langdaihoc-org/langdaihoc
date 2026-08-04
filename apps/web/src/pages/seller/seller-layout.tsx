@@ -16,7 +16,6 @@ const SELLER_LINKS_BASE: DashboardLink[] = [
 ];
 
 const SELLER_MOBILE_MORE_BASE: DashboardLink[] = [
-  { to: '/seller/posts', label: 'Bài đăng', Icon: Newspaper },
   { to: '/seller/bank', label: 'Ngân hàng', Icon: CreditCard },
   { to: '/seller/reviews', label: 'Đánh giá', Icon: Star },
   { to: '/seller/complaints', label: 'Khiếu nại', Icon: AlertTriangle },
@@ -50,6 +49,7 @@ function buildSellerNav(
         ].map((l) => (l.to === '/seller/orders' ? { ...l, ...ordersLink } : l));
       })();
 
+  const postsLink: DashboardLink = { to: '/seller/posts', label: 'Bài đăng', Icon: Newspaper };
   const mobilePrimary = isShip
     ? [
         { to: '/seller', label: 'Tổng quan', Icon: LayoutDashboard },
@@ -60,6 +60,7 @@ function buildSellerNav(
           badge: openOrderCount > 0 ? openOrderCount : undefined,
           emphasize: openOrderCount > 0,
         },
+        postsLink,
         { to: '/seller/profile', label: 'Hồ sơ', Icon: Store },
       ]
     : [
@@ -72,6 +73,7 @@ function buildSellerNav(
           badge: openOrderCount > 0 ? openOrderCount : undefined,
           emphasize: openOrderCount > 0,
         },
+        postsLink,
       ];
 
   return { links, mobilePrimary, mobileMore: SELLER_MOBILE_MORE_BASE };
