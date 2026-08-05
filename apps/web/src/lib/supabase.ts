@@ -18,6 +18,8 @@ const url = isHttpUrl(rawUrl) ? rawUrl : undefined;
 let clientPromise: Promise<SupabaseClient | null> | null = null;
 let oauthClientPromise: Promise<SupabaseClient | null> | null = null;
 
+const OAUTH_STORAGE_KEY = 'ldh-oauth-auth';
+
 /**
  * Lazy-load Supabase browser client (Realtime).
  * Phiên app gắn cookie qua API — không persist Auth session.
@@ -59,6 +61,7 @@ export function loadSupabaseOAuth(): Promise<SupabaseClient | null> {
         auth: {
           persistSession: true,
           storage: window.sessionStorage,
+          storageKey: OAUTH_STORAGE_KEY,
           autoRefreshToken: false,
           detectSessionInUrl: false,
           flowType: 'pkce',
@@ -67,6 +70,19 @@ export function loadSupabaseOAuth(): Promise<SupabaseClient | null> {
     })();
   }
   return oauthClientPromise;
+}
+
+/**
+ * Xóa session OAuth khỏi sessionStorage.
+ * Không dùng supabase.auth.signOut() — nó gọi /logout và thu hồi session trên
+ * Supabase, làm access token vừa gắn vào cookie API trở nên vô hiệu.
+ */
+export function clearOAuthStorage() {
+  try {
+    window.sessionStorage.removeItem(OAUTH_STORAGE_KEY);
+  } catch {
+    // sessionStorage bị chặn — bỏ qua
+  }
 }
 
 /** @deprecated Dùng loadSupabase() — giữ alias để tránh import sync nặng. */

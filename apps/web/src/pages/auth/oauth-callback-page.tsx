@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { Alert } from '@/components/ui/card';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authApi, ApiError } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
-import { loadSupabaseOAuth } from '@/lib/supabase';
+import { clearOAuthStorage, loadSupabaseOAuth } from '@/lib/supabase';
 import { OAUTH_NEXT_KEY, OAUTH_REMEMBER_KEY } from '@/lib/google-oauth';
 
 function friendlyOAuthError(raw: string) {
@@ -22,11 +22,18 @@ export function OAuthCallbackPage() {
   const { toast } = useToast();
   const { refetch, setSessionUser } = useAuth();
   const [error, setError] = useState('');
+  const startedRef = useRef(false);
+  const handlersRef = useRef({ navigate, toast, refetch, setSessionUser });
+  handlersRef.current = { navigate, toast, refetch, setSessionUser };
 
   useEffect(() => {
-    let cancelled = false;
+    // Chỉ đổi code một lần: URL bị dọn ngay sau khi đọc, lần chạy sau sẽ báo "thiếu mã".
+    if (startedRef.current) return;
+    startedRef.current = true;
 
     async function finish() {
+      const { navigate, toast, refetch, setSessionUser } = handlersRef.current;
+
       const params = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const code = params.get('code') ?? hashParams.get('code');
@@ -41,29 +48,24 @@ export function OAuthCallbackPage() {
       }
 
       if (oauthError) {
-        if (!cancelled) setError(friendlyOAuthError(oauthError));
+        setError(friendlyOAuthError(oauthError));
         return;
       }
       if (!code) {
-        if (!cancelled) {
-          setError('Thiếu mã xác thực Google. Hãy thử đăng nhập lại trên cùng trình duyệt.');
-        }
+        setError('Thiếu mã xác thực Google. Hãy thử đăng nhập lại trên cùng trình duyệt.');
         return;
       }
 
       const supabase = await loadSupabaseOAuth();
       if (!supabase) {
-        if (!cancelled) {
-          setError('Thiếu cấu hình Supabase trên web (VITE_SUPABASE_URL / ANON_KEY).');
-        }
+        setError('Thiếu cấu hình Supabase trên web (VITE_SUPABASE_URL / ANON_KEY).');
         return;
       }
 
       const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeErr || !data.session?.access_token || !data.session.refresh_token) {
-        if (!cancelled) {
-          setError(friendlyOAuthError(exchangeErr?.message || 'Không xác thực được với Google.'));
-        }
+        clearOAuthStorage();
+        setError(friendlyOAuthError(exchangeErr?.message || 'Không xác thực được với Google.'));
         return;
       }
 
@@ -78,9 +80,8 @@ export function OAuthCallbackPage() {
           refreshToken: data.session.refresh_token,
           rememberMe,
         });
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        clearOAuthStorage();
 
-        if (cancelled) return;
         if (result.user) setSessionUser(result.user);
         await refetch();
         toast('Đăng nhập Google thành công', 'success');
@@ -95,18 +96,13 @@ export function OAuthCallbackPage() {
               : '/';
         navigate(dest, { replace: true });
       } catch (err) {
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Đăng nhập Google thất bại');
-        }
+        clearOAuthStorage();
+        setError(err instanceof ApiError ? err.message : 'Đăng nhập Google thất bại');
       }
     }
 
     void finish();
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate, refetch, setSessionUser, toast]);
+  }, []);
 
   if (error) {
     return (
