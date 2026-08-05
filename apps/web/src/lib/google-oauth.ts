@@ -1,4 +1,4 @@
-import { loadSupabase } from '@/lib/supabase';
+import { loadSupabaseOAuth } from '@/lib/supabase';
 
 const OAUTH_REMEMBER_KEY = 'ldh_oauth_remember';
 const OAUTH_NEXT_KEY = 'ldh_oauth_next';
@@ -6,7 +6,7 @@ const OAUTH_NEXT_KEY = 'ldh_oauth_next';
 export { OAUTH_REMEMBER_KEY, OAUTH_NEXT_KEY };
 
 export async function startGoogleLogin(opts?: { rememberMe?: boolean; next?: string | null }) {
-  const supabase = await loadSupabase();
+  const supabase = await loadSupabaseOAuth();
   if (!supabase) {
     throw new Error('Thiếu VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — không mở được Google.');
   }
