@@ -354,6 +354,16 @@ export function PrivacyPage() {
               {SITE_URL}
             </a>
           </p>
+          <p>
+            Xem thêm:{' '}
+            <Link
+              to="/terms"
+              className="font-medium text-brand-orange-dark underline-offset-2 hover:underline"
+            >
+              Điều khoản sử dụng
+            </Link>
+            .
+          </p>
         </Section>
 
         <div className="border-t border-[var(--color-line)] pt-4 text-sm">

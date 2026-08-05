@@ -87,7 +87,12 @@ export function SellerRegisterPage() {
 
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" {...register('agreeTerms')} className="mt-1 rounded" />
-          <span>Tôi đồng ý điều khoản sử dụng</span>
+          <span>
+            Tôi đồng ý{' '}
+            <Link to="/terms" target="_blank" className="font-semibold text-brand-orange-dark underline-offset-2 hover:underline">
+              điều khoản sử dụng
+            </Link>
+          </span>
         </label>
         {errors.agreeTerms && <p className="text-xs text-red-500">{errors.agreeTerms.message}</p>}
         <label className="flex items-start gap-2 text-sm">

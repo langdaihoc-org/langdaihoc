@@ -24,6 +24,9 @@ export function BuyerFooter() {
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-semibold">Hỗ trợ</h4>
           <p className="text-sm text-[var(--color-muted)]">Khu Làng Đại Học, Thủ Đức</p>
+          <Link to="/terms" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]">
+            Điều khoản sử dụng
+          </Link>
           <Link to="/privacy" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]">
             Chính sách bảo mật
           </Link>
@@ -51,8 +54,12 @@ export function BuyerFooter() {
       </div>
       <div className="border-t border-[var(--color-line)] py-4 text-center text-xs text-[var(--color-muted)]">
         © {new Date().getFullYear()} langdaihoc ·{' '}
+        <Link to="/terms" className="underline-offset-2 hover:underline">
+          Điều khoản
+        </Link>
+        {' · '}
         <Link to="/privacy" className="underline-offset-2 hover:underline">
-          Chính sách bảo mật
+          Bảo mật
         </Link>
         {' · '}
         <a href={SITE_URL} className="underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
