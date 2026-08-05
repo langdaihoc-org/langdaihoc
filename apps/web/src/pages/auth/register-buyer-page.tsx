@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { buyerRegisterSchema, type BuyerRegisterInput } from '@langdaihoc/shared';
@@ -87,7 +87,12 @@ export function BuyerRegisterPage() {
 
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" {...register('agreePrivacy')} className="mt-1 rounded" />
-          <span>Tôi đồng ý chính sách bảo mật</span>
+          <span>
+            Tôi đồng ý{' '}
+            <Link to="/privacy" target="_blank" className="font-semibold text-brand-orange-dark underline-offset-2 hover:underline">
+              chính sách bảo mật
+            </Link>
+          </span>
         </label>
         {errors.agreePrivacy && (
           <p className="text-xs text-red-500">{errors.agreePrivacy.message}</p>

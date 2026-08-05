@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { sellerRegisterSchema, type SellerRegisterInput } from '@langdaihoc/shared';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthLayout, AuthFooterLinks, SubmitRow } from '@/components/layout/auth-layout';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/card';
@@ -92,7 +92,12 @@ export function SellerRegisterPage() {
         {errors.agreeTerms && <p className="text-xs text-red-500">{errors.agreeTerms.message}</p>}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" {...register('agreePrivacy')} className="mt-1 rounded" />
-          <span>Tôi đồng ý chính sách bảo mật</span>
+          <span>
+            Tôi đồng ý{' '}
+            <Link to="/privacy" target="_blank" className="font-semibold text-brand-orange-dark underline-offset-2 hover:underline">
+              chính sách bảo mật
+            </Link>
+          </span>
         </label>
         {errors.agreePrivacy && (
           <p className="text-xs text-red-500">{errors.agreePrivacy.message}</p>

@@ -26,6 +26,7 @@ function lazyNamed<T extends Record<string, ComponentType>>(
 }
 
 const ProfilePage = lazyNamed(() => import('@/pages/profile-page'), 'ProfilePage');
+const PrivacyPage = lazyNamed(() => import('@/pages/privacy-page'), 'PrivacyPage');
 
 const LoginPage = lazyNamed(() => import('@/pages/auth/login-page'), 'LoginPage');
 const CheckEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'CheckEmailPage');
@@ -117,6 +118,7 @@ export function App() {
                     <Route path="orders" element={<ProtectedRoute roles={['buyer']}><OrdersPage /></ProtectedRoute>} />
                     <Route path="orders/:id" element={<ProtectedRoute roles={['buyer']}><OrderDetailPage /></ProtectedRoute>} />
                     <Route path="profile" element={<ProtectedRoute roles={['buyer']}><ProfilePage /></ProtectedRoute>} />
+                    <Route path="privacy" element={<PrivacyPage />} />
                   </Route>
 
                   <Route path="auth/login" element={<GuestOnlyRoute><LoginPage /></GuestOnlyRoute>} />
