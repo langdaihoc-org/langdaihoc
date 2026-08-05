@@ -370,6 +370,23 @@ export async function ensureUserRole(db: Database, userId: string, role: UserRol
 }
 
 /**
+ * Tài khoản chỉ đăng nhập bằng Google chưa có mật khẩu — Supabase chỉ tạo
+ * identity 'email' khi đăng ký bằng email/mật khẩu.
+ */
+export function authUserHasPassword(authUser: {
+  identities?: { provider: string }[] | null;
+  app_metadata?: { providers?: unknown; provider?: unknown } | null;
+}): boolean {
+  const identities = authUser.identities;
+  if (identities?.length) {
+    return identities.some((i) => i.provider === 'email');
+  }
+  const providers = authUser.app_metadata?.providers;
+  if (Array.isArray(providers)) return providers.includes('email');
+  return authUser.app_metadata?.provider === 'email';
+}
+
+/**
  * Google OAuth: có profile thì dùng; chưa có thì tạo buyer active (email Google đã xác minh).
  * Seller/admin đăng nhập Google nếu đã có hồ sơ — không tự tạo seller.
  */

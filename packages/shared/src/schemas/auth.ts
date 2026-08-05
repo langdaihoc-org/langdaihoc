@@ -166,6 +166,17 @@ export const oauthSessionSchema = z.object({
   rememberMe: z.boolean().optional().default(false),
 });
 
+/** Tạo mật khẩu lần đầu cho tài khoản đăng nhập bằng Google (chưa có mật khẩu). */
+export const setPasswordSchema = z
+  .object({
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Xác nhận mật khẩu không khớp',
+    path: ['confirmPassword'],
+  });
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Nhập mật khẩu hiện tại'),
@@ -199,5 +210,6 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type VerifyRecoveryInput = z.infer<typeof verifyRecoverySchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type OAuthSessionInput = z.infer<typeof oauthSessionSchema>;
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

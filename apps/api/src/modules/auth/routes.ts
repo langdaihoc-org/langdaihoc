@@ -11,6 +11,7 @@ import {
   verifyRecoverySchema,
   verifyEmailSchema,
   oauthSessionSchema,
+  setPasswordSchema,
   changePasswordSchema,
   profileUpdateSchema,
   normalizePhoneVN,
@@ -41,6 +42,7 @@ import {
   getSellerByUserId,
   ensureUserRole,
   ensureProfileForOAuthUser,
+  authUserHasPassword,
   roleHomePath,
   createAuthUserForRegister,
   sendSignupVerificationEmail,
@@ -107,6 +109,7 @@ async function buildAuthUserPayload(
     avatarUrl?: string | null;
   },
   emailVerified: boolean,
+  hasPassword: boolean,
 ) {
   const role = profile.role as UserRole;
   const seller = role === 'seller' ? await getSellerByUserId(db, profile.id) : null;
@@ -121,6 +124,7 @@ async function buildAuthUserPayload(
     fullName: profile.fullName,
     avatarUrl: profile.avatarUrl ?? null,
     emailVerified,
+    hasPassword,
     sellerStatus: seller?.status ?? null,
     shopName: seller?.shopName ?? null,
   };
@@ -342,7 +346,7 @@ authRouter.post(
     setSessionCookies(res, data.session, input.rememberMe);
 
     const role = profileForPayload.role as UserRole;
-    const user = await buildAuthUserPayload(db, profileForPayload, emailVerified);
+    const user = await buildAuthUserPayload(db, profileForPayload, emailVerified, true);
 
     res.json({
       user,
@@ -399,7 +403,12 @@ authRouter.post(
     );
 
     const role = profileForPayload.role as UserRole;
-    const user = await buildAuthUserPayload(db, profileForPayload, emailVerified);
+    const user = await buildAuthUserPayload(
+      db,
+      profileForPayload,
+      emailVerified,
+      authUserHasPassword(authUser),
+    );
 
     res.json({
       user,
@@ -480,6 +489,7 @@ authRouter.get(
         avatarUrl: req.user!.avatarUrl,
       },
       req.user!.emailVerified,
+      req.user!.hasPassword,
     );
 
     res.json({ user });
@@ -510,7 +520,12 @@ authRouter.patch(
       .where(eq(profiles.id, req.user!.id))
       .returning();
     if (!updated) throw new AppError(404, 'Không tìm thấy hồ sơ', 'NOT_FOUND');
-    const user = await buildAuthUserPayload(db, updated, req.user!.emailVerified);
+    const user = await buildAuthUserPayload(
+      db,
+      updated,
+      req.user!.emailVerified,
+      req.user!.hasPassword,
+    );
     res.json({ data: updated, user, message: 'Đã cập nhật hồ sơ' });
   }),
 );
@@ -694,6 +709,39 @@ authRouter.post(
       message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
       redirectTo: '/auth/login',
     });
+  }),
+);
+
+/** Tài khoản Google chưa có mật khẩu — đặt lần đầu, không hỏi mật khẩu cũ. */
+authRouter.post(
+  '/set-password',
+  requireAuth,
+  changePasswordLimiter,
+  asyncHandler(async (req, res) => {
+    if (req.user!.hasPassword) {
+      throw new AppError(
+        400,
+        'Tài khoản đã có mật khẩu. Hãy dùng chức năng đổi mật khẩu.',
+        'PASSWORD_ALREADY_SET',
+      );
+    }
+
+    const input = setPasswordSchema.parse(req.body);
+    const supabaseAdmin = req.app.locals.supabaseAdmin;
+    const accessToken = req.cookies[ACCESS_TOKEN_COOKIE];
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user!.id, {
+      password: input.newPassword,
+    });
+    if (error) {
+      throw new AppError(400, 'Không tạo được mật khẩu', 'SET_PASSWORD_FAILED');
+    }
+
+    if (accessToken) {
+      await supabaseAdmin.auth.admin.signOut(accessToken, 'others').catch(() => undefined);
+    }
+
+    res.json({ message: 'Đã tạo mật khẩu. Từ giờ bạn có thể đăng nhập bằng email và mật khẩu.' });
   }),
 );
 

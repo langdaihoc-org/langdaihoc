@@ -103,6 +103,8 @@ export const authApi = {
     api<{ message: string; redirectTo: string }>('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   changePassword: (body: unknown) =>
     api<{ message: string }>('/api/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
+  setPassword: (body: { newPassword: string; confirmPassword: string }) =>
+    api<{ message: string }>('/api/auth/set-password', { method: 'POST', body: JSON.stringify(body) }),
   resendVerification: (identifier: string) =>
     api<{ message: string }>('/api/auth/resend-verification', {
       method: 'POST',
@@ -391,6 +393,8 @@ export interface AuthUser {
   avatarUrl?: string | null;
   emailVerified: boolean; sellerStatus: string | null;
   shopName?: string | null;
+  /** false khi tài khoản chỉ đăng nhập bằng Google — chưa đặt mật khẩu */
+  hasPassword?: boolean;
 }
 
 export interface Banner {

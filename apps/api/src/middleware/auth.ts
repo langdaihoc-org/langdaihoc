@@ -9,7 +9,7 @@ import {
 } from '../lib/supabase.js';
 import { setSessionCookies, wantsRememberMe, clearSessionCookies } from '../lib/session.js';
 import { AppError } from './error-handler.js';
-import { syncProfileStatusOnLogin } from '../modules/auth/service.js';
+import { syncProfileStatusOnLogin, authUserHasPassword } from '../modules/auth/service.js';
 
 let supabaseAnon: ReturnType<typeof createSupabaseAnon> | null = null;
 function getSupabaseAnon() {
@@ -26,6 +26,7 @@ export interface AuthUser {
   fullName: string;
   avatarUrl?: string | null;
   emailVerified: boolean;
+  hasPassword: boolean;
 }
 
 declare global {
@@ -109,6 +110,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       fullName: profile.fullName,
       avatarUrl: profile.avatarUrl ?? null,
       emailVerified,
+      hasPassword: authUserHasPassword(data.user),
     };
 
     next();

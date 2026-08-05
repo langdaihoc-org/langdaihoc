@@ -28,6 +28,7 @@ export function ProfilePage() {
   const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwdMsg, setPwdMsg] = useState('');
   const [pwdError, setPwdError] = useState('');
+  const [newPwdForm, setNewPwdForm] = useState({ newPassword: '', confirmPassword: '' });
   const [deleteAddrId, setDeleteAddrId] = useState<string | null>(null);
   const [showAddrForm, setShowAddrForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -58,6 +59,8 @@ export function ProfilePage() {
 
   const emailChanged =
     email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase();
+  // Payload cũ không có trường này — mặc định coi như có mật khẩu.
+  const hasPassword = user?.hasPassword !== false;
 
   const profileMut = useMutation({
     mutationFn: () =>
@@ -89,6 +92,21 @@ export function ProfilePage() {
     onError: (e) => {
       setPwdMsg('');
       setPwdError(e instanceof Error ? e.message : 'Không đổi được mật khẩu');
+    },
+  });
+
+  const setPwdMut = useMutation({
+    mutationFn: () => authApi.setPassword(newPwdForm),
+    onSuccess: (res) => {
+      setPwdMsg(res.message);
+      setPwdError('');
+      setNewPwdForm({ newPassword: '', confirmPassword: '' });
+      refetch();
+      toast('Đã tạo mật khẩu', 'success');
+    },
+    onError: (e) => {
+      setPwdMsg('');
+      setPwdError(e instanceof Error ? e.message : 'Không tạo được mật khẩu');
     },
   });
 
@@ -183,7 +201,7 @@ export function ProfilePage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@gmail.com"
             />
-            {emailChanged && (
+            {emailChanged && hasPassword && (
               <Input
                 label="Mật khẩu hiện tại (để đổi email)"
                 type="password"
@@ -191,6 +209,12 @@ export function ProfilePage() {
                 value={emailPassword}
                 onChange={(e) => setEmailPassword(e.target.value)}
               />
+            )}
+            {emailChanged && !hasPassword && (
+              <p className="text-xs text-red-600">
+                Tài khoản Google chưa có mật khẩu. Hãy tạo mật khẩu ở mục Bảo mật tài khoản
+                trước khi đổi email.
+              </p>
             )}
             <p className="text-xs text-[var(--color-muted)]">
               Đổi email sẽ dùng email mới để đăng nhập
@@ -205,7 +229,7 @@ export function ProfilePage() {
                 disabled={
                   !fullName.trim() ||
                   !email.trim() ||
-                  (emailChanged && !emailPassword)
+                  (emailChanged && (!hasPassword || !emailPassword))
                 }
               >
                 Lưu
@@ -238,42 +262,77 @@ export function ProfilePage() {
 
       <Card className="space-y-3">
         <p className="font-bold">Bảo mật tài khoản</p>
-        <Input
-          label="Mật khẩu hiện tại"
-          type="password"
-          autoComplete="current-password"
-          value={pwdForm.currentPassword}
-          onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })}
-        />
-        <Input
-          label="Mật khẩu mới"
-          type="password"
-          autoComplete="new-password"
-          value={pwdForm.newPassword}
-          onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })}
-        />
-        <Input
-          label="Xác nhận mật khẩu mới"
-          type="password"
-          autoComplete="new-password"
-          value={pwdForm.confirmPassword}
-          onChange={(e) => setPwdForm({ ...pwdForm, confirmPassword: e.target.value })}
-        />
-        {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
-        {pwdMsg && <p className="text-sm text-brand-green-dark">{pwdMsg}</p>}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            size="sm"
-            disabled={!pwdForm.currentPassword || !pwdForm.newPassword || !pwdForm.confirmPassword}
-            loading={pwdMut.isPending}
-            onClick={() => pwdMut.mutate()}
-          >
-            Đổi mật khẩu
-          </Button>
-          <Link to="/auth/forgot-password" className="text-sm font-medium text-brand-orange-dark underline">
-            Quên mật khẩu? Khôi phục qua email
-          </Link>
-        </div>
+        {hasPassword ? (
+          <>
+            <Input
+              label="Mật khẩu hiện tại"
+              type="password"
+              autoComplete="current-password"
+              value={pwdForm.currentPassword}
+              onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })}
+            />
+            <Input
+              label="Mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={pwdForm.newPassword}
+              onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })}
+            />
+            <Input
+              label="Xác nhận mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={pwdForm.confirmPassword}
+              onChange={(e) => setPwdForm({ ...pwdForm, confirmPassword: e.target.value })}
+            />
+            {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
+            {pwdMsg && <p className="text-sm text-brand-green-dark">{pwdMsg}</p>}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={!pwdForm.currentPassword || !pwdForm.newPassword || !pwdForm.confirmPassword}
+                loading={pwdMut.isPending}
+                onClick={() => pwdMut.mutate()}
+              >
+                Đổi mật khẩu
+              </Button>
+              <Link to="/auth/forgot-password" className="text-sm font-medium text-brand-orange-dark underline">
+                Quên mật khẩu? Khôi phục qua email
+              </Link>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-[var(--color-muted)]">
+              Bạn đang đăng nhập bằng Google nên tài khoản chưa có mật khẩu. Tạo mật khẩu để
+              đăng nhập được bằng email khi cần.
+            </p>
+            <Input
+              label="Mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={newPwdForm.newPassword}
+              onChange={(e) => setNewPwdForm({ ...newPwdForm, newPassword: e.target.value })}
+            />
+            <Input
+              label="Xác nhận mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={newPwdForm.confirmPassword}
+              onChange={(e) => setNewPwdForm({ ...newPwdForm, confirmPassword: e.target.value })}
+            />
+            {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
+            {pwdMsg && <p className="text-sm text-brand-green-dark">{pwdMsg}</p>}
+            <Button
+              size="sm"
+              disabled={!newPwdForm.newPassword || !newPwdForm.confirmPassword}
+              loading={setPwdMut.isPending}
+              onClick={() => setPwdMut.mutate()}
+            >
+              Tạo mật khẩu
+            </Button>
+          </>
+        )}
       </Card>
 
       <Card className="space-y-3">
