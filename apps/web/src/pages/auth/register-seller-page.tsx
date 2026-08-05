@@ -50,10 +50,6 @@ export function SellerRegisterPage() {
       <form onSubmit={onSubmit} className="space-y-4">
         {error && <Alert variant="error">{error}</Alert>}
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-          Tài khoản nhận đồ ship hộ không đăng ký tại đây — chỉ admin thêm nội bộ.
-        </div>
-
         <Input label="Họ và tên" error={errors.fullName?.message} {...register('fullName')} />
         <Input label="Email liên hệ" type="email" error={errors.email?.message} {...register('email')} />
         <Input label="Số điện thoại liên hệ *" type="tel" inputMode="tel" autoComplete="tel" error={errors.phone?.message} {...register('phone')} />
