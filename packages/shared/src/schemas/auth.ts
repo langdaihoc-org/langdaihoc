@@ -160,8 +160,9 @@ export const verifyEmailSchema = z.object({
 
 /** Hoàn tất Google OAuth — client đã exchange code, gửi session cho API gắn cookie. */
 export const oauthSessionSchema = z.object({
-  accessToken: z.string().trim().min(20).max(4096),
-  refreshToken: z.string().trim().min(20).max(4096),
+  accessToken: z.string().trim().min(20).max(8192),
+  // Refresh token của Supabase là chuỗi ngắn (~12-24 ký tự), không phải JWT.
+  refreshToken: z.string().trim().min(8).max(4096),
   rememberMe: z.boolean().optional().default(false),
 });
 
