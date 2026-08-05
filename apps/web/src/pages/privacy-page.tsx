@@ -82,8 +82,8 @@ export function PrivacyPage() {
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
               <Strong>Dữ liệu tài khoản:</Strong> họ tên, email, số điện thoại, ảnh đại diện, vai
-              trò và trạng thái tài khoản. Mật khẩu do Supabase Auth quản lý; langdaihoc không lưu
-              mật khẩu dạng đọc được.
+              trò, trạng thái tài khoản và lý do tạm khóa/từ chối (nếu có). Mật khẩu do Supabase
+              Auth quản lý; langdaihoc không lưu mật khẩu dạng đọc được.
             </li>
             <li>
               <Strong>Đăng nhập Google:</Strong> mã định danh tài khoản, email đã xác minh, tên và
@@ -95,9 +95,10 @@ export function PrivacyPage() {
               chi tiết, KTX/tòa/phòng hoặc điểm bàn giao.
             </li>
             <li>
-              <Strong>Dữ liệu đơn hàng:</Strong> sản phẩm/dịch vụ, số lượng, giá trị, ghi chú, thời
-              gian, địa chỉ lấy/trả, trạng thái, lý do hủy và lịch sử xử lý. Đơn nhận ship có thể
-              gồm mã vận đơn, vị trí lấy hàng, số điện thoại và giá trị kiện hàng do bạn khai báo.
+              <Strong>Giỏ hàng và đơn hàng:</Strong> sản phẩm/dịch vụ đã chọn, số lượng, tùy chọn,
+              giá trị, ghi chú, thời gian, địa chỉ lấy/trả, trạng thái, lý do hủy và lịch sử xử lý.
+              Đơn nhận ship có thể gồm mã vận đơn, vị trí lấy hàng, số điện thoại và giá trị kiện
+              hàng do bạn khai báo.
             </li>
             <li>
               <Strong>Dữ liệu thanh toán:</Strong> phương thức, trạng thái thanh toán, ảnh biên lai
@@ -106,12 +107,15 @@ export function PrivacyPage() {
               quyền truy cập hạn chế phù hợp.
             </li>
             <li>
-              <Strong>Nội dung và hỗ trợ:</Strong> bài đăng, hình ảnh, đánh giá, nội dung khiếu nại,
-              tin nhắn trao đổi, bằng chứng và kết quả giải quyết.
+              <Strong>Thông tin đối tác, nội dung và hỗ trợ:</Strong> tên/địa chỉ cửa hàng, khu vực
+              phục vụ, giờ hoạt động, loại dịch vụ dự kiến, ghi chú đăng ký; bài đăng, hình ảnh,
+              đánh giá, nội dung khiếu nại, tin nhắn trao đổi, bằng chứng và kết quả giải quyết.
             </li>
             <li>
-              <Strong>Dữ liệu kỹ thuật:</Strong> địa chỉ IP, user-agent/trình duyệt, thời điểm truy
-              cập, nhật ký thao tác quản trị, cookie phiên và thông tin cần thiết để ngăn lạm dụng.
+              <Strong>Dữ liệu kỹ thuật:</Strong> cookie phiên, thông tin cần thiết để giới hạn tần
+              suất/ngăn lạm dụng và nhật ký thao tác quản trị (có thể gồm IP, user-agent và thời
+              điểm). langdaihoc không tự xây dựng nhật ký IP/user-agent cho mọi lượt duyệt trang;
+              nhà cung cấp hạ tầng có thể tạo log kỹ thuật theo chính sách riêng của họ.
             </li>
           </ul>
           <p>
@@ -136,7 +140,10 @@ export function PrivacyPage() {
               Hiển thị thông tin cửa hàng, sản phẩm, bài đăng hoặc đánh giá mà người dùng chủ động
               công khai.
             </li>
-            <li>Gửi email và thông báo giao dịch, xác minh hoặc cảnh báo bảo mật.</li>
+            <li>
+              Gửi email xác minh/khôi phục tài khoản và thông báo trong ứng dụng về đơn hàng hoặc
+              bảo mật. Hiện hệ thống không gửi email tiếp thị hay email trạng thái đơn.
+            </li>
             <li>
               Phân quyền, ghi nhật ký quản trị, phòng chống gian lận, điều tra sự cố và bảo vệ quyền
               lợi hợp pháp của người dùng, đối tác và nền tảng.
@@ -247,6 +254,10 @@ export function PrivacyPage() {
               Hồ sơ, địa chỉ, đơn hàng, đánh giá, khiếu nại, cửa hàng và nội dung chính chưa có lịch
               xóa tự động; được giữ khi tài khoản/dịch vụ còn hoạt động hoặc khi cần cho giao dịch,
               đối soát, giải quyết tranh chấp và nghĩa vụ pháp lý.
+            </li>
+            <li>
+              Ảnh bằng chứng khiếu nại hiện chưa có lịch xóa tự động và được giữ cùng hồ sơ khiếu
+              nại cho đến khi có yêu cầu hợp lệ hoặc không còn mục đích/căn cứ lưu giữ.
             </li>
             <li>
               Ảnh công khai được giữ đến khi nội dung bị xóa hoặc được thay thế; bản sao lưu/hạ tầng
