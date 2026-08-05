@@ -10,6 +10,7 @@ import {
   resetPasswordSchema,
   verifyRecoverySchema,
   verifyEmailSchema,
+  oauthSessionSchema,
   changePasswordSchema,
   profileUpdateSchema,
   normalizePhoneVN,
@@ -39,6 +40,7 @@ import {
   syncProfileStatusOnLogin,
   getSellerByUserId,
   ensureUserRole,
+  ensureProfileForOAuthUser,
   roleHomePath,
   createAuthUserForRegister,
   sendSignupVerificationEmail,
@@ -338,6 +340,63 @@ authRouter.post(
     const profileForPayload = freshProfile ?? profile;
 
     setSessionCookies(res, data.session, input.rememberMe);
+
+    const role = profileForPayload.role as UserRole;
+    const user = await buildAuthUserPayload(db, profileForPayload, emailVerified);
+
+    res.json({
+      user,
+      redirectTo: roleHomePath(role),
+      requiresEmailVerification: false,
+    });
+  }),
+);
+
+authRouter.post(
+  '/oauth/session',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const input = oauthSessionSchema.parse(req.body);
+    const db = req.app.locals.db;
+    const supabaseAnon = createSupabaseAnon();
+
+    const { data: userData, error: userErr } = await supabaseAnon.auth.getUser(input.accessToken);
+    if (userErr || !userData.user) {
+      throw new AppError(401, 'Phiên Google không hợp lệ hoặc đã hết hạn', 'INVALID_OAUTH_SESSION');
+    }
+
+    const authUser = userData.user;
+    const emailVerified = Boolean(authUser.email_confirmed_at);
+    if (!emailVerified) {
+      throw new AppError(403, 'Email Google chưa được xác minh', 'EMAIL_NOT_VERIFIED');
+    }
+
+    const profile = await ensureProfileForOAuthUser(db, authUser);
+
+    if (profile.status === 'deleted') {
+      throw new AppError(401, 'Tài khoản không hợp lệ', 'INVALID_CREDENTIALS');
+    }
+    if (profile.status === 'suspended') {
+      throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
+    }
+
+    await syncProfileStatusOnLogin(db, authUser.id, emailVerified);
+
+    const [freshProfile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.id, authUser.id))
+      .limit(1);
+    const profileForPayload = freshProfile ?? profile;
+
+    setSessionCookies(
+      res,
+      {
+        access_token: input.accessToken,
+        refresh_token: input.refreshToken,
+      } as Parameters<typeof setSessionCookies>[1],
+      input.rememberMe,
+    );
 
     const role = profileForPayload.role as UserRole;
     const user = await buildAuthUserPayload(db, profileForPayload, emailVerified);

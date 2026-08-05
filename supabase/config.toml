@@ -22,7 +22,7 @@ enabled = false
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173/auth/verify-email", "http://localhost:5173/auth/reset-password"]
+additional_redirect_urls = ["http://localhost:5173/auth/verify-email", "http://localhost:5173/auth/reset-password", "http://localhost:5173/auth/oauth/callback"]
 # Access token: 15 phút (khớp server)
 jwt_expiry = 900
 # Refresh token: hết hạn sau 30 ngày không dùng ("nhớ đăng nhập")

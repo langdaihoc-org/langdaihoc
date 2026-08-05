@@ -75,6 +75,11 @@ export const authApi = {
     api<{ message: string; redirectTo: string }>('/api/auth/register/seller', { method: 'POST', body: JSON.stringify(body) }),
   login: (body: unknown) =>
     api<{ user: AuthUser; redirectTo: string; requiresEmailVerification: boolean }>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  oauthSession: (body: { accessToken: string; refreshToken: string; rememberMe?: boolean }) =>
+    api<{ user: AuthUser; redirectTo: string; requiresEmailVerification: boolean }>('/api/auth/oauth/session', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   logout: () => api<{ message: string }>('/api/auth/logout', { method: 'POST' }),
   me: () => api<{ user: AuthUser & { shopName?: string | null } }>('/api/auth/me'),
   updateProfile: (body: { fullName?: string; phone?: string | null; avatarUrl?: string | null }) =>

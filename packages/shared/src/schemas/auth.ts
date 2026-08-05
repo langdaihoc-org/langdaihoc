@@ -158,6 +158,13 @@ export const verifyEmailSchema = z.object({
   type: z.enum(['signup', 'email', 'magiclink']).default('signup'),
 });
 
+/** Hoàn tất Google OAuth — client đã exchange code, gửi session cho API gắn cookie. */
+export const oauthSessionSchema = z.object({
+  accessToken: z.string().trim().min(20).max(4096),
+  refreshToken: z.string().trim().min(20).max(4096),
+  rememberMe: z.boolean().optional().default(false),
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Nhập mật khẩu hiện tại'),
@@ -190,5 +197,6 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type VerifyRecoveryInput = z.infer<typeof verifyRecoverySchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type OAuthSessionInput = z.infer<typeof oauthSessionSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

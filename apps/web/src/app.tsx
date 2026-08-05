@@ -30,6 +30,7 @@ const ProfilePage = lazyNamed(() => import('@/pages/profile-page'), 'ProfilePage
 const LoginPage = lazyNamed(() => import('@/pages/auth/login-page'), 'LoginPage');
 const CheckEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'CheckEmailPage');
 const VerifyEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'VerifyEmailPage');
+const OAuthCallbackPage = lazyNamed(() => import('@/pages/auth/oauth-callback-page'), 'OAuthCallbackPage');
 const BuyerRegisterPage = lazyNamed(() => import('@/pages/auth/register-buyer-page'), 'BuyerRegisterPage');
 const SellerRegisterPage = lazyNamed(() => import('@/pages/auth/register-seller-page'), 'SellerRegisterPage');
 
@@ -119,6 +120,7 @@ export function App() {
                   </Route>
 
                   <Route path="auth/login" element={<GuestOnlyRoute><LoginPage /></GuestOnlyRoute>} />
+                  <Route path="auth/oauth/callback" element={<OAuthCallbackPage />} />
                   <Route path="auth/check-email" element={<CheckEmailPage />} />
                   <Route path="auth/verify-email" element={<VerifyEmailPage />} />
                   <Route path="auth/register/buyer" element={<GuestOnlyRoute><BuyerRegisterPage /></GuestOnlyRoute>} />

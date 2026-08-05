@@ -38,6 +38,7 @@ export function LoginPage() {
   const [info, setInfo] = useState(() => initialAuthInfo(location.search, locationState));
   const [needsVerify, setNeedsVerify] = useState(false);
   const [emailForResend, setEmailForResend] = useState(locationState?.registeredEmail ?? '');
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('verified') === '1' && !locationState?.authNotice) {
@@ -115,9 +116,24 @@ export function LoginPage() {
     }
   };
 
+  const onGoogleLogin = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const { startGoogleLogin } = await import('@/lib/google-oauth');
+      await startGoogleLogin({
+        rememberMe: Boolean(getValues('rememberMe')),
+        next: afterLoginPath(),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không mở được đăng nhập Google');
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <AuthLayout title="Đăng nhập" subtitle="Dùng email hoặc số điện thoại đã đăng ký">
-      <form onSubmit={onSubmit} className="space-y-4">
+    <AuthLayout title="Đăng nhập" subtitle="Dùng Google hoặc email / số điện thoại đã đăng ký">
+      <div className="space-y-4">
         {info && <Alert variant="success">{info}</Alert>}
         {error && <Alert variant="error">{error}</Alert>}
         {needsVerify && (
@@ -129,6 +145,24 @@ export function LoginPage() {
           </Alert>
         )}
 
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-2"
+          loading={googleLoading}
+          onClick={() => void onGoogleLogin()}
+        >
+          <GoogleGlyph />
+          Đăng nhập với Google
+        </Button>
+
+        <div className="relative py-1 text-center text-xs font-medium text-[var(--color-muted)]">
+          <span className="relative z-10 bg-white px-2">hoặc</span>
+          <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[var(--color-line)]" />
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="mt-4 space-y-4">
         <Input
           label="Email hoặc số điện thoại"
           type="text"
@@ -161,6 +195,29 @@ export function LoginPage() {
         ]}
       />
     </AuthLayout>
+  );
+}
+
+function GoogleGlyph() {
+  return (
+    <svg className="size-4 shrink-0" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#4285F4"
+        d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.48a5.54 5.54 0 0 1-2.4 3.63v3.01h3.88c2.27-2.09 3.53-5.17 3.53-8.88Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.88-3.01c-1.08.72-2.45 1.15-4.05 1.15-3.11 0-5.75-2.1-6.69-4.92H1.3v3.1A12 12 0 0 0 12 24Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.31 14.31A7.2 7.2 0 0 1 4.93 12c0-.8.14-1.58.38-2.31V6.59H1.3A12 12 0 0 0 0 12c0 1.94.46 3.77 1.3 5.41l4.01-3.1Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.69 1.3 6.59l4.01 3.1C6.25 6.85 8.89 4.75 12 4.75Z"
+      />
+    </svg>
   );
 }
 

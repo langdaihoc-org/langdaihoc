@@ -369,6 +369,71 @@ export async function ensureUserRole(db: Database, userId: string, role: UserRol
     .onConflictDoNothing({ target: [userRoles.userId, userRoles.role] });
 }
 
+/**
+ * Google OAuth: có profile thì dùng; chưa có thì tạo buyer active (email Google đã xác minh).
+ * Seller/admin đăng nhập Google nếu đã có hồ sơ — không tự tạo seller.
+ */
+export async function ensureProfileForOAuthUser(
+  db: Database,
+  authUser: {
+    id: string;
+    email?: string | null;
+    email_confirmed_at?: string | null;
+    user_metadata?: Record<string, unknown> | null;
+  },
+) {
+  const [existing] = await db.select().from(profiles).where(eq(profiles.id, authUser.id)).limit(1);
+  if (existing) return existing;
+
+  const email = authUser.email?.trim().toLowerCase();
+  if (!email) {
+    throw new AppError(400, 'Tài khoản Google thiếu email', 'OAUTH_NO_EMAIL');
+  }
+  if (!authUser.email_confirmed_at) {
+    throw new AppError(403, 'Email Google chưa được xác minh', 'EMAIL_NOT_VERIFIED');
+  }
+
+  const meta = authUser.user_metadata ?? {};
+  const fullNameRaw =
+    (typeof meta.full_name === 'string' && meta.full_name.trim()) ||
+    (typeof meta.name === 'string' && meta.name.trim()) ||
+    email.split('@')[0] ||
+    'Người dùng';
+  const fullName = fullNameRaw.slice(0, 100);
+  const avatarUrl =
+    (typeof meta.avatar_url === 'string' && meta.avatar_url) ||
+    (typeof meta.picture === 'string' && meta.picture) ||
+    null;
+
+  try {
+    await db.insert(profiles).values({
+      id: authUser.id,
+      email,
+      role: 'buyer',
+      status: 'active',
+      fullName,
+      avatarUrl,
+    });
+    await ensureUserRole(db, authUser.id, 'buyer');
+  } catch (err) {
+    const [race] = await db.select().from(profiles).where(eq(profiles.id, authUser.id)).limit(1);
+    if (race) return race;
+    const [byEmail] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
+    if (byEmail) {
+      throw new AppError(
+        409,
+        'Email này đã có tài khoản. Hãy đăng nhập bằng mật khẩu hoặc liên kết Google trong Supabase.',
+        'EMAIL_TAKEN',
+      );
+    }
+    throw err;
+  }
+
+  const [created] = await db.select().from(profiles).where(eq(profiles.id, authUser.id)).limit(1);
+  if (!created) throw new AppError(500, 'Không tạo được hồ sơ', 'PROFILE_CREATE_FAILED');
+  return created;
+}
+
 export function roleHomePath(role: UserRole): string {
   if (role === 'seller') return '/seller';
   if (role === 'admin') return '/admin';
