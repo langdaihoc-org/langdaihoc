@@ -178,10 +178,11 @@ export function DashboardShell({
             </div>
           </nav>
 
+          {/* z phải cao hơn thanh điều hướng dưới (z-100), nếu không nút Đăng xuất bị che. */}
           {moreOpen && mobileMore && (
-            <div className="fixed inset-0 z-[60] lg:hidden">
+            <div className="fixed inset-0 z-[110] lg:hidden">
               <button type="button" className="absolute inset-0 bg-black/45" onClick={() => setMoreOpen(false)} aria-label="Đóng" />
-              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl">
+              <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl">
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="font-bold">Thêm tính năng</h3>
                   <button type="button" onClick={() => setMoreOpen(false)} aria-label="Đóng" className="rounded-full p-2 hover:bg-black/5">
