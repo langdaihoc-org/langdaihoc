@@ -132,8 +132,8 @@ export function LoginPage() {
   };
 
   return (
-    <AuthLayout title="Đăng nhập" subtitle="Dùng Google hoặc email / số điện thoại đã đăng ký">
-      <div className="space-y-4">
+    <AuthLayout title="Đăng nhập" subtitle="Dùng email / số điện thoại đã đăng ký hoặc Google">
+      <form onSubmit={onSubmit} className="space-y-4">
         {info && <Alert variant="success">{info}</Alert>}
         {error && <Alert variant="error">{error}</Alert>}
         {needsVerify && (
@@ -145,24 +145,6 @@ export function LoginPage() {
           </Alert>
         )}
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full gap-2"
-          loading={googleLoading}
-          onClick={() => void onGoogleLogin()}
-        >
-          <GoogleGlyph />
-          Đăng nhập với Google
-        </Button>
-
-        <div className="relative py-1 text-center text-xs font-medium text-[var(--color-muted)]">
-          <span className="relative z-10 bg-white px-2">hoặc</span>
-          <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[var(--color-line)]" />
-        </div>
-      </div>
-
-      <form onSubmit={onSubmit} className="mt-4 space-y-4">
         <Input
           label="Email hoặc số điện thoại"
           type="text"
@@ -186,6 +168,22 @@ export function LoginPage() {
 
         <SubmitRow loading={isSubmitting} label="Đăng nhập" />
       </form>
+
+      <div className="relative my-4 text-center text-xs font-medium text-[var(--color-muted)]">
+        <span className="relative z-10 bg-white px-2">hoặc</span>
+        <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[var(--color-line)]" />
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full gap-2"
+        loading={googleLoading}
+        onClick={() => void onGoogleLogin()}
+      >
+        <GoogleGlyph />
+        Đăng nhập với Google
+      </Button>
 
       <AuthFooterLinks
         links={[
