@@ -67,7 +67,6 @@ export function SellerRegisterPage() {
             <option value="food">Ăn uống</option>
             <option value="laundry">Giặt đồ</option>
           </select>
-          <p className="text-xs text-gray-500">Admin sẽ xác nhận loại hình khi duyệt</p>
         </div>
 
         <Input
