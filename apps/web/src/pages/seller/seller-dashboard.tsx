@@ -16,8 +16,8 @@ export function SellerDashboard() {
   const shop = shopData?.data;
   const accepting = shop?.acceptingOrders !== false;
   const { data } = useQuery({
-    queryKey: ['seller-orders'],
-    queryFn: () => ordersApi.list(),
+    queryKey: ['seller-orders', 'summary'],
+    queryFn: () => ordersApi.list(1, 20, { view: 'summary' }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
   });

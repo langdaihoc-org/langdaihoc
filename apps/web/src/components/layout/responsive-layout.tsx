@@ -15,7 +15,6 @@ import { EmailVerifyBanner } from '@/components/layout/email-verify-banner';
 import { InstallAppBanner } from '@/components/layout/install-app-banner';
 import { localizeNotificationText } from '@/lib/format';
 import { useBuyerLive } from '@/hooks/use-buyer-live';
-import { useRealtimeNotifications } from '@/hooks/use-realtime-notifications';
 
 const NAV = [
   { to: '/', label: 'Trang chủ' },
@@ -278,7 +277,6 @@ const MOB_NAV = [
 
 export function ResponsiveBuyerLayout() {
   useBuyerLive();
-  useRealtimeNotifications();
   const { pathname } = useLocation();
   const showCart = !pathname.startsWith('/cart') && !pathname.startsWith('/checkout');
 

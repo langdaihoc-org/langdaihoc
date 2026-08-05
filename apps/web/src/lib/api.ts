@@ -133,6 +133,7 @@ export const catalogApi = {
     api<{ data: FoodItem[]; meta?: { page: number; limit: number; total: number } }>(
       `/api/catalog/food${params ? `?${params}` : ''}`,
     ),
+  foodItem: (id: string) => api<{ data: FoodItem }>(`/api/catalog/food/${id}`),
   laundry: (params?: string) => api<{ data: LaundryService[] }>(`/api/catalog/laundry${params ? `?${params}` : ''}`),
   categories: (type?: string) => api<{ data: Category[] }>(`/api/catalog/categories${type ? `?type=${type}` : ''}`),
 };
@@ -147,10 +148,13 @@ export const cartApi = {
 };
 
 export const ordersApi = {
-  list: (page = 1, limit = 20) =>
-    api<{ data: Order[]; meta: { page: number; limit: number; hasMore: boolean } }>(
-      `/api/orders?page=${page}&limit=${limit}`,
-    ),
+  list: (page = 1, limit = 20, opts?: { view?: 'summary' }) => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (opts?.view) q.set('view', opts.view);
+    return api<{ data: Order[]; meta: { page: number; limit: number; hasMore: boolean } }>(
+      `/api/orders?${q}`,
+    );
+  },
   pulse: () =>
     api<{
       data: {

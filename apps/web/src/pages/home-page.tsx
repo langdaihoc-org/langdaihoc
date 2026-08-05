@@ -33,8 +33,8 @@ export function HomePage() {
     staleTime: 60_000,
   });
   const { data: ordersData } = useQuery({
-    queryKey: ['orders'],
-    queryFn: () => ordersApi.list(),
+    queryKey: ['orders', 'summary'],
+    queryFn: () => ordersApi.list(1, 20, { view: 'summary' }),
     enabled: isAuthenticated,
     staleTime: 10_000,
     refetchOnWindowFocus: true,

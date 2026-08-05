@@ -5,6 +5,7 @@ import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { setPublicCatalogCache } from '../../lib/http-cache.js';
 import {
   getFoodCatalog,
+  getFoodItemPublic,
   getLaundryCatalog,
   getApprovedSellers,
   getApprovedSellerById,
@@ -24,7 +25,7 @@ catalogRouter.get(
     const db = req.app.locals.db;
     const [foodResult, foodSellers, laundry, categoryRows, allBanners] = await Promise.all([
       getFoodCatalog(db, { limit: 8, page: 1 }),
-      getApprovedSellers(db, 'food'),
+      getApprovedSellers(db, 'food', { limit: 4 }),
       getLaundryCatalog(db, undefined, { limit: 6 }),
       db
         .select()
@@ -35,7 +36,7 @@ catalogRouter.get(
 
     const sellerIds = foodSellers.map((s) => s.id);
     const ratings = await getSellerRatingsMap(db, sellerIds);
-    const sellers = foodSellers.slice(0, 4).map((s) => ({
+    const sellers = foodSellers.map((s) => ({
       ...s,
       rating: ratings.get(s.id) ?? { average: 0, count: 0 },
     }));
@@ -152,6 +153,16 @@ catalogRouter.get(
     // Search/q đổi nhanh — cache ngắn hơn; listing thường thì 60s
     setPublicCatalogCache(res, q ? 15 : 60);
     res.json(result);
+  }),
+);
+
+catalogRouter.get(
+  '/food/:id',
+  asyncHandler(async (req, res) => {
+    const data = await getFoodItemPublic(req.app.locals.db, String(req.params.id));
+    if (!data) throw new AppError(404, 'Không tìm thấy món', 'NOT_FOUND');
+    setPublicCatalogCache(res, 30);
+    res.json({ data });
   }),
 );
 

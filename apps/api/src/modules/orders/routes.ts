@@ -227,6 +227,7 @@ ordersRouter.get(
   asyncHandler(async (req, res) => {
     const page = Math.max(1, Number(req.query.page ?? 1));
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
+    const summaryOnly = req.query.view === 'summary';
     const db = req.app.locals.db;
     // Tải thêm 1 để biết còn trang sau không
     const rows = await getOrdersForUser(db, req.user!.id, req.user!.role, page, limit + 1);
@@ -235,8 +236,12 @@ ordersRouter.get(
     const isSeller = req.user!.role === 'seller';
     const data = await enrichOrdersList(db, pageRows, {
       includeBuyer: isSeller,
-      includeDetails: true,
+      includeDetails: !summaryOnly,
     });
+    if (summaryOnly) {
+      res.json({ data, meta: { page, limit, hasMore } });
+      return;
+    }
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const allProofUrls: string[] = [];
     for (const row of data) {

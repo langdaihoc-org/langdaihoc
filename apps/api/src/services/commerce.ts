@@ -75,9 +75,14 @@ export async function notifyUser(
   await db.insert(notifications).values({ userId, type, title, body, data: data ?? null });
 }
 
-export async function getApprovedSellers(db: Database, serviceType?: 'food' | 'laundry' | 'ship_proxy') {
+export async function getApprovedSellers(
+  db: Database,
+  serviceType?: 'food' | 'laundry' | 'ship_proxy',
+  opts?: { limit?: number },
+) {
   const conditions = [eq(sellers.status, 'approved'), eq(sellers.acceptingOrders, true)];
   if (serviceType) conditions.push(eq(sellers.serviceTypes, serviceType));
+  const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 200);
 
   return db
     .select({
@@ -95,7 +100,7 @@ export async function getApprovedSellers(db: Database, serviceType?: 'food' | 'l
     })
     .from(sellers)
     .where(and(...conditions))
-    .limit(200);
+    .limit(limit);
 }
 
 export async function getApprovedSellerById(db: Database, sellerId: string) {
@@ -267,6 +272,8 @@ export interface FoodCatalogParams {
   page?: number;
   limit?: number;
   q?: string;
+  /** List card chỉ cần tên/giá/ảnh — topping lấy khi mở món. */
+  includeOptions?: boolean;
 }
 
 function normalizeFoodImages(imageUrl: string | null, imageUrls: unknown): string[] {
@@ -279,7 +286,7 @@ function normalizeFoodImages(imageUrl: string | null, imageUrls: unknown): strin
 }
 
 export async function getFoodCatalog(db: Database, params: FoodCatalogParams = {}) {
-  const { sellerId, categorySlug, q } = params;
+  const { sellerId, categorySlug, q, includeOptions = false } = params;
   const page = Math.max(1, params.page ?? 1);
   const limit = Math.min(100, Math.max(1, params.limit ?? 20));
   const offset = (page - 1) * limit;
@@ -335,10 +342,14 @@ export async function getFoodCatalog(db: Database, params: FoodCatalogParams = {
     .offset(offset);
 
   const itemIds = items.map((i) => i.id);
-  const { groups, options } = await loadFoodItemExtras(db, itemIds);
+  const extrasBundle = includeOptions
+    ? await loadFoodItemExtras(db, itemIds)
+    : { groups: [] as (typeof foodOptionGroups.$inferSelect)[], options: [] as (typeof foodItemOptions.$inferSelect)[] };
 
   const data = items.map((item) => {
-    const extras = mapFoodItemExtras(item.id, groups, options);
+    const extras = includeOptions
+      ? mapFoodItemExtras(item.id, extrasBundle.groups, extrasBundle.options)
+      : { optionGroups: [] as ReturnType<typeof mapFoodItemExtras>['optionGroups'], options: [] as ReturnType<typeof mapFoodItemExtras>['options'] };
     const images = normalizeFoodImages(item.imageUrl, item.imageUrls);
     return {
       ...item,
@@ -352,6 +363,46 @@ export async function getFoodCatalog(db: Database, params: FoodCatalogParams = {
   return {
     data,
     meta: { page, limit, total: Number(countRow?.total ?? 0) },
+  };
+}
+
+/** Chi tiết 1 món + topping — dùng khi mở sheet đặt món. */
+export async function getFoodItemPublic(db: Database, foodItemId: string) {
+  const [item] = await db
+    .select({
+      id: foodItems.id,
+      sellerId: foodItems.sellerId,
+      shopName: sellers.shopName,
+      categoryId: foodItems.categoryId,
+      name: foodItems.name,
+      description: foodItems.description,
+      price: foodItems.price,
+      prepTimeMinutes: foodItems.prepTimeMinutes,
+      imageUrl: foodItems.imageUrl,
+      imageUrls: foodItems.imageUrls,
+    })
+    .from(foodItems)
+    .innerJoin(sellers, eq(foodItems.sellerId, sellers.id))
+    .where(
+      and(
+        eq(foodItems.id, foodItemId),
+        eq(foodItems.isAvailable, true),
+        eq(sellers.status, 'approved'),
+        eq(sellers.acceptingOrders, true),
+      ),
+    )
+    .limit(1);
+  if (!item) return null;
+
+  const { groups, options } = await loadFoodItemExtras(db, [item.id]);
+  const extras = mapFoodItemExtras(item.id, groups, options);
+  const images = normalizeFoodImages(item.imageUrl, item.imageUrls);
+  return {
+    ...item,
+    price: Number(item.price),
+    imageUrl: images[0] ?? item.imageUrl ?? null,
+    imageUrls: images,
+    ...extras,
   };
 }
 

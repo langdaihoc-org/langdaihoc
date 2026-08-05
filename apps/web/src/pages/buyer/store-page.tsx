@@ -36,6 +36,15 @@ export function StorePage() {
   const [conflictOpen, setConflictOpen] = useState(false);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
+  const selectedId = selectedItem?.id;
+  const { data: foodDetail } = useQuery({
+    queryKey: ['food-item', selectedId],
+    queryFn: async () => (await catalogApi.foodItem(selectedId!)).data,
+    enabled: Boolean(selectedId),
+    staleTime: 30_000,
+  });
+  const sheetItem = foodDetail ?? selectedItem;
+
   const { data: store, isLoading: loadingStore } = useQuery({
     queryKey: ['seller', sellerId],
     queryFn: async () => (await catalogApi.seller(sellerId!)).data,
@@ -98,17 +107,17 @@ export function StorePage() {
     action: FoodSheetAction,
     force = false,
   ) => {
-    if (!selectedItem) return;
+    if (!sheetItem) return;
     if (!force) setPendingAdd({ ...p, action });
-    const catalogOptions = (selectedItem.optionGroups ?? []).flatMap((g) => g.options ?? []);
-    const fallback = selectedItem.options ?? [];
+    const catalogOptions = (sheetItem.optionGroups ?? []).flatMap((g) => g.options ?? []);
+    const fallback = sheetItem.options ?? [];
     const allOptions = catalogOptions.length ? catalogOptions : fallback;
     const seen = new Set<string>();
     const opts = allOptions
       .filter((o) => p.options.includes(o.id) && !seen.has(o.id) && (seen.add(o.id), true))
       .map((o) => ({ id: o.id, name: o.name, priceDelta: o.priceDelta }));
     addMut.mutate({
-      foodItemId: selectedItem.id,
+      foodItemId: sheetItem.id,
       quantity: p.quantity,
       note: p.note || undefined,
       options: opts,
@@ -277,12 +286,12 @@ export function StorePage() {
         </div>
       )}
       <FoodItemSheet
-        item={selectedItem}
+        item={sheetItem}
         imageIndex={selectedIndex}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         onAdd={(p, action) => handleAdd(p, action)}
-        loading={addMut.isPending}
+        loading={addMut.isPending || (Boolean(selectedId) && !foodDetail)}
       />
       <ImageLightbox
         open={!!lightbox}
