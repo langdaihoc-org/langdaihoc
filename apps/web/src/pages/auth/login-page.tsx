@@ -344,8 +344,9 @@ export function VerifyEmailPage() {
           }
           return;
         }
-      } else if (!hashParams.get('access_token') && !queryParams.get('code')) {
-        // Không có token — không báo thành công giả.
+      } else {
+        // Thiếu token_hash — kể cả khi URL có access_token/code (link cũ dạng khác),
+        // không có cách nào xác minh phía client nên không được báo thành công giả.
         if (!cancelled) {
           setStatus('error');
           toast('Thiếu liên kết xác minh. Hãy mở đúng link trong email.', 'error');

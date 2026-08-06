@@ -1,20 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, ApiError } from '@/lib/api';
+import { ordersApi, ApiError, type Order } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Clock, User, MapPin, ArrowUpDown, Package } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import {
   NEXT_STATUS,
-  SELLER_ACTIVE,
-  SELLER_DONE,
   HIDDEN_ORDER,
   paymentMethodLabel,
   paymentStatusLabel,
@@ -24,17 +22,53 @@ import {
   invalidateSellerOrders,
 } from './seller-shared';
 
+const PAGE_SIZE = 20;
+
 export function SellerOrdersPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [tab, setTab] = useState<'active' | 'delivering' | 'done'>('active');
   const [deliverSort, setDeliverSort] = useState<DeliverSort>('time');
+  const [page, setPage] = useState(1);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [counts, setCounts] = useState({ active: 0, delivering: 0, done: 0 });
   const { data, isLoading, dataUpdatedAt, isFetching } = useQuery({
-    queryKey: ['seller-orders'],
-    queryFn: () => ordersApi.list(),
+    queryKey: ['seller-orders', tab, page],
+    queryFn: () => ordersApi.list(page, PAGE_SIZE, { scope: tab }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    if (!data) return;
+    setAllOrders((prev) => {
+      const existing = new Set(prev.map((o) => o.id));
+      const fresh = data.data.filter((o) => !existing.has(o.id));
+      return page === 1 ? data.data : [...prev, ...fresh];
+    });
+    setHasMore(data.meta?.hasMore ?? false);
+    if (data.meta?.counts) {
+      setCounts({
+        active: data.meta.counts.active ?? 0,
+        delivering: data.meta.counts.delivering ?? 0,
+        done: data.meta.counts.done ?? 0,
+      });
+    }
+  }, [data, page]);
+
+  const handleTabChange = (next: 'active' | 'delivering' | 'done') => {
+    if (next === tab) return;
+    setTab(next);
+    setPage(1);
+    setAllOrders([]);
+    setHasMore(false);
+  };
+
+  const resetList = () => {
+    setPage(1);
+    setAllOrders([]);
+  };
 
   const [quoteOrder, setQuoteOrder] = useState<string | null>(null);
   const [quoteFinalPrice, setQuoteFinalPrice] = useState('');
@@ -45,6 +79,7 @@ export function SellerOrdersPage() {
   const statusMut = useMutation({
     mutationFn: ({ id, status, note }: { id: string; status: string; note?: string }) => ordersApi.updateStatus(id, status, note),
     onSuccess: () => {
+      resetList();
       invalidateSellerOrders(qc);
       setConfirmAction(null);
     },
@@ -64,6 +99,7 @@ export function SellerOrdersPage() {
       });
     },
     onSuccess: () => {
+      resetList();
       invalidateSellerOrders(qc);
       setQuoteOrder(null);
       setQuoteFinalPrice('');
@@ -75,6 +111,7 @@ export function SellerOrdersPage() {
   const verifyMut = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) => ordersApi.verifyPayment(id, approved),
     onSuccess: () => {
+      resetList();
       invalidateSellerOrders(qc);
       setConfirmAction(null);
     },
@@ -82,29 +119,19 @@ export function SellerOrdersPage() {
   });
   const paidMut = useMutation({
     mutationFn: (id: string) => ordersApi.markPaid(id),
-    onSuccess: () => invalidateSellerOrders(qc),
+    onSuccess: () => {
+      resetList();
+      invalidateSellerOrders(qc);
+    },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không đánh dấu đã thu tiền', 'error'),
   });
-  const all = data?.data ?? [];
 
-  const visible = useMemo(() => all.filter((o) => !HIDDEN_ORDER.has(o.status)), [all]);
-
-  const counts = useMemo(() => ({
-    active: visible.filter((o) => SELLER_ACTIVE.has(o.status) && o.status !== 'delivering' && o.status !== 'returning').length,
-    delivering: visible.filter((o) => o.status === 'delivering' || o.status === 'returning').length,
-    done: visible.filter((o) => SELLER_DONE.has(o.status)).length,
-  }), [visible]);
-
+  // API đã lọc theo scope tab — chỉ ẩn cancelled/rejected nếu lọt vào.
   const orders = useMemo(() => {
-    const filtered =
-      tab === 'active'
-        ? visible.filter((o) => SELLER_ACTIVE.has(o.status) && o.status !== 'delivering' && o.status !== 'returning')
-        : tab === 'delivering'
-          ? visible.filter((o) => o.status === 'delivering' || o.status === 'returning')
-          : visible.filter((o) => SELLER_DONE.has(o.status));
+    const filtered = allOrders.filter((o) => !HIDDEN_ORDER.has(o.status));
     if (tab === 'delivering') return sortDeliveringOrders(filtered, deliverSort);
     return filtered;
-  }, [visible, tab, deliverSort]);
+  }, [allOrders, tab, deliverSort]);
 
   return (
     <div className="space-y-3">
@@ -129,7 +156,7 @@ export function SellerOrdersPage() {
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
+              onClick={() => handleTabChange(id)}
               className={cn(
                 'flex-1 py-2.5 text-sm font-medium transition-colors',
                 tab === id ? 'border-b-2 border-brand-green text-brand-green' : 'text-[var(--color-muted)]',
@@ -475,6 +502,18 @@ export function SellerOrdersPage() {
                 </Card>
               );
             })}
+          </div>
+        )}
+        {!isLoading && hasMore && (
+          <div className="border-t border-[var(--color-line)] px-4 py-3 text-center">
+            <button
+              type="button"
+              disabled={isFetching}
+              onClick={() => setPage((p) => p + 1)}
+              className="text-sm font-semibold text-brand-green disabled:opacity-50"
+            >
+              {isFetching ? 'Đang tải…' : 'Xem thêm'}
+            </button>
           </div>
         )}
       </div>

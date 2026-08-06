@@ -576,14 +576,18 @@ adminRouter.delete(
       newValue: null,
     });
 
-    await db.delete(profiles).where(eq(profiles.id, userId));
-
+    // Auth trước — nếu fail thì profile còn nguyên; tránh orphan Auth.
     const supabase = createSupabaseAdmin();
     const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
     if (authErr) {
-      // Profile đã xóa; auth còn sót thì ghi log nhưng vẫn coi là xóa thành công phía app.
-      console.error('[admin] delete auth user failed', userId, authErr.message);
+      throw new AppError(
+        502,
+        `Không xóa được tài khoản đăng nhập: ${authErr.message}`,
+        'AUTH_DELETE_FAILED',
+      );
     }
+
+    await db.delete(profiles).where(eq(profiles.id, userId));
 
     res.json({ data: { id: userId, deleted: true } });
   }),

@@ -17,15 +17,23 @@ export function SellerDashboard() {
   const accepting = shop?.acceptingOrders !== false;
   const { data } = useQuery({
     queryKey: ['seller-orders', 'summary'],
-    queryFn: () => ordersApi.list(1, 20, { view: 'summary' }),
+    queryFn: () => ordersApi.list(1, 10, { view: 'summary' }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
   });
   const orders = data?.data ?? [];
-  const pending = orders.filter((o) => o.status === 'pending').length;
-  const preparing = orders.filter((o) => ['accepted', 'preparing', 'picking_up', 'picked_up', 'washing'].includes(o.status)).length;
-  const delivering = orders.filter((o) => ['delivering', 'returning'].includes(o.status)).length;
-  const revenue = orders.filter((o) => o.status === 'completed').reduce((s, o) => s + Number(o.total), 0);
+  const counts = data?.meta?.counts;
+  const pending = counts?.pending ?? orders.filter((o) => o.status === 'pending').length;
+  const preparing =
+    counts?.preparing ??
+    orders.filter((o) =>
+      ['accepted', 'preparing', 'picking_up', 'picked_up', 'washing', 'waiting_price_confirmation'].includes(o.status),
+    ).length;
+  const delivering =
+    counts?.delivering ?? orders.filter((o) => ['delivering', 'returning'].includes(o.status)).length;
+  const revenue =
+    counts?.completedRevenue ??
+    orders.filter((o) => o.status === 'completed').reduce((s, o) => s + Number(o.total), 0);
 
   const toggleOpen = useMutation({
     mutationFn: (next: boolean) => sellerApi.updateShop({ acceptingOrders: next }),

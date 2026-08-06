@@ -1157,19 +1157,73 @@ export async function transitionOrder(
   return updated;
 }
 
+/** Nhóm trạng thái cho tab list buyer/seller — khớp FE. */
+export const ORDER_LIST_SCOPES = {
+  buyer_active: [
+    'pending',
+    'accepted',
+    'preparing',
+    'delivering',
+    'picking_up',
+    'picked_up',
+    'waiting_price_confirmation',
+    'washing',
+    'returning',
+  ],
+  buyer_done: ['completed'],
+  seller_active: [
+    'pending',
+    'accepted',
+    'preparing',
+    'picking_up',
+    'picked_up',
+    'waiting_price_confirmation',
+    'washing',
+  ],
+  seller_delivering: ['delivering', 'returning'],
+  seller_done: ['completed'],
+} as const;
+
+export type OrderListScope =
+  | 'active'
+  | 'delivering'
+  | 'done'
+  | 'all';
+
+function scopeStatuses(role: string, scope: OrderListScope): string[] | null {
+  if (scope === 'all') return null;
+  if (role === 'buyer') {
+    if (scope === 'active') return [...ORDER_LIST_SCOPES.buyer_active];
+    if (scope === 'done') return [...ORDER_LIST_SCOPES.buyer_done];
+    return null;
+  }
+  if (role === 'seller') {
+    if (scope === 'active') return [...ORDER_LIST_SCOPES.seller_active];
+    if (scope === 'delivering') return [...ORDER_LIST_SCOPES.seller_delivering];
+    if (scope === 'done') return [...ORDER_LIST_SCOPES.seller_done];
+  }
+  return null;
+}
+
 export async function getOrdersForUser(
   db: Database,
   userId: string,
   role: string,
   page = 1,
   limit = 20,
+  scope: OrderListScope = 'all',
 ) {
   const offset = (page - 1) * limit;
+  const statuses = scopeStatuses(role, scope);
+
   if (role === 'buyer') {
+    const where = statuses
+      ? and(eq(orders.buyerId, userId), inArray(orders.status, statuses))
+      : eq(orders.buyerId, userId);
     return db
       .select()
       .from(orders)
-      .where(eq(orders.buyerId, userId))
+      .where(where)
       .orderBy(desc(orders.createdAt))
       .limit(limit)
       .offset(offset);
@@ -1177,16 +1231,68 @@ export async function getOrdersForUser(
   if (role === 'seller') {
     const [seller] = await db.select().from(sellers).where(eq(sellers.userId, userId)).limit(1);
     if (!seller) return [];
+    const where = statuses
+      ? and(eq(orders.sellerId, seller.id), inArray(orders.status, statuses))
+      : eq(orders.sellerId, seller.id);
     return db
       .select()
       .from(orders)
-      .where(eq(orders.sellerId, seller.id))
+      .where(where)
       .orderBy(desc(orders.createdAt))
       .limit(limit)
       .offset(offset);
   }
   // Admin dùng /api/admin/orders — không liệt kê toàn hệ thống tại đây.
   return [];
+}
+
+/** Đếm theo tab — badge UI không phụ thuộc trang đã tải. */
+export async function countOrdersByScope(db: Database, userId: string, role: string) {
+  if (role === 'buyer') {
+    const [row] = await db
+      .select({
+        active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','delivering','picking_up','picked_up','waiting_price_confirmation','washing','returning')), 0)::int`,
+        done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
+      })
+      .from(orders)
+      .where(eq(orders.buyerId, userId));
+    return {
+      active: Number(row?.active ?? 0),
+      delivering: 0,
+      done: Number(row?.done ?? 0),
+      pending: 0,
+      preparing: 0,
+      completedRevenue: 0,
+    };
+  }
+
+  if (role === 'seller') {
+    const [seller] = await db.select().from(sellers).where(eq(sellers.userId, userId)).limit(1);
+    if (!seller) {
+      return { active: 0, delivering: 0, done: 0, pending: 0, preparing: 0, completedRevenue: 0 };
+    }
+    const [row] = await db
+      .select({
+        active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
+        delivering: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('delivering','returning')), 0)::int`,
+        done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
+        pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
+        preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
+        completedRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed'), 0)::float8`,
+      })
+      .from(orders)
+      .where(eq(orders.sellerId, seller.id));
+    return {
+      active: Number(row?.active ?? 0),
+      delivering: Number(row?.delivering ?? 0),
+      done: Number(row?.done ?? 0),
+      pending: Number(row?.pending ?? 0),
+      preparing: Number(row?.preparing ?? 0),
+      completedRevenue: Number(row?.completedRevenue ?? 0),
+    };
+  }
+
+  return { active: 0, delivering: 0, done: 0, pending: 0, preparing: 0, completedRevenue: 0 };
 }
 
 export async function enrichOrdersList(

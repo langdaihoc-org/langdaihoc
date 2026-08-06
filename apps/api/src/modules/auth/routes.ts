@@ -22,6 +22,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import {
   setSessionCookies,
   setRecoveryCookies,
+  clearRecoveryCookies,
   clearSessionCookies,
   wantsRememberMe,
 } from '../../lib/session.js';
@@ -29,6 +30,8 @@ import { assertUploadedImageUrl } from '../../lib/storage.js';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
+  RECOVERY_ACCESS_COOKIE,
+  RECOVERY_REFRESH_COOKIE,
   createSupabaseAnon,
 } from '../../lib/supabase.js';
 import { getFrontendUrl } from '../../lib/env.js';
@@ -572,11 +575,11 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const input = verifyRecoverySchema.parse(req.body);
     const supabaseAnon = createSupabaseAnon();
-    const accessCookie = req.cookies?.[ACCESS_TOKEN_COOKIE] as string | undefined;
+    const recoveryCookie = req.cookies?.[RECOVERY_ACCESS_COOKIE] as string | undefined;
 
     // StrictMode / reload: token OTP chỉ dùng 1 lần — nếu cookie recovery còn hạn thì OK.
-    if (accessCookie) {
-      const { data: existing } = await supabaseAnon.auth.getUser(accessCookie);
+    if (recoveryCookie) {
+      const { data: existing } = await supabaseAnon.auth.getUser(recoveryCookie);
       if (existing.user) {
         res.json({ ok: true });
         return;
@@ -671,8 +674,8 @@ authRouter.post(
   authLimiter,
   asyncHandler(async (req, res) => {
     const input = resetPasswordSchema.parse(req.body);
-    const accessToken = req.cookies?.[ACCESS_TOKEN_COOKIE] as string | undefined;
-    const refreshToken = (req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined) ?? '';
+    const accessToken = req.cookies?.[RECOVERY_ACCESS_COOKIE] as string | undefined;
+    const refreshToken = (req.cookies?.[RECOVERY_REFRESH_COOKIE] as string | undefined) ?? '';
 
     if (!accessToken) {
       throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
@@ -682,7 +685,7 @@ authRouter.post(
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const { data: userData, error: userError } = await supabaseAnon.auth.getUser(accessToken);
     if (userError || !userData.user) {
-      clearSessionCookies(res);
+      clearRecoveryCookies(res);
       throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
     }
 
@@ -691,7 +694,7 @@ authRouter.post(
       refresh_token: refreshToken,
     });
     if (sessionError) {
-      clearSessionCookies(res);
+      clearRecoveryCookies(res);
       throw new AppError(400, 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 'INVALID_TOKEN');
     }
 
@@ -703,6 +706,8 @@ authRouter.post(
     // Thu hồi mọi phiên cũ (kể cả thiết bị khác) sau khi đổi mật khẩu.
     await supabaseAdmin.auth.admin.signOut(accessToken, 'global').catch(() => undefined);
     await supabaseAnon.auth.signOut().catch(() => undefined);
+    clearRecoveryCookies(res);
+    // Phòng trường hợp trình duyệt còn phiên đăng nhập thường cũ trên cùng máy.
     clearSessionCookies(res);
 
     res.json({

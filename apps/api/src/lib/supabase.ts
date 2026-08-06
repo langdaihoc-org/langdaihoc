@@ -29,6 +29,10 @@ export function createSupabaseAnon() {
 
 export const ACCESS_TOKEN_COOKIE = 'ldh_access_token';
 export const REFRESH_TOKEN_COOKIE = 'ldh_refresh_token';
+/** Cookie riêng cho phiên recovery (quên mật khẩu) — KHÔNG dùng chung với session
+ * đăng nhập thường, để requireAuth không cấp quyền truy cập API đầy đủ từ link reset. */
+export const RECOVERY_ACCESS_COOKIE = 'ldh_recovery_access';
+export const RECOVERY_REFRESH_COOKIE = 'ldh_recovery_refresh';
 
 const sameSiteEnv = process.env.COOKIE_SAMESITE === 'none' ? 'none' : 'lax';
 const secureRequested =

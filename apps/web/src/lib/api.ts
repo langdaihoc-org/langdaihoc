@@ -155,12 +155,31 @@ export const cartApi = {
 };
 
 export const ordersApi = {
-  list: (page = 1, limit = 20, opts?: { view?: 'summary' }) => {
+  list: (
+    page = 1,
+    limit = 20,
+    opts?: { view?: 'summary'; scope?: 'active' | 'delivering' | 'done' | 'all' },
+  ) => {
     const q = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (opts?.view) q.set('view', opts.view);
-    return api<{ data: Order[]; meta: { page: number; limit: number; hasMore: boolean } }>(
-      `/api/orders?${q}`,
-    );
+    if (opts?.scope && opts.scope !== 'all') q.set('scope', opts.scope);
+    return api<{
+      data: Order[];
+      meta: {
+        page: number;
+        limit: number;
+        hasMore: boolean;
+        scope?: string;
+        counts?: {
+          active: number;
+          delivering: number;
+          done: number;
+          pending?: number;
+          preparing?: number;
+          completedRevenue?: number;
+        };
+      };
+    }>(`/api/orders?${q}`);
   },
   pulse: () =>
     api<{

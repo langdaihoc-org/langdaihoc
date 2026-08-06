@@ -8,9 +8,7 @@ import { StatusBadge } from '@/components/ui/brand';
 import { cn } from '@/lib/utils';
 import { QueryErrorState } from '@/components/ui/query-state';
 
-const ACTIVE = new Set(['pending','accepted','preparing','delivering','picking_up','picked_up','waiting_price_confirmation','washing','returning']);
-const DONE = new Set(['completed']);
-const HIDDEN_ORDER = new Set(['cancelled','rejected','needs_support']);
+const HIDDEN_ORDER = new Set(['cancelled', 'rejected', 'needs_support']);
 
 const PAGE_SIZE = 20;
 
@@ -19,10 +17,11 @@ export function OrdersPage() {
   const [page, setPage] = useState(1);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [counts, setCounts] = useState({ active: 0, done: 0 });
 
   const { data: pageData, isLoading, isError, refetch, isFetching, dataUpdatedAt } = useQuery({
-    queryKey: ['orders', page],
-    queryFn: () => ordersApi.list(page, PAGE_SIZE),
+    queryKey: ['orders', tab, page],
+    queryFn: () => ordersApi.list(page, PAGE_SIZE, { scope: tab }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
   });
@@ -35,26 +34,26 @@ export function OrdersPage() {
       return page === 1 ? pageData.data : [...prev, ...fresh];
     });
     setHasMore(pageData.meta?.hasMore ?? false);
+    if (pageData.meta?.counts) {
+      setCounts({
+        active: pageData.meta.counts.active ?? 0,
+        done: pageData.meta.counts.done ?? 0,
+      });
+    }
   }, [pageData, page]);
 
-  // Reset khi tab đổi
   const handleTabChange = (next: 'active' | 'done') => {
+    if (next === tab) return;
     setTab(next);
     setPage(1);
     setAllOrders([]);
+    setHasMore(false);
   };
 
-  const visible = useMemo(() => allOrders.filter((o) => !HIDDEN_ORDER.has(o.status)), [allOrders]);
-
-  const counts = useMemo(() => ({
-    active: visible.filter((o) => ACTIVE.has(o.status)).length,
-    done: visible.filter((o) => DONE.has(o.status)).length,
-  }), [visible]);
-
-  const orders = useMemo(() => {
-    if (tab === 'active') return visible.filter((o) => ACTIVE.has(o.status));
-    return visible.filter((o) => DONE.has(o.status));
-  }, [visible, tab]);
+  const orders = useMemo(
+    () => allOrders.filter((o) => !HIDDEN_ORDER.has(o.status)),
+    [allOrders],
+  );
 
   return (
     <div className="mx-auto max-w-2xl">

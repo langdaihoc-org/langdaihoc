@@ -34,7 +34,7 @@ export function ConfirmDialog({
       role="alertdialog"
       titleId={titleId}
       describedById={description ? descId : undefined}
-      zIndexClass="z-[90]"
+      zIndexClass="z-[110]"
       panelClassName="w-full max-w-sm rounded-2xl bg-white p-5 shadow-[var(--shadow-hover)]"
     >
       <div

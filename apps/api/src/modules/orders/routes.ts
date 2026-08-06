@@ -28,6 +28,7 @@ import {
   transitionOrder,
   getOrdersForUser,
   enrichOrdersList,
+  countOrdersByScope,
   isPgUniqueViolation,
 } from '../../services/commerce.js';
 import { formatOrderSummary } from '@langdaihoc/shared';
@@ -228,9 +229,17 @@ ordersRouter.get(
     const page = Math.max(1, Number(req.query.page ?? 1));
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
     const summaryOnly = req.query.view === 'summary';
+    const rawScope = typeof req.query.scope === 'string' ? req.query.scope : 'all';
+    const scope =
+      rawScope === 'active' || rawScope === 'delivering' || rawScope === 'done' || rawScope === 'all'
+        ? rawScope
+        : 'all';
     const db = req.app.locals.db;
     // Tải thêm 1 để biết còn trang sau không
-    const rows = await getOrdersForUser(db, req.user!.id, req.user!.role, page, limit + 1);
+    const [rows, counts] = await Promise.all([
+      getOrdersForUser(db, req.user!.id, req.user!.role, page, limit + 1, scope),
+      countOrdersByScope(db, req.user!.id, req.user!.role),
+    ]);
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const isSeller = req.user!.role === 'seller';
@@ -238,8 +247,9 @@ ordersRouter.get(
       includeBuyer: isSeller,
       includeDetails: !summaryOnly,
     });
+    const meta = { page, limit, hasMore, scope, counts };
     if (summaryOnly) {
-      res.json({ data, meta: { page, limit, hasMore } });
+      res.json({ data, meta });
       return;
     }
     const supabaseAdmin = req.app.locals.supabaseAdmin;
@@ -260,7 +270,7 @@ ordersRouter.get(
         imageUrl: resigned[proofCursor++] ?? p.imageUrl,
       }));
     }
-    res.json({ data, meta: { page, limit, hasMore } });
+    res.json({ data, meta });
   }),
 );
 
@@ -287,7 +297,11 @@ ordersRouter.get(
               .where(eq(shipProxyOrderDetails.orderId, order.id))
               .limit(1)
           : Promise.resolve([] as Awaited<ReturnType<typeof db.select>>),
-        db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, order.id)),
+        db
+          .select()
+          .from(orderStatusHistory)
+          .where(eq(orderStatusHistory.orderId, order.id))
+          .orderBy(asc(orderStatusHistory.createdAt)),
         db.select().from(paymentProofs).where(eq(paymentProofs.orderId, order.id)),
         db.select().from(reviews).where(eq(reviews.orderId, order.id)).limit(1),
         db.select().from(complaints).where(eq(complaints.orderId, order.id)).limit(1),

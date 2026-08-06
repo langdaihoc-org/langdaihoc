@@ -3,6 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
+  RECOVERY_ACCESS_COOKIE,
+  RECOVERY_REFRESH_COOKIE,
   COOKIE_OPTIONS,
 } from '../lib/supabase.js';
 
@@ -35,17 +37,25 @@ export function setSessionCookies(res: Response, session: Session, rememberMe = 
   }
 }
 
-/** Cookie ngắn hạn chỉ để đổi mật khẩu sau verify-recovery — không trả token ra JSON. */
+/**
+ * Cookie ngắn hạn, TÁCH RIÊNG khỏi session đăng nhập thường — chỉ dùng để gọi
+ * POST /reset-password. Không dùng tên cookie session (ldh_access_token/ldh_refresh_token)
+ * để requireAuth không cấp quyền truy cập API đầy đủ chỉ từ 1 link reset mật khẩu.
+ */
 export function setRecoveryCookies(res: Response, session: Session) {
-  res.cookie(ACCESS_TOKEN_COOKIE, session.access_token, {
+  res.cookie(RECOVERY_ACCESS_COOKIE, session.access_token, {
     ...COOKIE_OPTIONS,
     maxAge: ACCESS_MAX_AGE_MS,
   });
-  res.cookie(REFRESH_TOKEN_COOKIE, session.refresh_token, {
+  res.cookie(RECOVERY_REFRESH_COOKIE, session.refresh_token, {
     ...COOKIE_OPTIONS,
     maxAge: ACCESS_MAX_AGE_MS,
   });
-  res.clearCookie(REMEMBER_COOKIE, COOKIE_OPTIONS);
+}
+
+export function clearRecoveryCookies(res: Response) {
+  res.clearCookie(RECOVERY_ACCESS_COOKIE, COOKIE_OPTIONS);
+  res.clearCookie(RECOVERY_REFRESH_COOKIE, COOKIE_OPTIONS);
 }
 
 export function clearSessionCookies(res: Response) {
