@@ -24,7 +24,10 @@ export function OAuthCallbackPage() {
   const [error, setError] = useState('');
   const startedRef = useRef(false);
   const handlersRef = useRef({ navigate, toast, refetch, setSessionUser });
-  handlersRef.current = { navigate, toast, refetch, setSessionUser };
+
+  useEffect(() => {
+    handlersRef.current = { navigate, toast, refetch, setSessionUser };
+  }, [navigate, toast, refetch, setSessionUser]);
 
   useEffect(() => {
     // Chỉ đổi code một lần: URL bị dọn ngay sau khi đọc, lần chạy sau sẽ báo "thiếu mã".
