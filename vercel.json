@@ -5,15 +5,39 @@
   "framework": null,
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/",
       "has": [{ "type": "host", "value": "langdaihoc.vercel.app" }],
-      "destination": "https://langdaihoc.xyz/:path*",
+      "destination": "https://langdaihoc.xyz/",
       "permanent": true
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "langdaihoc.vercel.app" }],
+      "destination": "https://langdaihoc.xyz/$1",
+      "permanent": true
+    },
+    {
+      "source": "/",
       "has": [{ "type": "host", "value": "langdaihoc-langdaihoc.vercel.app" }],
-      "destination": "https://langdaihoc.xyz/:path*",
+      "destination": "https://langdaihoc.xyz/",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "langdaihoc-langdaihoc.vercel.app" }],
+      "destination": "https://langdaihoc.xyz/$1",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "langdaihoc-ldhwork-langdaihoc.vercel.app" }],
+      "destination": "https://langdaihoc.xyz/",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "langdaihoc-ldhwork-langdaihoc.vercel.app" }],
+      "destination": "https://langdaihoc.xyz/$1",
       "permanent": true
     }
   ],

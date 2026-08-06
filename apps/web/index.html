@@ -16,6 +16,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="langdaihoc" />
     <title>langdaihoc — Ăn uống · Giặt sạch · Ship hộ</title>
+    <script>
+      (function () {
+        if (location.hostname.endsWith('.vercel.app')) {
+          location.replace('https://langdaihoc.xyz' + location.pathname + location.search + location.hash);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
