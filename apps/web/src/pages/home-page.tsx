@@ -90,57 +90,60 @@ export function HomePage() {
       )}
 
       {/* Quick actions */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <Link to="/food" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-food p-6 text-white shadow-md shadow-sky-500/25">
-            <div className="relative z-10 flex flex-col gap-2 text-left">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
-                <UtensilsCrossed className="size-3.5" /> Ăn uống
+      <section className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+        {(
+          [
+            {
+              to: '/food',
+              title: 'Đặt đồ ăn',
+              Icon: UtensilsCrossed,
+              tile: 'svc-tile-food',
+              icon: 'svc-icon-food',
+              ring: 'hover:border-sky-300/80',
+            },
+            {
+              to: '/laundry',
+              title: 'Đặt giặt sấy',
+              Icon: WashingMachine,
+              tile: 'svc-tile-laundry',
+              icon: 'svc-icon-laundry',
+              ring: 'hover:border-cyan-300/80',
+            },
+            {
+              to: '/ship',
+              title: 'Nhận ship hộ',
+              Icon: Bike,
+              tile: 'svc-tile-ship',
+              icon: 'svc-icon-ship',
+              ring: 'hover:border-blue-300/80',
+            },
+          ] as const
+        ).map(({ to, title, Icon, tile, icon, ring }) => (
+          <Link
+            key={to}
+            to={to}
+            className={`group relative overflow-hidden rounded-[1.25rem] border border-[var(--color-line)] ${tile} p-4 shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-hover)] ${ring} sm:min-h-[11.5rem] sm:p-5`}
+          >
+            {/* soft glow blob */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-white/70 blur-2xl transition-opacity duration-500 group-hover:opacity-90 sm:size-44"
+            />
+            <div className="relative z-10 flex items-center gap-4 sm:h-full sm:flex-col sm:items-stretch sm:justify-between sm:gap-6">
+              <span
+                className={`grid size-14 shrink-0 place-items-center rounded-2xl text-white shadow-md shadow-sky-900/10 transition-transform duration-500 group-hover:scale-105 group-hover:-rotate-3 sm:size-16 ${icon}`}
+              >
+                <Icon className="size-7 sm:size-8" strokeWidth={1.75} />
               </span>
-              <h2 className="text-xl font-bold sm:text-2xl">Đặt đồ ăn</h2>
-              <p className="max-w-60 text-sm text-white/90">
-                Quán quanh Làng ĐH, giao tại tòa hoặc rào.
-              </p>
-              <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold">
-                Xem quán <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-              </span>
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3 sm:items-end">
+                <h2 className="text-lg font-bold tracking-tight text-[var(--color-ink)] sm:text-xl">{title}</h2>
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-line)] bg-white/80 text-brand-orange-dark transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-orange-dark group-hover:text-white">
+                  <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                </span>
+              </div>
             </div>
-          </div>
-        </Link>
-
-        <Link to="/laundry" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-laundry p-6 text-white shadow-md shadow-cyan-500/20">
-            <div className="relative z-10 flex flex-col gap-2 text-left">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
-                <WashingMachine className="size-3.5" /> Giặt đồ
-              </span>
-              <h2 className="text-xl font-bold sm:text-2xl">Đặt lịch giặt</h2>
-              <p className="max-w-60 text-sm text-white/90">
-                Lấy đồ, giặt sấy và giao lại.
-              </p>
-              <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold">
-                Xem tiệm <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-              </span>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/ship" className="group">
-          <div className="relative h-full overflow-hidden rounded-2xl bg-grad-ship p-6 text-white shadow-md shadow-blue-500/25">
-            <div className="relative z-10 flex flex-col gap-2 text-left">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-medium">
-                <Bike className="size-3.5" /> Nhận đồ ship hộ
-              </span>
-              <h2 className="text-xl font-bold sm:text-2xl">Nhận ship hộ</h2>
-              <p className="max-w-60 text-sm text-white/90">
-                Nhờ lấy hàng và nhận lại tại KTX.
-              </p>
-              <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold">
-                Đặt nhận hộ <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-              </span>
-            </div>
-          </div>
-        </Link>
+          </Link>
+        ))}
       </section>
 
       {/* Categories */}
