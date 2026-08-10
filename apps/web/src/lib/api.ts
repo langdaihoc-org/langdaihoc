@@ -212,11 +212,11 @@ export const ordersApi = {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     }),
   updateStatus: (id: string, status: string, note?: string) =>
-    api(`/api/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }),
+    api<{ data: Order }>(`/api/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }),
   confirmPrice: (id: string) => api(`/api/orders/${id}/confirm-price`, { method: 'POST' }),
   rejectPrice: (id: string) => api(`/api/orders/${id}/reject-price`, { method: 'POST' }),
   submitQuote: (id: string, body: unknown) =>
-    api(`/api/orders/${id}/laundry-quote`, { method: 'POST', body: JSON.stringify(body) }),
+    api<{ data: Order }>(`/api/orders/${id}/laundry-quote`, { method: 'POST', body: JSON.stringify(body) }),
   review: (id: string, body: unknown) =>
     api(`/api/orders/${id}/review`, { method: 'POST', body: JSON.stringify(body) }),
   updateReview: (id: string, body: unknown) =>
@@ -237,7 +237,7 @@ export const ordersApi = {
     api(`/api/orders/${id}/payment-proof`, { method: 'POST', body: JSON.stringify({ imageUrl }) }),
   verifyPayment: (id: string, approved: boolean, rejectionReason?: string) =>
     api(`/api/orders/${id}/verify-payment`, { method: 'POST', body: JSON.stringify({ approved, rejectionReason }) }),
-  markPaid: (id: string) => api(`/api/orders/${id}/mark-paid`, { method: 'POST' }),
+  markPaid: (id: string) => api<{ data: Order }>(`/api/orders/${id}/mark-paid`, { method: 'POST' }),
   bankInfo: (sellerId: string) => api<{ data: BankAccount | null }>(`/api/orders/bank-info/${sellerId}`),
 };
 

@@ -13,21 +13,32 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import {
   NEXT_STATUS,
+  SELLER_ACTIVE,
   HIDDEN_ORDER,
   paymentMethodLabel,
   paymentStatusLabel,
   type DeliverSort,
   DELIVER_SORT_OPTIONS,
   sortDeliveringOrders,
-  invalidateSellerOrders,
+  refreshSellerOrderMeta,
 } from './seller-shared';
 
 const PAGE_SIZE = 20;
 
+type OrderTab = 'active' | 'delivering' | 'done';
+
+function tabForStatus(status: string): OrderTab | 'hidden' {
+  if (HIDDEN_ORDER.has(status)) return 'hidden';
+  if (status === 'delivering' || status === 'returning') return 'delivering';
+  if (status === 'completed') return 'done';
+  if (SELLER_ACTIVE.has(status)) return 'active';
+  return 'hidden';
+}
+
 export function SellerOrdersPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<'active' | 'delivering' | 'done'>('active');
+  const [tab, setTab] = useState<OrderTab>('active');
   const [deliverSort, setDeliverSort] = useState<DeliverSort>('time');
   const [page, setPage] = useState(1);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
@@ -43,9 +54,10 @@ export function SellerOrdersPage() {
   useEffect(() => {
     if (!data) return;
     setAllOrders((prev) => {
+      if (page === 1) return data.data;
       const existing = new Set(prev.map((o) => o.id));
       const fresh = data.data.filter((o) => !existing.has(o.id));
-      return page === 1 ? data.data : [...prev, ...fresh];
+      return [...prev, ...fresh];
     });
     setHasMore(data.meta?.hasMore ?? false);
     if (data.meta?.counts) {
@@ -57,7 +69,7 @@ export function SellerOrdersPage() {
     }
   }, [data, page]);
 
-  const handleTabChange = (next: 'active' | 'delivering' | 'done') => {
+  const handleTabChange = (next: OrderTab) => {
     if (next === tab) return;
     setTab(next);
     setPage(1);
@@ -65,9 +77,29 @@ export function SellerOrdersPage() {
     setHasMore(false);
   };
 
-  const resetList = () => {
-    setPage(1);
-    setAllOrders([]);
+  /** Cập nhật UI tại chỗ — đơn rời tab hiện tại thì biến mất khỏi list, badge đổi ngay. */
+  const applyLocalOrderUpdate = (orderId: string, patch: Partial<Order>) => {
+    const cur = allOrders.find((o) => o.id === orderId);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    const dest = tabForStatus(next.status);
+    const leavesTab = dest !== tab;
+
+    setAllOrders((prev) => {
+      if (!prev.some((o) => o.id === orderId)) return prev;
+      if (leavesTab) return prev.filter((o) => o.id !== orderId);
+      return prev.map((o) => (o.id === orderId ? { ...o, ...patch } : o));
+    });
+
+    if (leavesTab) {
+      setCounts((c) => ({
+        ...c,
+        [tab]: Math.max(0, c[tab] - 1),
+        ...(dest === 'active' || dest === 'delivering' || dest === 'done'
+          ? { [dest]: c[dest] + 1 }
+          : {}),
+      }));
+    }
   };
 
   const [quoteOrder, setQuoteOrder] = useState<string | null>(null);
@@ -77,10 +109,16 @@ export function SellerOrdersPage() {
   const [confirmAction, setConfirmAction] = useState<null | { type: 'reject' | 'reject_ck'; id: string; code: string }>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const statusMut = useMutation({
-    mutationFn: ({ id, status, note }: { id: string; status: string; note?: string }) => ordersApi.updateStatus(id, status, note),
-    onSuccess: () => {
-      resetList();
-      invalidateSellerOrders(qc);
+    mutationFn: ({ id, status, note }: { id: string; status: string; note?: string }) =>
+      ordersApi.updateStatus(id, status, note),
+    onSuccess: (res, vars) => {
+      const updated = res?.data;
+      applyLocalOrderUpdate(vars.id, {
+        status: updated?.status ?? vars.status,
+        ...(updated?.paymentStatus ? { paymentStatus: updated.paymentStatus } : {}),
+        ...(updated?.total != null ? { total: updated.total } : {}),
+      });
+      refreshSellerOrderMeta(qc);
       setConfirmAction(null);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được trạng thái', 'error'),
@@ -98,9 +136,13 @@ export function SellerOrdersPage() {
         ...(quoteNote.trim() && { sellerNote: quoteNote.trim() }),
       });
     },
-    onSuccess: () => {
-      resetList();
-      invalidateSellerOrders(qc);
+    onSuccess: (res, id) => {
+      const updated = res?.data;
+      applyLocalOrderUpdate(id, {
+        status: updated?.status ?? 'waiting_price_confirmation',
+        ...(updated?.total != null ? { total: updated.total } : {}),
+      });
+      refreshSellerOrderMeta(qc);
       setQuoteOrder(null);
       setQuoteFinalPrice('');
       setQuoteQty('');
@@ -110,18 +152,20 @@ export function SellerOrdersPage() {
   });
   const verifyMut = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) => ordersApi.verifyPayment(id, approved),
-    onSuccess: () => {
-      resetList();
-      invalidateSellerOrders(qc);
+    onSuccess: (_res, vars) => {
+      applyLocalOrderUpdate(vars.id, {
+        paymentStatus: vars.approved ? 'verified' : 'unpaid',
+      });
+      refreshSellerOrderMeta(qc);
       setConfirmAction(null);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được thanh toán', 'error'),
   });
   const paidMut = useMutation({
     mutationFn: (id: string) => ordersApi.markPaid(id),
-    onSuccess: () => {
-      resetList();
-      invalidateSellerOrders(qc);
+    onSuccess: (_res, id) => {
+      applyLocalOrderUpdate(id, { paymentStatus: 'paid' });
+      refreshSellerOrderMeta(qc);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không đánh dấu đã thu tiền', 'error'),
   });
@@ -133,16 +177,16 @@ export function SellerOrdersPage() {
     return filtered;
   }, [allOrders, tab, deliverSort]);
 
+  const showInitialLoading = isLoading && allOrders.length === 0;
+
   return (
     <div className="space-y-3">
       <div className="flex items-end justify-between gap-2">
         <h1 className="font-bold">Quản lý đơn hàng</h1>
         <p className="text-[11px] text-[var(--color-muted)]">
-          {isFetching
-            ? 'Đang cập nhật…'
-            : dataUpdatedAt
-              ? `Theo dõi nhẹ · ${new Date(dataUpdatedAt).toLocaleTimeString('vi')}`
-              : 'Theo dõi nhẹ · chỉ tải lại khi có thay đổi'}
+          {dataUpdatedAt
+            ? `Theo dõi nhẹ · ${new Date(dataUpdatedAt).toLocaleTimeString('vi')}`
+            : 'Theo dõi nhẹ · chỉ tải lại khi có thay đổi'}
         </p>
       </div>
 
@@ -167,7 +211,7 @@ export function SellerOrdersPage() {
           ))}
         </div>
 
-        {tab === 'delivering' && !isLoading && orders.length > 0 && (
+        {tab === 'delivering' && !showInitialLoading && orders.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-line)] bg-black/[0.015] px-3 py-2">
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-muted)]">
               <ArrowUpDown className="size-3.5" />
@@ -193,7 +237,7 @@ export function SellerOrdersPage() {
           </div>
         )}
 
-        {isLoading ? (
+        {showInitialLoading ? (
           <p className="py-10 text-center text-sm text-[var(--color-muted)]">Đang tải...</p>
         ) : orders.length === 0 ? (
           <div className="py-12 text-center">
@@ -504,7 +548,7 @@ export function SellerOrdersPage() {
             })}
           </div>
         )}
-        {!isLoading && hasMore && (
+        {!showInitialLoading && hasMore && (
           <div className="border-t border-[var(--color-line)] px-4 py-3 text-center">
             <button
               type="button"

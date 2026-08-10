@@ -49,6 +49,12 @@ export function invalidateSellerOrders(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ['seller-orders-pulse'] });
 }
 
+/** Chỉ refresh badge/pulse — không xóa list đang xem (tránh giật khi bấm nút). */
+export function refreshSellerOrderMeta(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['seller-orders-pulse'] });
+  void qc.invalidateQueries({ queryKey: ['seller-orders', 'summary'] });
+}
+
 export const NEXT_STATUS: Record<string, Record<string, string>> = {
   food: { pending: 'accepted', accepted: 'preparing', preparing: 'delivering', delivering: 'completed' },
   ship_proxy: { pending: 'accepted', accepted: 'preparing', preparing: 'picked_up', picked_up: 'delivering', delivering: 'completed' },
