@@ -719,8 +719,8 @@ ordersRouter.post(
     if (order.paymentMethod !== 'cash') {
       throw new AppError(400, 'Đơn này không thanh toán tiền mặt', 'INVALID_PAYMENT_METHOD');
     }
-    if (order.status === 'cancelled' || order.status === 'rejected') {
-      throw new AppError(409, 'Đơn đã hủy, không thể thu tiền', 'ORDER_CLOSED');
+    if (order.status !== 'delivering' && order.status !== 'returning') {
+      throw new AppError(400, 'Chỉ thu tiền mặt khi đang giao', 'INVALID_STATUS');
     }
     const [updated] = await db
       .update(orders)

@@ -474,9 +474,6 @@ export function SellerOrdersPage() {
                             </Button>
                           </>
                         )}
-                        {o.paymentMethod === 'cash' && o.paymentStatus === 'unpaid' && o.status !== 'cancelled' && (
-                          <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => paidMut.mutate(o.id)}>Đã thu tiền mặt</Button>
-                        )}
                       </div>
                     )}
                     {tab === 'delivering' && (
