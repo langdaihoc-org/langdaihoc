@@ -223,7 +223,7 @@ sellerRouter.post(
         categoryId: z.string().uuid().nullable().optional(),
         categoryIds: z.array(z.string().uuid()).optional(),
         imageUrl: z.string().nullable().optional(),
-        imageUrls: z.array(z.string()).optional(),
+        imageUrls: z.array(z.string()).max(30).optional(),
         optionGroups: z.array(optionGroupInput).optional(),
       })
       .parse(req.body);
@@ -272,7 +272,7 @@ sellerRouter.patch(
         isAvailable: z.boolean().optional(),
         description: z.string().nullable().optional(),
         imageUrl: z.string().nullable().optional(),
-        imageUrls: z.array(z.string()).optional(),
+        imageUrls: z.array(z.string()).max(30).optional(),
         prepTimeMinutes: z.number().int().positive().optional(),
         categoryId: z.string().uuid().nullable().optional(),
         categoryIds: z.array(z.string().uuid()).optional(),
@@ -603,7 +603,7 @@ const postInputSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(4000).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
-  imageUrls: z.array(z.string().min(1)).max(10).optional().nullable(),
+  imageUrls: z.array(z.string().min(1)).max(30).optional().nullable(),
   ctaLabel: z.string().max(80).optional().nullable(),
   linkUrl: z
     .string()

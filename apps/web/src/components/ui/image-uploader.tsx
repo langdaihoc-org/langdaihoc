@@ -156,7 +156,7 @@ export function MultiImageUploader({
   onUpload,
   onUploadingChange,
   disabled,
-  max = 10,
+  max = 30,
 }: {
   label?: string;
   value: string[];

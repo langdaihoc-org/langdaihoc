@@ -297,7 +297,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
             value={imageUrls}
             onChange={setImageUrls}
             onUploadingChange={setImageUploading}
-            max={6}
+            max={30}
             onUpload={(file) => uploadSellerImage(sellerApi.uploadImage, file, 'food-images')}
           />
 

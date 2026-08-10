@@ -817,7 +817,7 @@ ordersRouter.post(
       .object({
         reason: z.string().min(3),
         description: z.string().min(10),
-        evidenceUrls: z.array(z.string()).optional(),
+        evidenceUrls: z.array(z.string()).max(10).optional(),
       })
       .parse(req.body);
     const db = req.app.locals.db;

@@ -499,11 +499,11 @@ export function OrderDetailPage() {
               </p>
               <div className="mt-3">
                 <MultiImageUploader
-                  label="Đính kèm ảnh minh chứng (tuỳ chọn, tối đa 5)"
+                  label="Đính kèm ảnh minh chứng (tuỳ chọn, tối đa 10)"
                   value={complaintImages}
                   onChange={setComplaintImages}
                   onUpload={(file) => uploadBuyerImage(buyerApi.uploadImage, file, id!)}
-                  max={5}
+                  max={10}
                 />
               </div>
               <Button
