@@ -72,8 +72,8 @@ export function PrivacyPage() {
             <Strong>ban vận hành nền tảng langdaihoc</Strong> là đơn vị kiểm soát dữ liệu cá nhân.
           </p>
           <p>
-            Kênh tiếp nhận yêu cầu về dữ liệu cá nhân: <EmailLink />. Khu vực hoạt động: Làng Đại
-            Học, Thành phố Hồ Chí Minh, Việt Nam.
+            Kênh tiếp nhận yêu cầu về dữ liệu cá nhân: <EmailLink />. Khu vực hoạt động: làng đại
+            học.
           </p>
         </Section>
 
@@ -344,7 +344,7 @@ export function PrivacyPage() {
             <br />
             Email: <EmailLink />
             <br />
-            Khu vực hoạt động: Làng Đại Học, Thành phố Hồ Chí Minh, Việt Nam
+            Khu vực hoạt động: làng đại học
             <br />
             Website:{' '}
             <a

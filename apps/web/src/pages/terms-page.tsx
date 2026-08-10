@@ -96,7 +96,7 @@ export function TermsPage() {
 
         <Section title="2. Bản chất dịch vụ">
           <p>
-            langdaihoc vận hành nền tảng trung gian công nghệ phục vụ khu vực Làng Đại Học và vùng
+            langdaihoc vận hành nền tảng trung gian công nghệ phục vụ làng đại học và vùng
             lân cận. Chúng tôi không trực tiếp sản xuất đồ ăn, vận hành tiệm giặt hay thực hiện nhận
             ship hộ, trừ khi có thông báo rõ ràng khác.
           </p>
@@ -298,7 +298,7 @@ export function TermsPage() {
             <br />
             Email: <EmailLink />
             <br />
-            Khu vực hoạt động: Làng Đại Học, Thành phố Hồ Chí Minh, Việt Nam
+            Khu vực hoạt động: làng đại học
             <br />
             Website:{' '}
             <a

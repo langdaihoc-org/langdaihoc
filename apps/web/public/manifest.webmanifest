@@ -2,7 +2,7 @@
   "id": "/",
   "name": "langdaihoc",
   "short_name": "langdaihoc",
-  "description": "Đặt đồ ăn, giặt đồ và ship hộ quanh khu KTX / Làng Đại Học.",
+  "description": "Đặt đồ ăn, giặt đồ và ship hộ quanh làng đại học.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

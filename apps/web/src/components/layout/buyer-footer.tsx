@@ -11,7 +11,7 @@ export function BuyerFooter() {
         <div className="flex flex-col gap-3">
           <BrandLogo showSlogan />
           <p className="text-sm leading-relaxed text-[var(--color-muted)]">
-            Đặt đồ ăn, giặt đồ và nhận ship hộ quanh khu Làng Đại Học — nhanh, gọn, đúng giờ.
+            Đặt đồ ăn, giặt đồ và nhận ship hộ quanh làng đại học — nhanh, gọn, đúng giờ.
           </p>
         </div>
         <div className="flex flex-col gap-2">
@@ -23,7 +23,7 @@ export function BuyerFooter() {
         </div>
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-semibold">Hỗ trợ</h4>
-          <p className="text-sm text-[var(--color-muted)]">Khu Làng Đại Học, Thủ Đức</p>
+          <p className="text-sm text-[var(--color-muted)]">Làng đại học</p>
           <Link to="/terms" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]">
             Điều khoản sử dụng
           </Link>
