@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ArrowRight, Star, UtensilsCrossed, WashingMachine, Bike, ClipboardList,
+  ArrowRight, Star, UtensilsCrossed, WashingMachine, ClipboardList,
 } from 'lucide-react';
 import { catalogApi, ordersApi } from '@/lib/api';
 import { FoodGridCard } from '@/components/marketplace/store-card';
@@ -88,63 +88,6 @@ export function HomePage() {
           </div>
         </section>
       )}
-
-      {/* Quick actions */}
-      <section className="grid gap-3 sm:grid-cols-3 sm:gap-4">
-        {(
-          [
-            {
-              to: '/food',
-              title: 'Đặt đồ ăn',
-              Icon: UtensilsCrossed,
-              tile: 'svc-tile-food',
-              icon: 'svc-icon-food',
-              ring: 'hover:border-sky-300/80',
-            },
-            {
-              to: '/laundry',
-              title: 'Đặt giặt sấy',
-              Icon: WashingMachine,
-              tile: 'svc-tile-laundry',
-              icon: 'svc-icon-laundry',
-              ring: 'hover:border-cyan-300/80',
-            },
-            {
-              to: '/ship',
-              title: 'Nhận ship hộ',
-              Icon: Bike,
-              tile: 'svc-tile-ship',
-              icon: 'svc-icon-ship',
-              ring: 'hover:border-blue-300/80',
-            },
-          ] as const
-        ).map(({ to, title, Icon, tile, icon, ring }) => (
-          <Link
-            key={to}
-            to={to}
-            className={`group relative overflow-hidden rounded-[1.25rem] border border-[var(--color-line)] ${tile} p-4 shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-hover)] ${ring} sm:min-h-[11.5rem] sm:p-5`}
-          >
-            {/* soft glow blob */}
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-white/70 blur-2xl transition-opacity duration-500 group-hover:opacity-90 sm:size-44"
-            />
-            <div className="relative z-10 flex items-center gap-4 sm:h-full sm:flex-col sm:items-stretch sm:justify-between sm:gap-6">
-              <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl text-white shadow-md shadow-sky-900/10 transition-transform duration-500 group-hover:scale-105 group-hover:-rotate-3 sm:size-16 ${icon}`}
-              >
-                <Icon className="size-7 sm:size-8" strokeWidth={1.75} />
-              </span>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3 sm:items-end">
-                <h2 className="text-lg font-bold tracking-tight text-[var(--color-ink)] sm:text-xl">{title}</h2>
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-line)] bg-white/80 text-brand-orange-dark transition-colors duration-300 group-hover:border-transparent group-hover:bg-brand-orange-dark group-hover:text-white">
-                  <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                </span>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </section>
 
       {/* Categories */}
       <section>
