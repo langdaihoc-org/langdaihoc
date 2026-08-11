@@ -543,7 +543,7 @@ authRouter.post(
     const frontendUrl = getFrontendUrl();
 
     const genericMessage =
-      'Nếu tài khoản tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email đăng ký.';
+      'Chúng tôi đã gửi hướng dẫn đặt lại mật khẩu tới email đăng ký.';
 
     const email = await findRegisteredAuthEmail(db, input.identifier);
     if (!email) {
