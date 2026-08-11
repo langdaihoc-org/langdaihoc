@@ -1286,6 +1286,7 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
       };
     }
     const periodStart = await getBillingPeriodStartedAt(db);
+    const periodStartIso = periodStart.toISOString();
     const [row] = await db
       .select({
         active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
@@ -1293,8 +1294,8 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
         done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
         pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
         preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
-        monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::float8`,
-        monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::int`,
+        monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::float8`,
+        monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::int`,
       })
       .from(orders)
       .where(eq(orders.sellerId, seller.id));
@@ -1309,7 +1310,7 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
       completedRevenue: monthlyRevenue,
       monthlyRevenue,
       monthlyOrderCount,
-      billingPeriodStartedAt: periodStart.toISOString(),
+      billingPeriodStartedAt: periodStartIso,
     };
   }
 

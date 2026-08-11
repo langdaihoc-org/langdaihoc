@@ -162,14 +162,15 @@ adminRouter.get(
       .offset(offset);
 
     const periodStart = await getBillingPeriodStartedAt(db);
+    const periodStartIso = periodStart.toISOString();
     const sellerIds = data.map((r: (typeof data)[number]) => r.seller.id);
     const statsBySeller = new Map<string, { monthlyRevenue: number; monthlyOrderCount: number }>();
     if (sellerIds.length) {
       const rows = await db
         .select({
           sellerId: orders.sellerId,
-          monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::float8`,
-          monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::int`,
+          monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::float8`,
+          monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::int`,
         })
         .from(orders)
         .where(inArray(orders.sellerId, sellerIds))
@@ -189,7 +190,7 @@ adminRouter.get(
         monthlyRevenue: statsBySeller.get(row.seller.id)?.monthlyRevenue ?? 0,
         monthlyOrderCount: statsBySeller.get(row.seller.id)?.monthlyOrderCount ?? 0,
       })),
-      meta: { billingPeriodStartedAt: periodStart.toISOString() },
+      meta: { billingPeriodStartedAt: periodStartIso },
     });
   }),
 );
