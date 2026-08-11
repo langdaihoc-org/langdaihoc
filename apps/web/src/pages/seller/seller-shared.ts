@@ -9,14 +9,16 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   const { toast } = useToast();
   const prevSig = useRef<string | null>(null);
   const prevPending = useRef<number | null>(null);
+  const prevLateWarning = useRef<number | null>(null);
 
   const pulseQuery = useQuery({
     queryKey: ['seller-orders-pulse'],
     queryFn: () => ordersApi.pulse(),
     refetchInterval: (q) => {
       const pending = q.state.data?.data?.pendingCount ?? 0;
-      // Có đơn chờ → poll mau hơn; yên → chậm lại để giảm tải
-      return pending > 0 ? 5_000 : 15_000;
+      const late = q.state.data?.data?.lateWarningCount ?? 0;
+      // Có đơn chờ / cảnh báo trễ → poll mau hơn; yên → chậm lại để giảm tải
+      return pending > 0 || late > 0 ? 5_000 : 15_000;
     },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -26,10 +28,11 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   useEffect(() => {
     const pulse = pulseQuery.data?.data;
     if (!pulse) return;
-    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}`;
+    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}`;
     if (prevSig.current == null) {
       prevSig.current = sig;
       prevPending.current = pulse.pendingCount;
+      prevLateWarning.current = pulse.lateWarningCount ?? 0;
       return;
     }
     if (prevSig.current !== sig) {
@@ -40,6 +43,11 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
         toast(n === 1 ? 'Có đơn mới cần xử lý' : `${n} đơn mới cần xử lý`, 'success');
       }
       prevPending.current = pulse.pendingCount;
+      const late = pulse.lateWarningCount ?? 0;
+      if (opts?.notifyNew && prevLateWarning.current != null && late > prevLateWarning.current) {
+        toast('Khách cảnh báo trễ đơn — kiểm tra đơn sắp tới giờ giao', 'error');
+      }
+      prevLateWarning.current = late;
     }
   }, [pulseQuery.data?.data, qc, toast, opts?.notifyNew]);
 }

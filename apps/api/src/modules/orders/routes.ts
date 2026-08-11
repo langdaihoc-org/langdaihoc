@@ -30,6 +30,7 @@ import {
   enrichOrdersList,
   countOrdersByScope,
   isPgUniqueViolation,
+  notifyUser,
 } from '../../services/commerce.js';
 import { formatOrderSummary } from '@langdaihoc/shared';
 import { paramId } from '../../lib/params.js';
@@ -93,8 +94,10 @@ ordersRouter.get(
           data: {
             pendingCount: 0,
             openCount: 0,
+            lateWarningCount: 0,
             latestCreatedAt: null as string | null,
             latestUpdatedAt: null as string | null,
+            latestLateWarningAt: null as string | null,
             unreadNotifications: 0,
             latestNotificationAt: null as string | null,
           },
@@ -106,8 +109,10 @@ ordersRouter.get(
         .select({
           pendingCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
           openCount: sql<number>`coalesce(count(*) filter (where ${orders.status} not in ('completed', 'cancelled', 'rejected', 'needs_support')), 0)::int`,
+          lateWarningCount: sql<number>`coalesce(count(*) filter (where ${orders.lateDeliveryWarnedAt} is not null and ${orders.status} not in ('completed', 'cancelled', 'rejected', 'needs_support')), 0)::int`,
           latestCreatedAt: sql<string | null>`max(${orders.createdAt})`,
           latestUpdatedAt: sql<string | null>`max(${orders.updatedAt})`,
+          latestLateWarningAt: sql<string | null>`max(${orders.lateDeliveryWarnedAt})`,
         })
         .from(orders)
         .where(eq(orders.sellerId, seller.id));
@@ -116,8 +121,10 @@ ordersRouter.get(
         data: {
           pendingCount: Number(row?.pendingCount ?? 0),
           openCount: Number(row?.openCount ?? 0),
+          lateWarningCount: Number(row?.lateWarningCount ?? 0),
           latestCreatedAt: row?.latestCreatedAt ?? null,
           latestUpdatedAt: row?.latestUpdatedAt ?? null,
+          latestLateWarningAt: row?.latestLateWarningAt ?? null,
           unreadNotifications: 0,
           latestNotificationAt: null as string | null,
         },
@@ -582,6 +589,75 @@ ordersRouter.post(
       return transitionOrder(tx, id, 'washing', req.user!.id, req.user!.role);
     });
     res.json({ data: order });
+  }),
+);
+
+/** Buyer nhắc quán: sắp tới giờ giao mà chưa được gọi điện. */
+ordersRouter.post(
+  '/:id/late-delivery-warning',
+  ...buyerGuard,
+  asyncHandler(async (req, res) => {
+    const db: Database = req.app.locals.db;
+    const id = paramId(req);
+    const { order } = await loadOrderForActor(db, id, req.user!);
+
+    if (order.buyerId !== req.user!.id) {
+      throw new AppError(403, 'Không có quyền', 'FORBIDDEN');
+    }
+    if (order.type !== 'food') {
+      throw new AppError(400, 'Chỉ áp dụng đơn ăn uống', 'INVALID_ORDER_TYPE');
+    }
+    if (['completed', 'cancelled', 'rejected', 'needs_support'].includes(order.status)) {
+      throw new AppError(400, 'Đơn đã kết thúc', 'ORDER_CLOSED');
+    }
+    if (!order.desiredDeliveryAt) {
+      throw new AppError(400, 'Đơn chưa có giờ giao mong muốn', 'NO_DELIVERY_TIME');
+    }
+    if (order.lateDeliveryWarnedAt) {
+      throw new AppError(409, 'Bạn đã gửi cảnh báo cho đơn này', 'ALREADY_WARNED');
+    }
+
+    const due = new Date(order.desiredDeliveryAt).getTime();
+    const openAt = due - 10 * 60 * 1000;
+    if (Number.isNaN(due) || Date.now() < openAt) {
+      throw new AppError(
+        400,
+        'Chỉ gửi được từ 10 phút trước giờ giao mong muốn',
+        'TOO_EARLY',
+      );
+    }
+
+    const now = new Date();
+    const [updated] = await db
+      .update(orders)
+      .set({ lateDeliveryWarnedAt: now, updatedAt: now })
+      .where(and(eq(orders.id, id), sql`${orders.lateDeliveryWarnedAt} is null`))
+      .returning();
+    if (!updated) {
+      throw new AppError(409, 'Bạn đã gửi cảnh báo cho đơn này', 'ALREADY_WARNED');
+    }
+
+    const [seller] = await db
+      .select({ userId: sellers.userId, shopName: sellers.shopName })
+      .from(sellers)
+      .where(eq(sellers.id, order.sellerId))
+      .limit(1);
+    if (seller) {
+      const when = new Date(order.desiredDeliveryAt).toLocaleString('vi-VN');
+      await notifyUser(
+        db,
+        seller.userId,
+        'late_delivery_warning',
+        'Cảnh báo trễ đơn',
+        `Khách báo chưa được gọi giao — đơn ${order.orderCode}, mong muốn ${when}.`,
+        { orderId: order.id, orderCode: order.orderCode },
+      );
+    }
+
+    res.json({
+      data: updated,
+      message: 'Đã gửi cảnh báo cho quán',
+    });
   }),
 );
 

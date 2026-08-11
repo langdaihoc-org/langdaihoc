@@ -176,6 +176,13 @@
                         "when":  1785300000000,
                         "tag":  "0025_platform_settings",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  25,
+                        "version":  "7",
+                        "when":  1785400000000,
+                        "tag":  "0026_late_delivery_warned_at",
+                        "breakpoints":  true
                     }
                 ]
 }

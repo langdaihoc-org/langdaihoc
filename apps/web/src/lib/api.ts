@@ -189,8 +189,10 @@ export const ordersApi = {
       data: {
         pendingCount: number;
         openCount: number;
+        lateWarningCount?: number;
         latestCreatedAt: string | null;
         latestUpdatedAt: string | null;
+        latestLateWarningAt?: string | null;
         unreadNotifications?: number;
         latestNotificationAt?: string | null;
       };
@@ -217,6 +219,11 @@ export const ordersApi = {
   updateStatus: (id: string, status: string, note?: string) =>
     api<{ data: Order }>(`/api/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }),
   confirmPrice: (id: string) => api(`/api/orders/${id}/confirm-price`, { method: 'POST' }),
+  lateDeliveryWarning: (id: string) =>
+    api<{ data: Order; message?: string }>(`/api/orders/${id}/late-delivery-warning`, {
+      method: 'POST',
+      body: '{}',
+    }),
   rejectPrice: (id: string) => api(`/api/orders/${id}/reject-price`, { method: 'POST' }),
   submitQuote: (id: string, body: unknown) =>
     api<{ data: Order }>(`/api/orders/${id}/laundry-quote`, { method: 'POST', body: JSON.stringify(body) }),
@@ -554,6 +561,7 @@ export interface Order {
   laundry?: LaundryOrderDetail | null;
   shipProxy?: ShipProxyOrderDetail | null;
   desiredDeliveryAt?: string | null;
+  lateDeliveryWarnedAt?: string | null;
   recipientName?: string | null;
   proofs?: PaymentProof[];
 }

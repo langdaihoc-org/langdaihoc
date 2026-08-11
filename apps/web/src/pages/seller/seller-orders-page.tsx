@@ -321,6 +321,14 @@ export function SellerOrdersPage() {
                             Mong muốn: {new Date(o.desiredDeliveryAt).toLocaleString('vi')}
                           </p>
                         )}
+                        {o.lateDeliveryWarnedAt && (
+                          <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-950">
+                            Khách cảnh báo trễ đơn · chưa được gọi giao
+                            <span className="mt-0.5 block font-normal text-amber-800/80">
+                              {new Date(o.lateDeliveryWarnedAt).toLocaleString('vi')}
+                            </span>
+                          </p>
+                        )}
                       </div>
                     )}
 

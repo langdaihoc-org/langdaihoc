@@ -123,6 +123,21 @@ export function OrderDetailPage() {
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được biên lai', 'error'),
   });
+  const lateWarnMut = useMutation({
+    mutationFn: () => ordersApi.lateDeliveryWarning(id!),
+    onSuccess: (res) => {
+      invalidateBuyerLive(qc);
+      void qc.invalidateQueries({ queryKey: ['order', id] });
+      toast(res.message ?? 'Đã gửi cảnh báo cho quán', 'success');
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được cảnh báo', 'error'),
+  });
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const orderPreview = data?.data?.order;
   const reviewPreview = data?.data?.review;
@@ -160,6 +175,11 @@ export function OrderDetailPage() {
     shipProxy,
   });
   const foodItems = items ?? [];
+  const canWarnLate = Boolean(
+    order.desiredDeliveryAt
+      && !order.lateDeliveryWarnedAt
+      && nowMs >= new Date(order.desiredDeliveryAt).getTime() - 10 * 60 * 1000,
+  );
 
   return (
     <div className="mx-auto max-w-lg space-y-3 pb-8">
@@ -251,6 +271,36 @@ export function OrderDetailPage() {
               <Clock className="size-3.5" />
               Mong muốn giao: {new Date(order.desiredDeliveryAt).toLocaleString('vi')}
             </p>
+          )}
+          {order.type === 'food'
+            && order.desiredDeliveryAt
+            && !['completed', 'cancelled', 'rejected', 'needs_support'].includes(order.status) && (
+            <div className="border-t border-[var(--color-line)] pt-2">
+              {order.lateDeliveryWarnedAt ? (
+                <p className="text-xs text-amber-800">
+                  Đã gửi cảnh báo trễ đơn lúc {new Date(order.lateDeliveryWarnedAt).toLocaleString('vi')}
+                </p>
+              ) : canWarnLate ? (
+                <div className="space-y-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-900 sm:w-auto"
+                    loading={lateWarnMut.isPending}
+                    onClick={() => lateWarnMut.mutate()}
+                  >
+                    Cảnh báo trễ đơn
+                  </Button>
+                  <p className="text-[11px] leading-snug text-[var(--color-muted)]">
+                    Hiện từ 10 phút trước giờ giao nếu bạn chưa nhận được cuộc gọi giao hàng — nhắc quán xử lý gấp.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] leading-snug text-[var(--color-muted)]">
+                  Nút cảnh báo trễ đơn sẽ hiện từ 10 phút trước giờ giao nếu bạn chưa được gọi.
+                </p>
+              )}
+            </div>
           )}
         </Card>
       )}
