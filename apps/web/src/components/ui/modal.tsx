@@ -29,6 +29,7 @@ export function Modal({
   describedById,
   role = 'dialog',
   zIndexClass = 'z-[80]',
+  overlayClassName,
   panelClassName,
   children,
   closeOnBackdrop = true,
@@ -39,6 +40,8 @@ export function Modal({
   describedById?: string;
   role?: 'dialog' | 'alertdialog';
   zIndexClass?: string;
+  /** Ghi đè căn overlay (mặc định: đáy trên mobile, giữa từ sm). */
+  overlayClassName?: string;
   panelClassName?: string;
   children: ReactNode;
   closeOnBackdrop?: boolean;
@@ -100,7 +103,7 @@ export function Modal({
   if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className={cn('fixed inset-0 flex items-end justify-center sm:items-center sm:p-4', zIndexClass)}>
+    <div className={cn('fixed inset-0 flex items-end justify-center sm:items-center sm:p-4', zIndexClass, overlayClassName)}>
       <button
         type="button"
         className="absolute inset-0 bg-black/45"

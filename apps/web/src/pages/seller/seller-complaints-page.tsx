@@ -112,7 +112,8 @@ export function SellerComplaintsPage() {
         onClose={() => setOrderViewId(null)}
         titleId={titleId}
         zIndexClass="z-[110]"
-        panelClassName="w-full max-w-lg overflow-hidden rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
+        overlayClassName="items-center p-4"
+        panelClassName="w-full max-w-lg overflow-hidden rounded-3xl bg-white p-5 shadow-2xl"
       >
         <div className="mb-4 flex items-start justify-between gap-2">
           <div>
