@@ -2,13 +2,15 @@ import { useId, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sellerApi, ordersApi, ApiError, type Complaint } from '@/lib/api';
 import { Card } from '@/components/ui/card';
-import { complaintStatusLabel, orderStatusLabel, formatPrice, orderDisplayTitle, orderTypeLabel } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { orderStatusLabel, formatPrice, orderDisplayTitle, orderTypeLabel } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { useToast } from '@/components/ui/toast';
 import { ComplaintThread } from '@/components/marketplace/complaint-thread';
 import { Modal } from '@/components/ui/modal';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { ChevronRight, Clock, MapPin, User, X } from 'lucide-react';
+import { refreshSellerOrderMeta } from './seller-shared';
 
 export function SellerComplaintsPage() {
   const qc = useQueryClient();
@@ -36,6 +38,16 @@ export function SellerComplaintsPage() {
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được tin nhắn', 'error'),
   });
+  const resolveMut = useMutation({
+    mutationFn: (id: string) => sellerApi.resolveComplaint(id),
+    onSuccess: (_res, id) => {
+      qc.invalidateQueries({ queryKey: ['seller-complaints'] });
+      qc.invalidateQueries({ queryKey: ['seller-complaint-messages', id] });
+      refreshSellerOrderMeta(qc);
+      toast('Đã đánh dấu giải quyết', 'success');
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không đóng được khiếu nại', 'error'),
+  });
   const list = data?.data ?? [];
   const orderDetail = orderData?.data;
   const o = orderDetail?.order;
@@ -48,64 +60,83 @@ export function SellerComplaintsPage() {
         <Card className="py-10 text-center text-sm text-[var(--color-muted)]">Đang tải...</Card>
       ) : list.length === 0 ? (
         <Card className="py-10 text-center text-[var(--color-muted)]">Chưa có khiếu nại</Card>
-      ) : list.map((c: Complaint) => (
-        <Card key={c.id} className="space-y-3">
-          {!['resolved', 'rejected'].includes(c.status) && (
-            <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
-              Khiếu nại từ khách · {c.reason}
-              <span className="mt-0.5 block font-normal text-amber-950/80">
-                {complaintStatusLabel(c.status)} · {new Date(c.createdAt).toLocaleString('vi')}
-              </span>
-            </p>
-          )}
-          <button type="button" className="flex w-full items-start justify-between gap-2 text-left" onClick={() => setExpandedId((id) => (id === c.id ? null : c.id))}>
-            <div className="min-w-0">
-              <p className="font-semibold">{c.reason}</p>
-              {c.buyer && (
-                <p className="text-xs text-[var(--color-muted)]">
-                  {c.buyer.fullName} · {c.buyer.email} · {c.buyer.phone ?? '—'}
-                </p>
-              )}
-            </div>
-            <StatusBadge variant={c.status === 'resolved' ? 'green' : c.status === 'rejected' ? 'red' : 'orange'}>{complaintStatusLabel(c.status)}</StatusBadge>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOrderViewId(c.orderId);
-            }}
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2.5 text-left transition-colors hover:border-brand-orange/40 hover:bg-sky-50/60"
-          >
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">Đơn liên quan</p>
-              <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-                {c.order?.orderCode ?? 'Xem chi tiết đơn'}
-                {c.order ? (
-                  <span className="font-normal text-[var(--color-muted)]">
-                    {' · '}
-                    {orderStatusLabel(c.order.status, c.order.type)}
-                    {c.order.total != null ? ` · ${formatPrice(c.order.total)}` : ''}
-                  </span>
-                ) : null}
+      ) : list.map((c: Complaint) => {
+        const closed = c.status === 'resolved' || c.status === 'rejected';
+        return (
+          <Card key={c.id} className="space-y-3">
+            {!closed && (
+              <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
+                Khiếu nại từ khách · {c.reason}
+                <span className="mt-0.5 block font-normal text-amber-950/80">
+                  {new Date(c.createdAt).toLocaleString('vi')}
+                </span>
               </p>
-            </div>
-            <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-brand-orange">
-              Xem đơn
-              <ChevronRight className="size-3.5" />
-            </span>
-          </button>
-          {expandedId === c.id && (
-            <ComplaintThread
-              complaint={c}
-              messages={messagesData?.data ?? []}
-              viewerRole="seller"
-              sending={replyMut.isPending}
-              onSend={(body) => replyMut.mutateAsync({ id: c.id, body })}
-            />
-          )}
-        </Card>
-      ))}
+            )}
+            <button type="button" className="flex w-full items-start justify-between gap-2 text-left" onClick={() => setExpandedId((id) => (id === c.id ? null : c.id))}>
+              <div className="min-w-0">
+                <p className="font-semibold">{c.reason}</p>
+                {c.buyer && (
+                  <p className="text-xs text-[var(--color-muted)]">
+                    {c.buyer.fullName} · {c.buyer.email} · {c.buyer.phone ?? '—'}
+                  </p>
+                )}
+              </div>
+              {closed && (
+                <StatusBadge variant={c.status === 'resolved' ? 'green' : 'red'}>
+                  {c.status === 'resolved' ? 'Đã xử lý' : 'Từ chối'}
+                </StatusBadge>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOrderViewId(c.orderId);
+              }}
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2.5 text-left transition-colors hover:border-brand-orange/40 hover:bg-sky-50/60"
+            >
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">Đơn liên quan</p>
+                <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
+                  {c.order?.orderCode ?? 'Xem chi tiết đơn'}
+                  {c.order ? (
+                    <span className="font-normal text-[var(--color-muted)]">
+                      {' · '}
+                      {orderStatusLabel(c.order.status, c.order.type)}
+                      {c.order.total != null ? ` · ${formatPrice(c.order.total)}` : ''}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-brand-orange">
+                Xem đơn
+                <ChevronRight className="size-3.5" />
+              </span>
+            </button>
+            {expandedId === c.id && (
+              <ComplaintThread
+                complaint={c}
+                messages={messagesData?.data ?? []}
+                viewerRole="seller"
+                hideOpenStatus
+                sending={replyMut.isPending}
+                onSend={(body) => replyMut.mutateAsync({ id: c.id, body })}
+              />
+            )}
+            {c.canSellerResolve && (
+              <Button
+                size="sm"
+                variant="green"
+                className="w-full sm:w-auto"
+                loading={resolveMut.isPending && resolveMut.variables === c.id}
+                onClick={() => resolveMut.mutate(c.id)}
+              >
+                Đã giải quyết
+              </Button>
+            )}
+          </Card>
+        );
+      })}
 
       <Modal
         open={!!orderViewId}

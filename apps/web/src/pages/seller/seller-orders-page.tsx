@@ -3,7 +3,7 @@ import { ordersApi, ApiError, type Order } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel, complaintStatusLabel } from '@/lib/format';
+import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { useState, useMemo, useEffect } from 'react';
@@ -282,7 +282,7 @@ export function SellerOrdersPage() {
                       >
                         Khiếu nại từ khách · {o.complaint.reason}
                         <span className="mt-0.5 block font-normal text-amber-950/80">
-                          {complaintStatusLabel(o.complaint.status)} · {new Date(o.complaint.createdAt).toLocaleString('vi')}
+                          {new Date(o.complaint.createdAt).toLocaleString('vi')}
                         </span>
                       </Link>
                     )}

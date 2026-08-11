@@ -3,6 +3,7 @@ import type { Complaint, ComplaintMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
+import { complaintStatusLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { sanitizeImageUrl } from '@langdaihoc/shared';
 
@@ -19,6 +20,7 @@ export function ComplaintThread({
   sending,
   canReply = true,
   viewerRole,
+  hideOpenStatus = false,
 }: {
   complaint: Complaint;
   messages: ComplaintMessage[];
@@ -27,9 +29,12 @@ export function ComplaintThread({
   canReply?: boolean;
   /** Role đang xem thread — dùng để gắn nhãn “Bạn” */
   viewerRole?: 'buyer' | 'seller' | 'admin';
+  /** Ẩn badge khi khiếu nại còn mở (vd. seller không cần nhãn “Chờ seller”) */
+  hideOpenStatus?: boolean;
 }) {
   const [reply, setReply] = useState('');
   const closed = complaint.status === 'resolved' || complaint.status === 'rejected';
+  const showStatus = closed || !hideOpenStatus;
 
   const roleLabel = (role: string) => {
     if (viewerRole && role === viewerRole) return 'Bạn';
@@ -51,9 +56,11 @@ export function ComplaintThread({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="font-semibold">{complaint.reason}</p>
-        <StatusBadge variant={closed ? (complaint.status === 'resolved' ? 'green' : 'red') : 'orange'}>
-          {complaint.status}
-        </StatusBadge>
+        {showStatus && (
+          <StatusBadge variant={closed ? (complaint.status === 'resolved' ? 'green' : 'red') : 'orange'}>
+            {complaintStatusLabel(complaint.status)}
+          </StatusBadge>
+        )}
       </div>
 
       {complaint.description && (

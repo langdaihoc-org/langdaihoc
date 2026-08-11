@@ -6,7 +6,7 @@ import { ordersApi, buyerApi, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel } from '@/lib/format';
+import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, complaintStatusLabel } from '@/lib/format';
 import { OrderTimeline } from '@/components/ui/order-timeline';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { LaundryQuoteCard } from '@/components/marketplace/laundry-quote-card';
@@ -570,7 +570,9 @@ export function OrderDetailPage() {
           ) : (
             <Card className="space-y-3">
               <p className="mb-1 font-semibold">Khiếu nại</p>
-              <StatusBadge variant={complaint.status === 'resolved' ? 'green' : 'orange'}>{complaint.status}</StatusBadge>
+              <StatusBadge variant={complaint.status === 'resolved' ? 'green' : complaint.status === 'rejected' ? 'red' : 'orange'}>
+                {complaintStatusLabel(complaint.status)}
+              </StatusBadge>
               <ComplaintThread
                 complaint={complaint}
                 messages={complaintMessages ?? []}
@@ -578,7 +580,7 @@ export function OrderDetailPage() {
                 onSend={(body) => complaintReplyMut.mutateAsync(body)}
                 sending={complaintReplyMut.isPending}
               />
-              {complaint.status === 'waiting_seller' && (
+              {['waiting_seller', 'processing'].includes(complaint.status) && (
                 <Button size="sm" variant="outline" loading={escalateMut.isPending} onClick={() => escalateMut.mutate()}>
                   Gửi lên admin
                 </Button>

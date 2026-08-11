@@ -336,6 +336,11 @@ export const sellerApi = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
+  resolveComplaint: (id: string) =>
+    api<{ data: Complaint; message?: string }>(`/api/seller/complaints/${id}/resolve`, {
+      method: 'POST',
+      body: '{}',
+    }),
 };
 
 export const adminApi = {
@@ -654,6 +659,7 @@ export interface Complaint {
   id: string; orderId: string; reason: string; description: string; status: string;
   adminResolution?: string | null; createdAt: string; evidenceUrls?: string[] | null;
   shopName?: string | null;
+  canSellerResolve?: boolean;
   buyer?: { id: string; fullName: string; email: string; phone?: string | null } | null;
   order?: {
     id: string;

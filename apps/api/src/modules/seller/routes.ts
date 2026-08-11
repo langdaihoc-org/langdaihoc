@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import {
   sellers,
   foodItems,
@@ -776,6 +776,14 @@ sellerRouter.get(
         orderType: orders.type,
         orderTotal: orders.total,
         orderCreatedAt: orders.createdAt,
+        canSellerResolve: sql<boolean>`(
+          ${complaints.status}::text in ('waiting_seller', 'processing')
+          and not exists (
+            select 1 from complaint_messages cm
+            where cm.complaint_id = ${complaints.id}
+              and cm.author_role = 'admin'
+          )
+        )`,
       })
       .from(complaints)
       .innerJoin(profiles, eq(complaints.buyerId, profiles.id))
@@ -785,6 +793,7 @@ sellerRouter.get(
     res.json({
       data: rows.map((row: (typeof rows)[number]) => ({
         ...row.complaint,
+        canSellerResolve: Boolean(row.canSellerResolve),
         buyer: {
           id: row.complaint.buyerId,
           fullName: row.buyerName,
@@ -870,5 +879,50 @@ sellerRouter.post(
         .where(eq(complaints.id, complaint.id));
     }
     res.status(201).json({ data: message });
+  }),
+);
+
+sellerRouter.post(
+  '/complaints/:id/resolve',
+  requireApprovedSeller,
+  asyncHandler(async (req, res) => {
+    const seller = (req as Request & { seller: Awaited<ReturnType<typeof getMySeller>> }).seller;
+    const complaintId = paramId(req);
+    const db = req.app.locals.db;
+    const [complaint] = await db
+      .select()
+      .from(complaints)
+      .where(and(eq(complaints.id, complaintId), eq(complaints.sellerId, seller.id)))
+      .limit(1);
+    if (!complaint) throw new AppError(404, 'Không tìm thấy khiếu nại', 'NOT_FOUND');
+    if (complaint.status === 'resolved' || complaint.status === 'rejected') {
+      throw new AppError(409, 'Khiếu nại đã đóng', 'COMPLAINT_CLOSED');
+    }
+    if (complaint.status === 'new') {
+      throw new AppError(400, 'Khiếu nại đã gửi lên admin — không thể tự đóng', 'ESCALATED_TO_ADMIN');
+    }
+    if (complaint.status !== 'waiting_seller' && complaint.status !== 'processing') {
+      throw new AppError(400, 'Không thể đóng khiếu nại ở trạng thái này', 'INVALID_STATUS');
+    }
+    const [adminMsg] = await db
+      .select({ id: complaintMessages.id })
+      .from(complaintMessages)
+      .where(and(eq(complaintMessages.complaintId, complaint.id), eq(complaintMessages.authorRole, 'admin')))
+      .limit(1);
+    if (adminMsg) {
+      throw new AppError(400, 'Khiếu nại đang do admin xử lý — không thể tự đóng', 'ESCALATED_TO_ADMIN');
+    }
+    const [updated] = await db
+      .update(complaints)
+      .set({ status: 'resolved', updatedAt: new Date() })
+      .where(eq(complaints.id, complaint.id))
+      .returning();
+    await db.insert(complaintMessages).values({
+      complaintId: complaint.id,
+      authorId: req.user!.id,
+      authorRole: 'seller',
+      body: 'Người bán đã đánh dấu khiếu nại đã giải quyết.',
+    });
+    res.json({ data: updated, message: 'Đã đóng khiếu nại' });
   }),
 );
