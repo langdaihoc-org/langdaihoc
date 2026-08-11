@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import {
   sellers,
   foodItems,
@@ -16,11 +16,12 @@ import {
   complaintMessages,
   profiles,
   orders,
+  notifications,
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
-import { loadFoodItemExtras, mapFoodItemExtras } from '../../services/commerce.js';
+import { loadFoodItemExtras, mapFoodItemExtras, notifyUser } from '../../services/commerce.js';
 import { paramId } from '../../lib/params.js';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
 
@@ -784,31 +785,56 @@ sellerRouter.get(
               and cm.author_role = 'admin'
           )
         )`,
+        lastMessageBody: sql<string | null>`(
+          select cm.body from complaint_messages cm
+          where cm.complaint_id = ${complaints.id}
+          order by cm.created_at desc
+          limit 1
+        )`,
+        lastMessageAt: sql<string | null>`(
+          select cm.created_at from complaint_messages cm
+          where cm.complaint_id = ${complaints.id}
+          order by cm.created_at desc
+          limit 1
+        )`,
+        lastMessageRole: sql<string | null>`(
+          select cm.author_role from complaint_messages cm
+          where cm.complaint_id = ${complaints.id}
+          order by cm.created_at desc
+          limit 1
+        )`,
       })
       .from(complaints)
       .innerJoin(profiles, eq(complaints.buyerId, profiles.id))
       .innerJoin(orders, eq(complaints.orderId, orders.id))
       .where(eq(complaints.sellerId, seller.id))
-      .orderBy(desc(complaints.createdAt));
+      .orderBy(desc(complaints.updatedAt), desc(complaints.createdAt));
     res.json({
-      data: rows.map((row: (typeof rows)[number]) => ({
-        ...row.complaint,
-        canSellerResolve: Boolean(row.canSellerResolve),
-        buyer: {
-          id: row.complaint.buyerId,
-          fullName: row.buyerName,
-          email: row.buyerEmail,
-          phone: row.buyerPhone,
-        },
-        order: {
-          id: row.complaint.orderId,
-          orderCode: row.orderCode,
-          status: row.orderStatus,
-          type: row.orderType,
-          total: row.orderTotal,
-          createdAt: row.orderCreatedAt,
-        },
-      })),
+      data: rows.map((row: (typeof rows)[number]) => {
+        const closed = row.complaint.status === 'resolved' || row.complaint.status === 'rejected';
+        return {
+          ...row.complaint,
+          canSellerResolve: Boolean(row.canSellerResolve),
+          lastMessageBody: row.lastMessageBody,
+          lastMessageAt: row.lastMessageAt,
+          lastMessageRole: row.lastMessageRole,
+          unreadFromBuyer: !closed && row.lastMessageRole === 'buyer',
+          buyer: {
+            id: row.complaint.buyerId,
+            fullName: row.buyerName,
+            email: row.buyerEmail,
+            phone: row.buyerPhone,
+          },
+          order: {
+            id: row.complaint.orderId,
+            orderCode: row.orderCode,
+            status: row.orderStatus,
+            type: row.orderType,
+            total: row.orderTotal,
+            createdAt: row.orderCreatedAt,
+          },
+        };
+      }),
     });
   }),
 );
@@ -878,6 +904,15 @@ sellerRouter.post(
         .set({ updatedAt: new Date() })
         .where(eq(complaints.id, complaint.id));
     }
+    const preview = body.length > 80 ? `${body.slice(0, 80)}…` : body;
+    await notifyUser(
+      db,
+      complaint.buyerId,
+      'complaint_message',
+      'Người bán đã phản hồi khiếu nại',
+      preview,
+      { orderId: complaint.orderId, complaintId: complaint.id },
+    );
     res.status(201).json({ data: message });
   }),
 );
@@ -923,6 +958,49 @@ sellerRouter.post(
       authorRole: 'seller',
       body: 'Người bán đã đánh dấu khiếu nại đã giải quyết.',
     });
+    await notifyUser(
+      db,
+      complaint.buyerId,
+      'complaint_resolved',
+      'Khiếu nại đã được giải quyết',
+      'Người bán đã đóng khiếu nại của bạn.',
+      { orderId: complaint.orderId, complaintId: complaint.id },
+    );
     res.json({ data: updated, message: 'Đã đóng khiếu nại' });
+  }),
+);
+
+sellerRouter.get(
+  '/notifications',
+  asyncHandler(async (req, res) => {
+    const data = await req.app.locals.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, req.user!.id))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+    res.json({ data });
+  }),
+);
+
+sellerRouter.patch(
+  '/notifications/read-all',
+  asyncHandler(async (req, res) => {
+    await req.app.locals.db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.userId, req.user!.id), isNull(notifications.readAt)));
+    res.json({ message: 'ok' });
+  }),
+);
+
+sellerRouter.patch(
+  '/notifications/:id/read',
+  asyncHandler(async (req, res) => {
+    await req.app.locals.db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.id, String(req.params.id)), eq(notifications.userId, req.user!.id)));
+    res.json({ message: 'ok' });
   }),
 );

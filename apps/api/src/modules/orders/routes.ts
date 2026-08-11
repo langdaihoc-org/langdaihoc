@@ -939,6 +939,22 @@ ordersRouter.post(
         authorRole: 'buyer',
         body: body.description,
       });
+      const [seller] = await db
+        .select({ userId: sellers.userId })
+        .from(sellers)
+        .where(eq(sellers.id, order.sellerId))
+        .limit(1);
+      if (seller) {
+        const preview = body.description.length > 80 ? `${body.description.slice(0, 80)}…` : body.description;
+        await notifyUser(
+          db,
+          seller.userId,
+          'complaint_new',
+          'Khiếu nại mới từ khách',
+          `${body.reason} · ${preview}`,
+          { orderId: order.id, complaintId: complaint.id, orderCode: order.orderCode },
+        );
+      }
       res.status(201).json({ data: complaint });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -1012,6 +1028,22 @@ ordersRouter.post(
       .update(complaints)
       .set({ updatedAt: new Date(), status: complaint.status === 'new' ? 'processing' : complaint.status })
       .where(eq(complaints.id, complaint.id));
+    const [seller] = await db
+      .select({ userId: sellers.userId })
+      .from(sellers)
+      .where(eq(sellers.id, order.sellerId))
+      .limit(1);
+    if (seller) {
+      const preview = body.length > 80 ? `${body.slice(0, 80)}…` : body;
+      await notifyUser(
+        db,
+        seller.userId,
+        'complaint_message',
+        'Tin nhắn khiếu nại mới',
+        preview,
+        { orderId: order.id, complaintId: complaint.id, orderCode: order.orderCode },
+      );
+    }
     res.status(201).json({ data: message });
   }),
 );

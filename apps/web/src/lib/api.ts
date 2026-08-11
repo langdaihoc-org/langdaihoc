@@ -341,6 +341,11 @@ export const sellerApi = {
       method: 'POST',
       body: '{}',
     }),
+  notifications: () => api<{ data: Notification[] }>('/api/seller/notifications'),
+  markNotificationRead: (id: string) =>
+    api(`/api/seller/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () =>
+    api('/api/seller/notifications/read-all', { method: 'PATCH' }),
 };
 
 export const adminApi = {
@@ -642,7 +647,7 @@ export interface Address {
 
 export interface Notification {
   id: string; type: string; title: string; body: string; readAt?: string | null; createdAt: string;
-  data?: { orderId?: string };
+  data?: { orderId?: string; complaintId?: string; orderCode?: string };
 }
 
 export interface BankAccount {
@@ -660,6 +665,10 @@ export interface Complaint {
   adminResolution?: string | null; createdAt: string; evidenceUrls?: string[] | null;
   shopName?: string | null;
   canSellerResolve?: boolean;
+  lastMessageBody?: string | null;
+  lastMessageAt?: string | null;
+  lastMessageRole?: string | null;
+  unreadFromBuyer?: boolean;
   buyer?: { id: string; fullName: string; email: string; phone?: string | null } | null;
   order?: {
     id: string;

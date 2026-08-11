@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { LayoutDashboard, Package, UtensilsCrossed, Store, Newspaper, CreditCard, Star, AlertTriangle, ClipboardList } from 'lucide-react';
 import { ordersApi } from '@/lib/api';
 import { DashboardShell, type DashboardLink } from '@/components/layout/dashboard-shell';
+import { SellerNotificationBell } from '@/components/seller/seller-notification-bell';
 import { useSellerOrdersLive, useSellerShop } from './seller-shared';
 
 const SELLER_LINKS_BASE: DashboardLink[] = [
@@ -116,6 +117,7 @@ export function SellerLayout() {
       accent="green"
       mobilePrimary={nav.mobilePrimary}
       mobileMore={nav.mobileMore}
+      headerExtra={<SellerNotificationBell />}
     >
       {pending && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

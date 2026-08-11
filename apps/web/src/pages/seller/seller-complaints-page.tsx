@@ -1,5 +1,6 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { sellerApi, ordersApi, ApiError, type Complaint } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,20 +10,58 @@ import { useToast } from '@/components/ui/toast';
 import { ComplaintThread } from '@/components/marketplace/complaint-thread';
 import { Modal } from '@/components/ui/modal';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
-import { ChevronRight, Clock, MapPin, User, X } from 'lucide-react';
+import { ChevronRight, Clock, MapPin, MessageCircle, User, X } from 'lucide-react';
 import { refreshSellerOrderMeta } from './seller-shared';
+import { cn } from '@/lib/utils';
+
+function previewLabel(role?: string | null) {
+  if (role === 'buyer') return 'Khách';
+  if (role === 'seller') return 'Bạn';
+  if (role === 'admin') return 'Admin';
+  return 'Tin';
+}
 
 export function SellerComplaintsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const titleId = useId();
+  const chatTitleId = useId();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data, isLoading } = useQuery({ queryKey: ['seller-complaints'], queryFn: () => sellerApi.complaints() });
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [orderViewId, setOrderViewId] = useState<string | null>(null);
-  const { data: messagesData } = useQuery({
-    queryKey: ['seller-complaint-messages', expandedId],
-    queryFn: () => sellerApi.complaintMessages(expandedId!),
-    enabled: !!expandedId,
+
+  const list = data?.data ?? [];
+  const activeComplaint = list.find((c) => c.id === chatId) ?? null;
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('c');
+    if (!fromUrl || !list.length) return;
+    if (list.some((c) => c.id === fromUrl)) setChatId(fromUrl);
+  }, [searchParams, list]);
+
+  const openChat = (id: string) => {
+    setChatId(id);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('c', id);
+      return next;
+    }, { replace: true });
+  };
+
+  const closeChat = () => {
+    setChatId(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('c');
+      return next;
+    }, { replace: true });
+  };
+
+  const { data: messagesData, isLoading: messagesLoading } = useQuery({
+    queryKey: ['seller-complaint-messages', chatId],
+    queryFn: () => sellerApi.complaintMessages(chatId!),
+    enabled: !!chatId,
   });
   const { data: orderData, isLoading: orderLoading, isError: orderError } = useQuery({
     queryKey: ['order', orderViewId],
@@ -34,7 +73,6 @@ export function SellerComplaintsPage() {
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: ['seller-complaint-messages', vars.id] });
       qc.invalidateQueries({ queryKey: ['seller-complaints'] });
-      toast('Đã gửi phản hồi', 'success');
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được tin nhắn', 'error'),
   });
@@ -48,14 +86,16 @@ export function SellerComplaintsPage() {
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không đóng được khiếu nại', 'error'),
   });
-  const list = data?.data ?? [];
   const orderDetail = orderData?.data;
   const o = orderDetail?.order;
   const viewingComplaint = list.find((c) => c.orderId === orderViewId);
 
   return (
     <div className="space-y-3">
-      <h1 className="font-bold">Khiếu nại từ khách</h1>
+      <div>
+        <h1 className="font-bold">Khiếu nại từ khách</h1>
+        <p className="mt-0.5 text-xs text-[var(--color-muted)]">Bấm vào khiếu nại để mở hội thoại với khách.</p>
+      </div>
       {isLoading ? (
         <Card className="py-10 text-center text-sm text-[var(--color-muted)]">Đang tải...</Card>
       ) : list.length === 0 ? (
@@ -63,7 +103,7 @@ export function SellerComplaintsPage() {
       ) : list.map((c: Complaint) => {
         const closed = c.status === 'resolved' || c.status === 'rejected';
         return (
-          <Card key={c.id} className="space-y-3">
+          <Card key={c.id} className={cn('space-y-2.5', c.unreadFromBuyer && 'ring-1 ring-brand-orange/35')}>
             {!closed && (
               <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
                 Khiếu nại từ khách · {c.reason}
@@ -72,77 +112,134 @@ export function SellerComplaintsPage() {
                 </span>
               </p>
             )}
-            <button type="button" className="flex w-full items-start justify-between gap-2 text-left" onClick={() => setExpandedId((id) => (id === c.id ? null : c.id))}>
-              <div className="min-w-0">
-                <p className="font-semibold">{c.reason}</p>
+            <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => openChat(c.id)}>
+              <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-50 text-brand-orange">
+                <MessageCircle className="size-4.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold">{c.reason}</p>
+                  {closed ? (
+                    <StatusBadge variant={c.status === 'resolved' ? 'green' : 'red'}>
+                      {c.status === 'resolved' ? 'Đã xử lý' : 'Từ chối'}
+                    </StatusBadge>
+                  ) : c.unreadFromBuyer ? (
+                    <span className="mt-1 size-2.5 shrink-0 rounded-full bg-brand-orange" aria-label="Tin mới" />
+                  ) : null}
+                </div>
                 {c.buyer && (
                   <p className="text-xs text-[var(--color-muted)]">
-                    {c.buyer.fullName} · {c.buyer.email} · {c.buyer.phone ?? '—'}
+                    {c.buyer.fullName}
+                    {c.order?.orderCode ? ` · ${c.order.orderCode}` : ''}
+                  </p>
+                )}
+                <p className={cn('mt-1 truncate text-sm', c.unreadFromBuyer ? 'font-medium text-[var(--color-ink)]' : 'text-[var(--color-muted)]')}>
+                  {c.lastMessageBody
+                    ? `${previewLabel(c.lastMessageRole)}: ${c.lastMessageBody}`
+                    : 'Chưa có tin nhắn'}
+                </p>
+                {c.lastMessageAt && (
+                  <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                    {new Date(c.lastMessageAt).toLocaleString('vi')}
                   </p>
                 )}
               </div>
-              {closed && (
-                <StatusBadge variant={c.status === 'resolved' ? 'green' : 'red'}>
-                  {c.status === 'resolved' ? 'Đã xử lý' : 'Từ chối'}
-                </StatusBadge>
-              )}
             </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOrderViewId(c.orderId);
-              }}
-              className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2.5 text-left transition-colors hover:border-brand-orange/40 hover:bg-sky-50/60"
-            >
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">Đơn liên quan</p>
-                <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-                  {c.order?.orderCode ?? 'Xem chi tiết đơn'}
-                  {c.order ? (
-                    <span className="font-normal text-[var(--color-muted)]">
-                      {' · '}
-                      {orderStatusLabel(c.order.status, c.order.type)}
-                      {c.order.total != null ? ` · ${formatPrice(c.order.total)}` : ''}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-brand-orange">
-                Xem đơn
-                <ChevronRight className="size-3.5" />
-              </span>
-            </button>
-            {expandedId === c.id && (
-              <ComplaintThread
-                complaint={c}
-                messages={messagesData?.data ?? []}
-                viewerRole="seller"
-                hideOpenStatus
-                sending={replyMut.isPending}
-                onSend={(body) => replyMut.mutateAsync({ id: c.id, body })}
-              />
-            )}
-            {c.canSellerResolve && (
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                variant="green"
-                className="w-full sm:w-auto"
-                loading={resolveMut.isPending && resolveMut.variables === c.id}
-                onClick={() => resolveMut.mutate(c.id)}
+                variant="outline"
+                onClick={() => setOrderViewId(c.orderId)}
               >
-                Đã giải quyết
+                Xem đơn
+                <ChevronRight className="size-3.5" />
               </Button>
-            )}
+              <Button size="sm" variant="secondary" onClick={() => openChat(c.id)}>
+                Mở chat
+              </Button>
+              {c.canSellerResolve && (
+                <Button
+                  size="sm"
+                  variant="green"
+                  loading={resolveMut.isPending && resolveMut.variables === c.id}
+                  onClick={() => resolveMut.mutate(c.id)}
+                >
+                  Đã giải quyết
+                </Button>
+              )}
+            </div>
           </Card>
         );
       })}
 
       <Modal
+        open={!!chatId && !!activeComplaint}
+        onClose={closeChat}
+        titleId={chatTitleId}
+        zIndexClass="z-[110]"
+        overlayClassName="items-center p-3 sm:p-4"
+        panelClassName="flex max-h-[min(88vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white p-4 shadow-2xl sm:p-5"
+      >
+        {activeComplaint && (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-2 border-b border-[var(--color-line)] pb-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">Hội thoại khiếu nại</p>
+                <h2 id={chatTitleId} className="truncate font-bold leading-tight">{activeComplaint.reason}</h2>
+                <p className="mt-0.5 truncate text-xs text-[var(--color-muted)]">
+                  {activeComplaint.buyer?.fullName ?? 'Khách'}
+                  {activeComplaint.order?.orderCode ? ` · ${activeComplaint.order.orderCode}` : ''}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button size="sm" variant="outline" onClick={() => setOrderViewId(activeComplaint.orderId)}>
+                  Xem đơn
+                </Button>
+                <button
+                  type="button"
+                  onClick={closeChat}
+                  aria-label="Đóng"
+                  className="flex size-9 items-center justify-center rounded-full hover:bg-black/5"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+            {messagesLoading ? (
+              <p className="py-10 text-center text-sm text-[var(--color-muted)]">Đang tải tin nhắn...</p>
+            ) : (
+              <ComplaintThread
+                complaint={activeComplaint}
+                messages={messagesData?.data ?? []}
+                viewerRole="seller"
+                hideOpenStatus
+                compactHeader
+                sending={replyMut.isPending}
+                onSend={(body) => replyMut.mutateAsync({ id: activeComplaint.id, body })}
+              />
+            )}
+            {activeComplaint.canSellerResolve && (
+              <div className="mt-3 border-t border-[var(--color-line)] pt-3">
+                <Button
+                  size="sm"
+                  variant="green"
+                  className="w-full"
+                  loading={resolveMut.isPending && resolveMut.variables === activeComplaint.id}
+                  onClick={() => resolveMut.mutate(activeComplaint.id)}
+                >
+                  Đã giải quyết
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
+
+      <Modal
         open={!!orderViewId}
         onClose={() => setOrderViewId(null)}
         titleId={titleId}
-        zIndexClass="z-[110]"
+        zIndexClass="z-[120]"
         overlayClassName="items-center p-4"
         panelClassName="w-full max-w-lg overflow-hidden rounded-3xl bg-white p-5 shadow-2xl"
       >

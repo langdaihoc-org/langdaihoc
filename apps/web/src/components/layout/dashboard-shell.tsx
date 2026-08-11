@@ -18,6 +18,7 @@ export function DashboardShell({
   accent = 'green',
   mobilePrimary,
   mobileMore,
+  headerExtra,
   children,
 }: {
   title: string;
@@ -27,6 +28,7 @@ export function DashboardShell({
   accent?: 'green' | 'orange';
   mobilePrimary?: MobileNavItem[];
   mobileMore?: DashboardLink[];
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { pathname } = useLocation();
@@ -63,6 +65,7 @@ export function DashboardShell({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {headerExtra}
             {user && (
               <div className="hidden items-center gap-2 sm:flex">
                 <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--color-line)] bg-sky-50 text-xs font-semibold text-brand-orange">
