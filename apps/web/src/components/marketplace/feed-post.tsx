@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bike, ChevronLeft, ChevronRight, Pin, Share2, Store, WashingMachine, X } from 'lucide-react';
 import type { FeedPost } from '@/lib/api';
@@ -126,7 +126,7 @@ function GalleryLightbox({
   }, [safeIndex, total, onClose]);
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col bg-black/92">
+    <div className="fixed inset-0 z-[90] flex flex-col bg-black">
       <div className="flex items-center justify-between px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
         <p className="text-sm font-medium tabular-nums">
           {safeIndex + 1} / {total}
@@ -142,7 +142,7 @@ function GalleryLightbox({
       </div>
 
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center touch-pan-y"
+        className="relative min-h-0 flex-1 touch-pan-y"
         onTouchStart={(e) => {
           touchX.current = e.changedTouches[0]?.clientX ?? null;
         }}
@@ -161,7 +161,7 @@ function GalleryLightbox({
             <button
               type="button"
               onClick={() => go(-1)}
-              className="absolute left-2 z-10 hidden size-10 items-center justify-center rounded-full bg-white/15 text-white sm:flex"
+              className="absolute left-2 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white sm:flex"
               aria-label="Ảnh trước"
             >
               <ChevronLeft className="size-6" />
@@ -169,7 +169,7 @@ function GalleryLightbox({
             <button
               type="button"
               onClick={() => go(1)}
-              className="absolute right-2 z-10 hidden size-10 items-center justify-center rounded-full bg-white/15 text-white sm:flex"
+              className="absolute right-2 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white sm:flex"
               aria-label="Ảnh sau"
             >
               <ChevronRight className="size-6" />
@@ -179,7 +179,7 @@ function GalleryLightbox({
         <img
           src={src}
           alt={alt}
-          className="max-h-full max-w-full object-contain select-none"
+          className="absolute inset-0 size-full object-contain select-none"
           draggable={false}
         />
       </div>
@@ -208,67 +208,98 @@ function GalleryLightbox({
   );
 }
 
-/** Collage nhiều ảnh kiểu Facebook group — bấm ảnh để lướt xem */
+/** Ảnh full-width — vuốt ngang khi nhiều ảnh (kiểu feed) */
 function PostImageCollage({ images, alt }: { images: string[]; alt: string }) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [slide, setSlide] = useState(0);
+  const touchX = useRef<number | null>(null);
   if (images.length === 0) return null;
 
-  const cell = (src: string, imageIndex: number, className?: string, extra?: number) => (
-    <button
-      key={`${imageIndex}-${src}`}
-      type="button"
-      onClick={() => setViewerIndex(imageIndex)}
-      className={cn('relative block overflow-hidden bg-[#6b4f3a]', className)}
-    >
-      <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
-      {extra != null && extra > 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-2xl font-bold text-white">
-          +{extra}
-        </div>
-      )}
-    </button>
-  );
+  const total = images.length;
+  const safeSlide = ((slide % total) + total) % total;
 
-  let grid: ReactNode;
-  if (images.length === 1) {
-    grid = <div className="aspect-[4/3] w-full">{cell(images[0]!, 0, 'h-full w-full')}</div>;
-  } else if (images.length === 2) {
-    grid = (
-      <div className="grid aspect-[2/1] grid-cols-2 gap-0.5 bg-[#6b4f3a]">
-        {cell(images[0]!, 0, 'h-full')}
-        {cell(images[1]!, 1, 'h-full')}
-      </div>
-    );
-  } else if (images.length === 3) {
-    grid = (
-      <div className="grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-0.5 bg-[#6b4f3a]">
-        {cell(images[0]!, 0, 'row-span-2 h-full')}
-        {cell(images[1]!, 1, 'h-full')}
-        {cell(images[2]!, 2, 'h-full')}
-      </div>
-    );
-  } else if (images.length === 4) {
-    grid = (
-      <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-0.5 bg-[#6b4f3a]">
-        {images.slice(0, 4).map((src, i) => cell(src, i, 'h-full min-h-0'))}
-      </div>
-    );
-  } else {
-    const extra = images.length - 5;
-    grid = (
-      <div className="grid aspect-[4/3] grid-cols-3 grid-rows-3 gap-0.5 bg-[#6b4f3a]">
-        {cell(images[0]!, 0, 'col-span-2 row-span-2 h-full min-h-0')}
-        {cell(images[2]!, 2, 'h-full min-h-0')}
-        {cell(images[3]!, 3, 'h-full min-h-0')}
-        {cell(images[1]!, 1, 'col-span-2 h-full min-h-0')}
-        {cell(images[4]!, 4, 'h-full min-h-0', extra > 0 ? extra : undefined)}
-      </div>
-    );
-  }
+  const goSlide = (delta: number) => {
+    if (total <= 1) return;
+    setSlide((safeSlide + delta + total) % total);
+  };
 
   return (
     <>
-      <div className="block">{grid}</div>
+      <div className="relative w-full bg-black">
+        <div
+          className="relative aspect-[4/5] w-full overflow-hidden sm:aspect-[4/3]"
+          onTouchStart={(e) => {
+            touchX.current = e.changedTouches[0]?.clientX ?? null;
+          }}
+          onTouchEnd={(e) => {
+            const start = touchX.current;
+            const end = e.changedTouches[0]?.clientX;
+            touchX.current = null;
+            if (start == null || end == null) return;
+            const dx = end - start;
+            if (Math.abs(dx) < 40) return;
+            goSlide(dx < 0 ? 1 : -1);
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setViewerIndex(safeSlide)}
+            className="absolute inset-0 block size-full"
+            aria-label="Xem ảnh lớn"
+          >
+            <img
+              src={images[safeSlide]}
+              alt={alt}
+              className="size-full object-cover"
+              loading="lazy"
+              draggable={false}
+            />
+          </button>
+          {total > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => goSlide(-1)}
+                className="absolute left-2 top-1/2 z-10 hidden size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white sm:flex"
+                aria-label="Ảnh trước"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => goSlide(1)}
+                className="absolute right-2 top-1/2 z-10 hidden size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white sm:flex"
+                aria-label="Ảnh sau"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+              <p className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
+                {safeSlide + 1}/{total}
+              </p>
+            </>
+          )}
+        </div>
+        {total > 1 && (
+          <div className="flex justify-center gap-1.5 py-2.5">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Ảnh ${i + 1}`}
+                onClick={() => setSlide(i)}
+                className="flex size-8 items-center justify-center"
+              >
+                <span
+                  className={cn(
+                    'size-1.5 rounded-full transition-colors',
+                    i === safeSlide ? 'bg-brand-orange' : 'bg-[var(--color-line)]',
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {viewerIndex != null && (
         <GalleryLightbox
           images={images}
