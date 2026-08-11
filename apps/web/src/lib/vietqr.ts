@@ -1,30 +1,54 @@
+/** Ngân hàng phổ biến — seller lướt chọn, map thẳng mã VietQR. */
+export const VIETQR_BANK_OPTIONS = [
+  { id: 'MB', label: 'MB Bank' },
+  { id: 'TCB', label: 'Techcombank' },
+  { id: 'VCB', label: 'Vietcombank' },
+  { id: 'VPB', label: 'VPBank' },
+  { id: 'ACB', label: 'ACB' },
+  { id: 'BIDV', label: 'BIDV' },
+  { id: 'VIB', label: 'VIB' },
+  { id: 'TPB', label: 'TPBank' },
+  { id: 'MSB', label: 'MSB' },
+  { id: 'OCB', label: 'OCB' },
+  { id: 'SHB', label: 'SHB' },
+  { id: 'STB', label: 'Sacombank' },
+  { id: 'VBA', label: 'Agribank' },
+  { id: 'HDB', label: 'HDBank' },
+  { id: 'SEAB', label: 'SeABank' },
+  { id: 'LPB', label: 'LPBank' },
+  { id: 'EIB', label: 'Eximbank' },
+  { id: 'CAKE', label: 'CAKE' },
+  { id: 'TIMO', label: 'Timo' },
+] as const;
+
 /** Map tên ngân hàng seller nhập tay → mã VietQR (BIN / short name). */
 const BANK_ALIASES: { id: string; aliases: string[] }[] = [
-  { id: 'MB', aliases: ['mb', 'mbbank', 'mb bank', 'ngan hang quan doi', 'quân đội'] },
-  { id: 'TCB', aliases: ['tcb', 'techcombank', 'techcom', 'kỹ thương'] },
-  { id: 'VCB', aliases: ['vcb', 'vietcombank', 'vietcom', 'ngoại thương'] },
-  { id: 'VPB', aliases: ['vpb', 'vpbank', 'vp bank'] },
-  { id: 'ACB', aliases: ['acb', 'a chau', 'á châu'] },
+  { id: 'TCB', aliases: ['techcombank', 'techcom bank', 'techcom', 'tcb', 'ky thuong'] },
+  { id: 'VCB', aliases: ['vietcombank', 'vietcom bank', 'vietcom', 'vcb', 'ngoai thuong'] },
+  { id: 'MB', aliases: ['mbbank', 'mb bank', 'quan doi', 'military bank'] },
+  { id: 'VPB', aliases: ['vpbank', 'vp bank', 'vpb'] },
+  { id: 'ACB', aliases: ['acb', 'a chau', 'asia commercial'] },
   { id: 'BIDV', aliases: ['bidv', 'dau tu phat trien'] },
   { id: 'VIB', aliases: ['vib'] },
-  { id: 'TPB', aliases: ['tpb', 'tpbank', 'tien phong'] },
+  { id: 'TPB', aliases: ['tpbank', 'tp bank', 'tpb', 'tien phong'] },
   { id: 'MSB', aliases: ['msb', 'hang hai'] },
   { id: 'OCB', aliases: ['ocb'] },
   { id: 'SHB', aliases: ['shb'] },
-  { id: 'STB', aliases: ['stb', 'sacombank', 'sai gon thuong tin'] },
-  { id: 'VBA', aliases: ['agribank', 'agri', 'nong nghiep'] },
-  { id: 'HDB', aliases: ['hdb', 'hdbank', 'hd bank'] },
-  { id: 'SEAB', aliases: ['seabank', 'sea bank', 'dong a'] },
-  { id: 'LPB', aliases: ['lpb', 'lienviet', 'liên việt', 'lvb'] },
+  { id: 'STB', aliases: ['sacombank', 'sai gon thuong tin', 'stb'] },
+  { id: 'VBA', aliases: ['agribank', 'agri bank', 'nong nghiep'] },
+  { id: 'HDB', aliases: ['hdbank', 'hd bank', 'hdb'] },
+  { id: 'SEAB', aliases: ['seabank', 'sea bank'] },
+  { id: 'LPB', aliases: ['lienviet', 'lien viet', 'lpb', 'lvb'] },
   { id: 'PGB', aliases: ['pgbank', 'pg bank'] },
-  { id: 'NAB', aliases: ['namabank', 'nam a'] },
-  { id: 'BAB', aliases: ['bacabank', 'bac a'] },
-  { id: 'PVCB', aliases: ['pvcb', 'pvcombank'] },
-  { id: 'EIB', aliases: ['eximbank', 'exim'] },
+  { id: 'NAB', aliases: ['namabank', 'nam a bank', 'nama'] },
+  { id: 'BAB', aliases: ['bacabank', 'bac a bank'] },
+  { id: 'PVCB', aliases: ['pvcombank', 'pvcb'] },
+  { id: 'EIB', aliases: ['eximbank', 'exim bank', 'eib'] },
   { id: 'SCB', aliases: ['scb'] },
   { id: 'IVB', aliases: ['indovina'] },
   { id: 'CAKE', aliases: ['cake'] },
   { id: 'TIMO', aliases: ['timo'] },
+  { id: 'MB', aliases: ['mb'] },
 ];
 
 function normalizeBankText(s: string) {
@@ -36,26 +60,57 @@ function normalizeBankText(s: string) {
     .trim();
 }
 
-export function resolveVietQrBankId(bankName: string): string | null {
-  const n = normalizeBankText(bankName);
-  if (!n) return null;
-  for (const bank of BANK_ALIASES) {
-    if (bank.aliases.some((a) => n === a || n.includes(a) || a.includes(n))) return bank.id;
+function aliasMatches(normalizedName: string, alias: string): boolean {
+  const a = normalizeBankText(alias);
+  if (!a) return false;
+  if (normalizedName === a) return true;
+
+  const tokens = normalizedName.split(/\s+/).filter(Boolean);
+  const compactName = normalizedName.replace(/\s+/g, '');
+  const compactAlias = a.replace(/\s+/g, '');
+
+  if (compactAlias.length <= 3) {
+    return tokens.includes(compactAlias) || compactName === compactAlias;
   }
-  // Nếu seller nhập sẵn mã ngắn (MB, TCB…)
-  if (/^[a-z0-9]{2,8}$/i.test(bankName.trim())) return bankName.trim().toUpperCase();
+
+  return normalizedName.includes(a) || compactName.includes(compactAlias);
+}
+
+export function resolveVietQrBankId(bankName: string): string | null {
+  const raw = bankName.trim();
+  if (!raw) return null;
+
+  const byOption = VIETQR_BANK_OPTIONS.find(
+    (b) => b.id.toLowerCase() === raw.toLowerCase() || normalizeBankText(b.label) === normalizeBankText(raw),
+  );
+  if (byOption) return byOption.id;
+
+  const n = normalizeBankText(raw);
+  const ranked = BANK_ALIASES.flatMap((bank) =>
+    bank.aliases.map((alias) => ({ id: bank.id, alias, len: alias.replace(/\s+/g, '').length })),
+  ).sort((a, b) => b.len - a.len);
+
+  for (const row of ranked) {
+    if (aliasMatches(n, row.alias)) return row.id;
+  }
+
+  if (/^[a-z0-9]{2,8}$/i.test(raw)) return raw.toUpperCase();
   return null;
 }
 
-/** Nội dung CK ngắn, không dấu — phù hợp VietQR. */
+/** Nội dung CK = 3 số đuôi SĐT (fallback: 3 ký tự cuối mã đơn). */
+export function transferMemoLast3(phone?: string | null, orderCode?: string | null): string {
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  if (digits.length >= 3) return digits.slice(-3);
+  const codeDigits = String(orderCode ?? '').replace(/\D/g, '');
+  if (codeDigits.length >= 3) return codeDigits.slice(-3);
+  const code = String(orderCode ?? '').replace(/[^a-zA-Z0-9]/g, '');
+  return code.slice(-3).toUpperCase() || '000';
+}
+
+/** @deprecated dùng transferMemoLast3 */
 export function vietQrTransferInfo(orderCode: string) {
-  return orderCode
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 50);
+  return transferMemoLast3(null, orderCode);
 }
 
 export function buildVietQrImageUrl(opts: {
@@ -72,7 +127,7 @@ export function buildVietQrImageUrl(opts: {
   const amount = Math.max(0, Math.round(Number(opts.amount) || 0));
   const params = new URLSearchParams();
   if (amount > 0) params.set('amount', String(amount));
-  const info = vietQrTransferInfo(opts.addInfo);
+  const info = String(opts.addInfo ?? '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
   if (info) params.set('addInfo', info);
   if (opts.accountHolder.trim()) params.set('accountName', opts.accountHolder.trim());
   const template = opts.template ?? 'compact';

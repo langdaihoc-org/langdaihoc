@@ -7,23 +7,31 @@ import { StatusBadge } from '@/components/ui/brand';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useSellerShop } from './seller-shared';
+import { VIETQR_BANK_OPTIONS } from '@/lib/vietqr';
+import { cn } from '@/lib/utils';
 
 export function SellerBankPage() {
   const qc = useQueryClient();
   const { data: shopData } = useSellerShop();
   const approved = shopData?.data?.status === 'approved';
   const { data } = useQuery({ queryKey: ['seller-bank'], queryFn: () => sellerApi.bankAccounts() });
-  const [bankName, setBankName] = useState('');
+  const [bankId, setBankId] = useState<string>(VIETQR_BANK_OPTIONS[0].id);
   const [accountNumber, setAccountNumber] = useState('');
   const [accountHolder, setAccountHolder] = useState('');
   const [deleteAcc, setDeleteAcc] = useState<{ id: string; label: string } | null>(null);
   const accounts = data?.data ?? [];
+  const selectedBank = VIETQR_BANK_OPTIONS.find((b) => b.id === bankId) ?? VIETQR_BANK_OPTIONS[0];
 
   const addMut = useMutation({
-    mutationFn: () => sellerApi.addBankAccount({ bankName, accountNumber, accountHolder, isDefault: true }),
+    mutationFn: () =>
+      sellerApi.addBankAccount({
+        bankName: selectedBank.label,
+        accountNumber,
+        accountHolder,
+        isDefault: true,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['seller-bank'] });
-      setBankName('');
       setAccountNumber('');
       setAccountHolder('');
     },
@@ -79,10 +87,38 @@ export function SellerBankPage() {
       <Card className="space-y-3">
         <h2 className="font-semibold">Thêm tài khoản</h2>
         {!approved && <p className="text-sm text-amber-700">Chờ duyệt cửa hàng để thêm tài khoản.</p>}
-        <Input label="Ngân hàng" value={bankName} onChange={(e) => setBankName(e.target.value)} disabled={!approved} />
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-gray-700">Ngân hàng</p>
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-[var(--color-line)] bg-white [scrollbar-width:thin]">
+            {VIETQR_BANK_OPTIONS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                disabled={!approved}
+                onClick={() => setBankId(b.id)}
+                className={cn(
+                  'flex w-full items-center justify-between border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm last:border-b-0 disabled:opacity-50',
+                  bankId === b.id
+                    ? 'bg-sky-50 font-semibold text-brand-orange-dark'
+                    : 'text-[var(--color-ink)] hover:bg-[var(--color-surface)]',
+                )}
+              >
+                <span>{b.label}</span>
+                {bankId === b.id && <span className="text-xs text-brand-orange">Đã chọn</span>}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-muted)]">Lướt dọc để chọn · đang chọn: {selectedBank.label}</p>
+        </div>
         <Input label="Số tài khoản" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} disabled={!approved} />
         <Input label="Chủ tài khoản" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} disabled={!approved} />
-        <Button onClick={() => addMut.mutate()} loading={addMut.isPending} disabled={!approved}>Lưu tài khoản</Button>
+        <Button
+          onClick={() => addMut.mutate()}
+          loading={addMut.isPending}
+          disabled={!approved || accountNumber.trim().length < 5 || accountHolder.trim().length < 2}
+        >
+          Lưu tài khoản
+        </Button>
       </Card>
       <ConfirmDialog
         open={Boolean(deleteAcc)}

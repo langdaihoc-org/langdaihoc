@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, paymentMethodLabel, complaintStatusLabel } from '@/lib/format';
-import { buildVietQrImageUrl } from '@/lib/vietqr';
+import { buildVietQrImageUrl, transferMemoLast3 } from '@/lib/vietqr';
 import { OrderTimeline } from '@/components/ui/order-timeline';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { LaundryQuoteCard } from '@/components/marketplace/laundry-quote-card';
@@ -420,12 +420,17 @@ export function OrderDetailPage() {
             </div>
           )}
           {(() => {
+            const phone =
+              order.recipientPhone
+              || order.deliveryAddress?.phone
+              || null;
+            const transferMemo = transferMemoLast3(phone, order.orderCode);
             const vietQr = buildVietQrImageUrl({
               bankName: selectedBank.bankName,
               accountNumber: selectedBank.accountNumber,
               accountHolder: selectedBank.accountHolder,
               amount: order.total,
-              addInfo: order.orderCode,
+              addInfo: transferMemo,
               template: 'compact',
             });
             const qrSrc = vietQr || selectedBank.qrImageUrl || null;
@@ -440,7 +445,11 @@ export function OrderDetailPage() {
                 <div className="min-w-0 text-xs text-[var(--color-muted)]">
                   <p className="font-semibold text-[var(--color-ink)]">Quét QR để CK nhanh</p>
                   <p className="mt-0.5">Số tiền: <span className="font-semibold text-brand-orange">{formatPrice(order.total)}</span></p>
-                  <p className="mt-0.5">Nội dung: <span className="font-medium text-[var(--color-ink)]">{order.orderCode}</span></p>
+                  <p className="mt-0.5">
+                    Nội dung:{' '}
+                    <span className="font-medium text-[var(--color-ink)]">{transferMemo}</span>
+                    <span className="text-[var(--color-muted)]"> (3 số đuôi SĐT)</span>
+                  </p>
                   {vietQr && <p className="mt-1 text-[10px]">Mở app ngân hàng → quét mã</p>}
                 </div>
               </div>
