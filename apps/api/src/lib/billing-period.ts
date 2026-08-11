@@ -12,13 +12,21 @@ export async function getBillingPeriodStartedAt(db: Database): Promise<Date> {
     const d = new Date(row.value);
     if (!Number.isNaN(d.getTime())) return d;
   }
-  // Chưa có setting — seed ngay để kỳ hiện tại bắt đầu từ lúc này
+  // Chưa có setting — mặc định đầu tháng VN (chỉ về 0 khi admin bấm "Bắt đầu tháng mới")
   const now = new Date();
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const [y, m] = ymd.split('-');
+  const startOfMonth = new Date(`${y}-${m}-01T00:00:00+07:00`);
   await db
     .insert(platformSettings)
-    .values({ key: BILLING_PERIOD_STARTED_AT_KEY, value: now.toISOString(), updatedAt: now })
+    .values({ key: BILLING_PERIOD_STARTED_AT_KEY, value: startOfMonth.toISOString(), updatedAt: now })
     .onConflictDoNothing();
-  return now;
+  return startOfMonth;
 }
 
 export async function resetBillingPeriod(db: Database): Promise<Date> {
