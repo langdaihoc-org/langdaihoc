@@ -655,6 +655,14 @@ export interface Complaint {
   adminResolution?: string | null; createdAt: string; evidenceUrls?: string[] | null;
   shopName?: string | null;
   buyer?: { id: string; fullName: string; email: string; phone?: string | null } | null;
+  order?: {
+    id: string;
+    orderCode: string;
+    status: string;
+    type: string;
+    total: string;
+    createdAt: string;
+  } | null;
 }
 
 export interface SellerShop {

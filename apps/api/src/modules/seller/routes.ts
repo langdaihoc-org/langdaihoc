@@ -15,6 +15,7 @@ import {
   complaints,
   complaintMessages,
   profiles,
+  orders,
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
@@ -770,9 +771,15 @@ sellerRouter.get(
         buyerName: profiles.fullName,
         buyerEmail: profiles.email,
         buyerPhone: profiles.phone,
+        orderCode: orders.orderCode,
+        orderStatus: orders.status,
+        orderType: orders.type,
+        orderTotal: orders.total,
+        orderCreatedAt: orders.createdAt,
       })
       .from(complaints)
       .innerJoin(profiles, eq(complaints.buyerId, profiles.id))
+      .innerJoin(orders, eq(complaints.orderId, orders.id))
       .where(eq(complaints.sellerId, seller.id))
       .orderBy(desc(complaints.createdAt));
     res.json({
@@ -783,6 +790,14 @@ sellerRouter.get(
           fullName: row.buyerName,
           email: row.buyerEmail,
           phone: row.buyerPhone,
+        },
+        order: {
+          id: row.complaint.orderId,
+          orderCode: row.orderCode,
+          status: row.orderStatus,
+          type: row.orderType,
+          total: row.orderTotal,
+          createdAt: row.orderCreatedAt,
         },
       })),
     });
