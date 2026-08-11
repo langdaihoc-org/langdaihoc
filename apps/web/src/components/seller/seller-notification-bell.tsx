@@ -1,21 +1,53 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
-import { sellerApi, type Notification } from '@/lib/api';
-import { localizeNotificationText } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { sellerApi, ordersApi, type Notification } from '@/lib/api';
+import { useToast } from '@/components/ui/toast';
+import { NotificationBellButton, NotificationPanel } from '@/components/ui/notification-panel';
 
 export function SellerNotificationBell() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const prevNotifAt = useRef<string | null>(null);
+
+  const { data: pulseData } = useQuery({
+    queryKey: ['seller-orders-pulse'],
+    queryFn: () => ordersApi.pulse(),
+    staleTime: 4_000,
+    refetchInterval: (q) => {
+      const unread = q.state.data?.data?.unreadNotifications ?? 0;
+      return unread > 0 ? 5_000 : 15_000;
+    },
+    refetchOnWindowFocus: true,
+  });
+
   const { data } = useQuery({
     queryKey: ['seller-notifications'],
     queryFn: () => sellerApi.notifications(),
-    staleTime: 15_000,
+    staleTime: 8_000,
     refetchOnWindowFocus: true,
+    refetchInterval: (pulseData?.data?.unreadNotifications ?? 0) > 0 ? 8_000 : 20_000,
   });
+
+  useEffect(() => {
+    const latest = pulseData?.data?.latestNotificationAt ?? null;
+    const unread = pulseData?.data?.unreadNotifications ?? 0;
+    if (latest) {
+      if (prevNotifAt.current && prevNotifAt.current !== latest && unread > 0) {
+        toast('Bạn có thông báo mới', 'success');
+        void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+      }
+      prevNotifAt.current = latest;
+    }
+  }, [pulseData?.data?.latestNotificationAt, pulseData?.data?.unreadNotifications, qc, toast]);
+
+  useEffect(() => {
+    if ((pulseData?.data?.unreadNotifications ?? 0) > 0) {
+      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+    }
+  }, [pulseData?.data?.unreadNotifications, pulseData?.data?.latestNotificationAt, qc]);
 
   const markReadLocal = (ids?: string[]) => {
     qc.setQueryData<{ data: Notification[] }>(['seller-notifications'], (prev) => {
@@ -33,22 +65,26 @@ export function SellerNotificationBell() {
   const readMut = useMutation({
     mutationFn: (id: string) => sellerApi.markNotificationRead(id),
     onMutate: (id) => markReadLocal([id]),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['seller-notifications'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+      void qc.invalidateQueries({ queryKey: ['seller-orders-pulse'] });
+    },
   });
 
   const readAllMut = useMutation({
     mutationFn: () => sellerApi.markAllNotificationsRead(),
     onMutate: () => markReadLocal(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['seller-notifications'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+      void qc.invalidateQueries({ queryKey: ['seller-orders-pulse'] });
+    },
   });
 
   const items = data?.data ?? [];
-  const unread = items.filter((n) => !n.readAt).length;
-
-  const openPanel = () => {
-    setOpen(true);
-    if (unread > 0 && !readAllMut.isPending) readAllMut.mutate();
-  };
+  const unread = Math.max(
+    items.filter((n) => !n.readAt).length,
+    pulseData?.data?.unreadNotifications ?? 0,
+  );
 
   const goToNotification = (n: Notification) => {
     if (!n.readAt) readMut.mutate(n.id);
@@ -57,61 +93,26 @@ export function SellerNotificationBell() {
       navigate(`/seller/complaints?c=${n.data.complaintId}`);
       return;
     }
-    if (n.type === 'late_delivery_warning' || n.type === 'new_order') {
-      navigate('/seller/orders');
+    if (n.type.startsWith('complaint_')) {
+      navigate('/seller/complaints');
       return;
     }
-    if (n.data?.orderId) {
+    if (n.type === 'late_delivery_warning' || n.type === 'new_order' || n.data?.orderId) {
       navigate('/seller/orders');
     }
   };
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => (open ? setOpen(false) : openPanel())}
-        aria-label="Thông báo"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className="relative flex size-10 items-center justify-center rounded-full border border-[var(--color-line)] bg-white hover:border-brand-orange/40"
-      >
-        <Bell className="size-4.5" />
-        {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
-      </button>
+      <NotificationBellButton open={open} unread={unread} onToggle={() => setOpen((v) => !v)} />
       {open && (
-        <>
-          <button type="button" className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-label="Đóng thông báo" />
-          <div
-            role="dialog"
-            aria-label="Thông báo"
-            className="fixed left-3 right-3 top-[calc(3.75rem+env(safe-area-inset-top))] z-50 mx-auto max-h-[min(24rem,70vh)] w-auto max-w-sm overflow-y-auto panel p-1.5 sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:mx-0 sm:w-80 sm:max-w-none"
-          >
-            <p className="px-3 py-2 text-sm font-semibold">Thông báo</p>
-            {items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-[var(--color-muted)]">Chưa có thông báo</p>
-            ) : (
-              items.slice(0, 20).map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => goToNotification(n)}
-                  className={cn(
-                    'w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-black/5',
-                    !n.readAt && 'bg-sky-50/50',
-                  )}
-                >
-                  <p className="font-medium">{localizeNotificationText(n.title)}</p>
-                  <p className="text-xs text-[var(--color-muted)]">{localizeNotificationText(n.body)}</p>
-                </button>
-              ))
-            )}
-          </div>
-        </>
+        <NotificationPanel
+          items={items}
+          onClose={() => setOpen(false)}
+          onSelect={goToNotification}
+          onMarkAllRead={() => readAllMut.mutate()}
+          markingAll={readAllMut.isPending}
+        />
       )}
     </div>
   );

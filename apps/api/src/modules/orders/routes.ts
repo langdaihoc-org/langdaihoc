@@ -106,7 +106,7 @@ ordersRouter.get(
         return;
       }
 
-      const [[row], [complaintRow]] = await Promise.all([
+      const [[row], [complaintRow], [notifRow]] = await Promise.all([
         db
           .select({
             pendingCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
@@ -125,6 +125,13 @@ ordersRouter.get(
           })
           .from(complaints)
           .where(eq(complaints.sellerId, seller.id)),
+        db
+          .select({
+            unreadNotifications: sql<number>`coalesce(count(*) filter (where ${notifications.readAt} is null), 0)::int`,
+            latestNotificationAt: sql<string | null>`max(${notifications.createdAt})`,
+          })
+          .from(notifications)
+          .where(eq(notifications.userId, req.user!.id)),
       ]);
 
       res.json({
@@ -137,8 +144,8 @@ ordersRouter.get(
           latestUpdatedAt: row?.latestUpdatedAt ?? null,
           latestLateWarningAt: row?.latestLateWarningAt ?? null,
           latestComplaintAt: complaintRow?.latestComplaintAt ?? null,
-          unreadNotifications: 0,
-          latestNotificationAt: null as string | null,
+          unreadNotifications: Number(notifRow?.unreadNotifications ?? 0),
+          latestNotificationAt: notifRow?.latestNotificationAt ?? null,
         },
       });
       return;

@@ -97,9 +97,23 @@ export function OrdersPage() {
           </div>
         ) : (
           <>
-            {orders.map((o) => (
-              <Link key={o.id} to={`/orders/${o.id}`} className="flex gap-3 border-b border-[var(--color-line)] px-4 py-3 transition-colors last:border-0 hover:bg-black/[0.02]">
-                <div className="grid size-12 place-items-center rounded-xl bg-orange-50 text-[var(--color-ink)]">
+            {orders.map((o) => {
+              const hasOpenComplaint = !!o.complaint && !['resolved', 'rejected'].includes(o.complaint.status);
+              return (
+              <Link
+                key={o.id}
+                to={`/orders/${o.id}`}
+                className={cn(
+                  'flex gap-3 border-b border-[var(--color-line)] px-4 py-3 transition-colors last:border-0',
+                  hasOpenComplaint
+                    ? 'border-l-4 border-l-amber-400 bg-amber-50 hover:bg-amber-100/70'
+                    : 'hover:bg-black/[0.02]',
+                )}
+              >
+                <div className={cn(
+                  'grid size-12 place-items-center rounded-xl text-[var(--color-ink)]',
+                  hasOpenComplaint ? 'bg-amber-200/70' : 'bg-orange-50',
+                )}>
                   {o.type === 'food' ? (
                     <UtensilsCrossed className="size-5" />
                   ) : o.type === 'ship_proxy' ? (
@@ -117,6 +131,11 @@ export function OrdersPage() {
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--color-muted)]">
                     <Clock className="size-3" />{new Date(o.createdAt).toLocaleString('vi')}
                   </p>
+                  {hasOpenComplaint && (
+                    <p className="mt-1 rounded-lg border border-amber-300 bg-amber-200/60 px-2 py-1 text-[11px] font-semibold text-amber-950">
+                      Khiếu nại · {o.complaint!.reason}
+                    </p>
+                  )}
                   {o.type === 'food' && o.items && o.items.length > 0 && (
                     <p className="mt-1 line-clamp-1 text-xs text-[var(--color-muted)]">
                       {o.items.map((it) => `${it.itemName}×${it.quantity}`).join(' · ')}
@@ -126,7 +145,8 @@ export function OrdersPage() {
                   <p className="mt-0.5 text-[11px] font-medium text-brand-orange-dark">Xem chi tiết →</p>
                 </div>
               </Link>
-            ))}
+              );
+            })}
             {hasMore && (
               <div className="border-t border-[var(--color-line)] px-4 py-3 text-center">
                 <button

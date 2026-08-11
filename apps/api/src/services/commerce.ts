@@ -1395,7 +1395,7 @@ export async function enrichOrdersList(
     string,
     { id: string; reason: string; status: string; createdAt: Date }
   >();
-  if (options?.includeBuyer) {
+  {
     const orderIds = orderRows.map((o) => o.id);
     if (orderIds.length) {
       const complaintRows = await db
@@ -1429,9 +1429,9 @@ export async function enrichOrdersList(
     };
     if (options?.includeBuyer) {
       enriched.buyerName = buyerMap.get(order.buyerId) ?? 'Khách';
-      const complaint = complaintByOrder.get(order.id);
-      if (complaint) enriched.complaint = complaint;
     }
+    const complaint = complaintByOrder.get(order.id);
+    if (complaint) enriched.complaint = complaint;
     if (options?.includeDetails) {
       if (order.type === 'food') {
         enriched.items = items.map((i) => ({

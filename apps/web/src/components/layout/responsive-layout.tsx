@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, ShoppingBag, Home, UtensilsCrossed,
-  WashingMachine, ClipboardList, User, LogOut, Bell, Compass, Bike,
+  WashingMachine, ClipboardList, User, LogOut, Compass, Bike,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BrandLogo } from '@/components/ui/brand';
@@ -13,7 +13,7 @@ import { StickyCartBar } from '@/components/marketplace/sticky-cart-bar';
 import { BuyerFooter } from '@/components/layout/buyer-footer';
 import { EmailVerifyBanner } from '@/components/layout/email-verify-banner';
 import { InstallAppBanner } from '@/components/layout/install-app-banner';
-import { localizeNotificationText } from '@/lib/format';
+import { NotificationBellButton, NotificationPanel } from '@/components/ui/notification-panel';
 import { useBuyerLive } from '@/hooks/use-buyer-live';
 
 const NAV = [
@@ -34,8 +34,7 @@ function NotificationBell() {
     queryKey: ['notifications'],
     queryFn: () => buyerApi.notifications(),
     enabled: isAuthenticated,
-    // Pulse buyer lo cập nhật; chỉ refetch khi focus / invalidate
-    staleTime: 20_000,
+    staleTime: 12_000,
     refetchOnWindowFocus: true,
   });
 
@@ -55,13 +54,19 @@ function NotificationBell() {
   const readMut = useMutation({
     mutationFn: (id: string) => buyerApi.markNotificationRead(id),
     onMutate: (id) => markReadLocal([id]),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['buyer-orders-pulse'] });
+    },
   });
 
   const readAllMut = useMutation({
     mutationFn: () => buyerApi.markAllNotificationsRead(),
     onMutate: () => markReadLocal(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['buyer-orders-pulse'] });
+    },
   });
 
   if (!isAuthenticated) return null;
@@ -69,59 +74,21 @@ function NotificationBell() {
   const items = data?.data ?? [];
   const unread = items.filter((n) => !n.readAt).length;
 
-  const openPanel = () => {
-    setOpen(true);
-    if (unread > 0 && !readAllMut.isPending) readAllMut.mutate();
-  };
-
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => (open ? setOpen(false) : openPanel())}
-        aria-label="Thông báo"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className="relative flex size-10 items-center justify-center rounded-full border border-[var(--color-line)] bg-white hover:border-brand-orange/40"
-      >
-        <Bell className="size-4.5" />
-        {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
-      </button>
+      <NotificationBellButton open={open} unread={unread} onToggle={() => setOpen((v) => !v)} />
       {open && (
-        <>
-          <button type="button" className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-label="Đóng thông báo" />
-          <div
-            role="dialog"
-            aria-label="Thông báo"
-            className="fixed left-3 right-3 top-[calc(3.75rem+env(safe-area-inset-top))] z-50 mx-auto max-h-[min(24rem,70vh)] w-auto max-w-sm overflow-y-auto panel p-1.5 sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:mx-0 sm:w-80 sm:max-w-none"
-          >
-            <p className="px-3 py-2 text-sm font-semibold">Thông báo</p>
-            {items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-[var(--color-muted)]">Chưa có thông báo</p>
-            ) : items.slice(0, 20).map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => {
-                  if (!n.readAt) readMut.mutate(n.id);
-                  setOpen(false);
-                  if (n.data?.orderId) navigate(`/orders/${n.data.orderId}`);
-                }}
-                className={cn(
-                  'w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-black/5',
-                  !n.readAt && 'bg-sky-50/50',
-                )}
-              >
-                <p className="font-medium">{localizeNotificationText(n.title)}</p>
-                <p className="text-xs text-[var(--color-muted)]">{localizeNotificationText(n.body)}</p>
-              </button>
-            ))}
-          </div>
-        </>
+        <NotificationPanel
+          items={items}
+          onClose={() => setOpen(false)}
+          onSelect={(n) => {
+            if (!n.readAt) readMut.mutate(n.id);
+            setOpen(false);
+            if (n.data?.orderId) navigate(`/orders/${n.data.orderId}`);
+          }}
+          onMarkAllRead={() => readAllMut.mutate()}
+          markingAll={readAllMut.isPending}
+        />
       )}
     </div>
   );

@@ -29,7 +29,7 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   useEffect(() => {
     const pulse = pulseQuery.data?.data;
     if (!pulse) return;
-    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.openComplaintCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}|${pulse.latestComplaintAt ?? ''}`;
+    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.openComplaintCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}|${pulse.latestComplaintAt ?? ''}|${pulse.unreadNotifications ?? 0}|${pulse.latestNotificationAt ?? ''}`;
     if (prevSig.current == null) {
       prevSig.current = sig;
       prevPending.current = pulse.pendingCount;
@@ -40,6 +40,7 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
       prevSig.current = sig;
       void qc.invalidateQueries({ queryKey: ['seller-orders'] });
       void qc.invalidateQueries({ queryKey: ['seller-complaints'] });
+      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
       if (opts?.notifyNew && prevPending.current != null && pulse.pendingCount > prevPending.current) {
         const n = pulse.pendingCount - prevPending.current;
         toast(n === 1 ? 'Có đơn mới cần xử lý' : `${n} đơn mới cần xử lý`, 'success');
