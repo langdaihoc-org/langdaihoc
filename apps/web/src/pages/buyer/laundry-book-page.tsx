@@ -262,7 +262,7 @@ export function LaundryBookPage() {
         <h2 className="mb-3 text-sm font-semibold">Phương thức thanh toán</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {([
-            { id: 'cash' as const, icon: Banknote, title: 'Tiền mặt', desc: 'Thanh toán khi nhận đồ' },
+            { id: 'cash' as const, icon: Banknote, title: 'Thanh toán cho shipper', desc: 'Trả khi nhận đồ' },
             { id: 'bank_transfer' as const, icon: Landmark, title: 'Chuyển khoản', desc: 'Sau khi xác nhận giá' },
           ]).map(({ id, icon: Icon, title, desc }) => (
             <button

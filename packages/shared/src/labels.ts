@@ -77,6 +77,15 @@ export function paymentStatusLabel(status: string): string {
   return PAYMENT_STATUS_LABELS[status] ?? status;
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'Thanh toán cho shipper',
+  bank_transfer: 'Chuyển khoản',
+};
+
+export function paymentMethodLabel(method: string): string {
+  return PAYMENT_METHOD_LABELS[method] ?? method;
+}
+
 const POST_STATUS_LABELS: Record<string, string> = {
   published: 'Đã đăng',
   hidden: 'Ẩn',

@@ -155,7 +155,7 @@ export function CheckoutPage() {
         <h2 className="mb-3 text-sm font-semibold">Phương thức thanh toán</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {([
-            { id: 'cash' as const, icon: Banknote, title: 'Tiền mặt', desc: 'Thanh toán khi nhận' },
+            { id: 'cash' as const, icon: Banknote, title: 'Thanh toán cho shipper', desc: 'Trả tiền khi nhận hàng' },
             { id: 'bank_transfer' as const, icon: Landmark, title: 'Chuyển khoản', desc: 'Qua tài khoản ngân hàng' },
           ]).map(({ id, icon: Icon, title, desc }) => (
             <button

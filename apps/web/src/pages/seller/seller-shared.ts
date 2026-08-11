@@ -81,7 +81,7 @@ export const SELLER_DONE = new Set(['completed']);
 export const HIDDEN_ORDER = new Set(['cancelled', 'rejected', 'needs_support']);
 
 export function paymentMethodLabel(method: string) {
-  return method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản';
+  return method === 'cash' ? 'Thanh toán cho shipper' : 'Chuyển khoản';
 }
 
 export function paymentStatusLabel(status: string) {

@@ -6,7 +6,8 @@ import { ordersApi, buyerApi, ApiError, type BankAccount } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, complaintStatusLabel } from '@/lib/format';
+import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, paymentMethodLabel, complaintStatusLabel } from '@/lib/format';
+import { buildVietQrImageUrl } from '@/lib/vietqr';
 import { OrderTimeline } from '@/components/ui/order-timeline';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { LaundryQuoteCard } from '@/components/marketplace/laundry-quote-card';
@@ -331,7 +332,7 @@ export function OrderDetailPage() {
       )}
 
       <Card className="space-y-2 text-sm">
-        <div className="flex justify-between"><span className="text-[var(--color-muted)]">Thanh toán</span><span>{order.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'}</span></div>
+        <div className="flex justify-between"><span className="text-[var(--color-muted)]">Thanh toán</span><span>{paymentMethodLabel(order.paymentMethod)}</span></div>
         <div className="flex justify-between"><span className="text-[var(--color-muted)]">Trạng thái TT</span><StatusBadge variant={order.paymentStatus === 'verified' || order.paymentStatus === 'paid' ? 'green' : 'orange'}>{paymentStatusLabel(order.paymentStatus)}</StatusBadge></div>
         {order.subtotal != null && Number(order.subtotal) !== Number(order.total) && (
           <div className="flex justify-between"><span className="text-[var(--color-muted)]">Tạm tính</span><span>{formatPrice(order.subtotal)}</span></div>
@@ -418,13 +419,33 @@ export function OrderDetailPage() {
               ))}
             </div>
           )}
-          {selectedBank.qrImageUrl && (
-            <img
-              src={selectedBank.qrImageUrl}
-              alt="QR chuyển khoản"
-              className="mx-auto max-h-48 rounded-xl border border-[var(--color-line)] object-contain"
-            />
-          )}
+          {(() => {
+            const vietQr = buildVietQrImageUrl({
+              bankName: selectedBank.bankName,
+              accountNumber: selectedBank.accountNumber,
+              accountHolder: selectedBank.accountHolder,
+              amount: order.total,
+              addInfo: order.orderCode,
+              template: 'compact',
+            });
+            const qrSrc = vietQr || selectedBank.qrImageUrl || null;
+            if (!qrSrc) return null;
+            return (
+              <div className="flex items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-2.5">
+                <img
+                  src={qrSrc}
+                  alt="QR chuyển khoản"
+                  className="size-24 shrink-0 rounded-lg border border-[var(--color-line)] bg-white object-contain"
+                />
+                <div className="min-w-0 text-xs text-[var(--color-muted)]">
+                  <p className="font-semibold text-[var(--color-ink)]">Quét QR để CK nhanh</p>
+                  <p className="mt-0.5">Số tiền: <span className="font-semibold text-brand-orange">{formatPrice(order.total)}</span></p>
+                  <p className="mt-0.5">Nội dung: <span className="font-medium text-[var(--color-ink)]">{order.orderCode}</span></p>
+                  {vietQr && <p className="mt-1 text-[10px]">Mở app ngân hàng → quét mã</p>}
+                </div>
+              </div>
+            );
+          })()}
           {proofs.length === 0 && order.status !== 'cancelled' && order.status !== 'rejected' && (
             <>
               <ImageUploader
