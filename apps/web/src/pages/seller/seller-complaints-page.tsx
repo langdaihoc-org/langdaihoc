@@ -37,6 +37,14 @@ export function SellerComplaintsPage() {
         <Card className="py-10 text-center text-[var(--color-muted)]">Chưa có khiếu nại</Card>
       ) : list.map((c: Complaint) => (
         <Card key={c.id} className="space-y-3">
+          {!['resolved', 'rejected'].includes(c.status) && (
+            <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
+              Khiếu nại từ khách · {c.reason}
+              <span className="mt-0.5 block font-normal text-amber-950/80">
+                {complaintStatusLabel(c.status)} · {new Date(c.createdAt).toLocaleString('vi')}
+              </span>
+            </p>
+          )}
           <button type="button" className="flex w-full items-start justify-between gap-2 text-left" onClick={() => setExpandedId((id) => (id === c.id ? null : c.id))}>
             <div>
               <p className="font-semibold">{c.reason}</p>

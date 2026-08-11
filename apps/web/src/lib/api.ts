@@ -562,6 +562,12 @@ export interface Order {
   shipProxy?: ShipProxyOrderDetail | null;
   desiredDeliveryAt?: string | null;
   lateDeliveryWarnedAt?: string | null;
+  complaint?: {
+    id: string;
+    reason: string;
+    status: string;
+    createdAt: string;
+  } | null;
   recipientName?: string | null;
   proofs?: PaymentProof[];
 }

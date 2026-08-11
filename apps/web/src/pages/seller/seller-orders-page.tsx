@@ -3,12 +3,13 @@ import { ordersApi, ApiError, type Order } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel } from '@/lib/format';
+import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel, complaintStatusLabel } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Clock, User, MapPin, ArrowUpDown, Package } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import {
@@ -265,6 +266,27 @@ export function SellerOrdersPage() {
                       <span className="font-semibold text-brand-orange">{formatPrice(o.total)}</span>
                     </div>
 
+                    {o.lateDeliveryWarnedAt && (
+                      <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
+                        Khách cảnh báo trễ đơn · chưa được gọi giao
+                        <span className="mt-0.5 block font-normal text-amber-950/80">
+                          {new Date(o.lateDeliveryWarnedAt).toLocaleString('vi')}
+                        </span>
+                      </p>
+                    )}
+
+                    {o.complaint && !['resolved', 'rejected'].includes(o.complaint.status) && (
+                      <Link
+                        to="/seller/complaints"
+                        className="block rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950"
+                      >
+                        Khiếu nại từ khách · {o.complaint.reason}
+                        <span className="mt-0.5 block font-normal text-amber-950/80">
+                          {complaintStatusLabel(o.complaint.status)} · {new Date(o.complaint.createdAt).toLocaleString('vi')}
+                        </span>
+                      </Link>
+                    )}
+
                     {o.type === 'food' && o.items && o.items.length > 0 && (
                       <ul className="space-y-2 rounded-xl bg-black/[0.02] p-3 text-sm">
                         {o.items.map((item, i) => (
@@ -319,14 +341,6 @@ export function SellerOrdersPage() {
                           <p className="flex items-center gap-1 text-[var(--color-muted)]">
                             <Clock className="size-3" />
                             Mong muốn: {new Date(o.desiredDeliveryAt).toLocaleString('vi')}
-                          </p>
-                        )}
-                        {o.lateDeliveryWarnedAt && (
-                          <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-950">
-                            Khách cảnh báo trễ đơn · chưa được gọi giao
-                            <span className="mt-0.5 block font-normal text-amber-800/80">
-                              {new Date(o.lateDeliveryWarnedAt).toLocaleString('vi')}
-                            </span>
                           </p>
                         )}
                       </div>

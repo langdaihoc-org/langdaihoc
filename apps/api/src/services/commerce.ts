@@ -1391,6 +1391,34 @@ export async function enrichOrdersList(
     }
   }
 
+  const complaintByOrder = new Map<
+    string,
+    { id: string; reason: string; status: string; createdAt: Date }
+  >();
+  if (options?.includeBuyer) {
+    const orderIds = orderRows.map((o) => o.id);
+    if (orderIds.length) {
+      const complaintRows = await db
+        .select({
+          id: complaints.id,
+          orderId: complaints.orderId,
+          reason: complaints.reason,
+          status: complaints.status,
+          createdAt: complaints.createdAt,
+        })
+        .from(complaints)
+        .where(inArray(complaints.orderId, orderIds));
+      for (const c of complaintRows) {
+        complaintByOrder.set(c.orderId, {
+          id: c.id,
+          reason: c.reason,
+          status: c.status,
+          createdAt: c.createdAt,
+        });
+      }
+    }
+  }
+
   return orderRows.map((order) => {
     const items = itemsByOrder.get(order.id) ?? [];
     const laundry = laundryByOrder.get(order.id);
@@ -1401,6 +1429,8 @@ export async function enrichOrdersList(
     };
     if (options?.includeBuyer) {
       enriched.buyerName = buyerMap.get(order.buyerId) ?? 'Khách';
+      const complaint = complaintByOrder.get(order.id);
+      if (complaint) enriched.complaint = complaint;
     }
     if (options?.includeDetails) {
       if (order.type === 'food') {
