@@ -177,6 +177,9 @@ export const ordersApi = {
           pending?: number;
           preparing?: number;
           completedRevenue?: number;
+          monthlyRevenue?: number;
+          monthlyOrderCount?: number;
+          billingPeriodStartedAt?: string | null;
         };
       };
     }>(`/api/orders?${q}`);
@@ -329,7 +332,17 @@ export const sellerApi = {
 export const adminApi = {
   stats: () =>
     api<{ data: { buyers: number; sellers: number; orders: number; pendingSellers: number; openComplaints: number; processingOrders: number } }>('/api/admin/stats'),
-  sellers: () => api<{ data: AdminSellerRow[] }>('/api/admin/sellers'),
+  sellers: () =>
+    api<{
+      data: AdminSellerRow[];
+      meta?: { billingPeriodStartedAt?: string };
+    }>('/api/admin/sellers'),
+  billingPeriod: () => api<{ data: { startedAt: string } }>('/api/admin/billing-period'),
+  resetBillingPeriod: () =>
+    api<{ data: { startedAt: string }; message?: string }>('/api/admin/billing-period/reset', {
+      method: 'POST',
+      body: '{}',
+    }),
   approveSeller: (
     id: string,
     status?: string,
@@ -662,6 +675,8 @@ export interface AdminSellerRow {
     rejectionReason?: string | null;
   };
   email: string; fullName: string; phone?: string | null;
+  monthlyRevenue?: number;
+  monthlyOrderCount?: number;
 }
 
 export interface AdminUser {

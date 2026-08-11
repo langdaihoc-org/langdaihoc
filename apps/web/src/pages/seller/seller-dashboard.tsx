@@ -31,9 +31,12 @@ export function SellerDashboard() {
     ).length;
   const delivering =
     counts?.delivering ?? orders.filter((o) => ['delivering', 'returning'].includes(o.status)).length;
-  const revenue =
+  const monthlyRevenue =
+    counts?.monthlyRevenue ??
     counts?.completedRevenue ??
     orders.filter((o) => o.status === 'completed').reduce((s, o) => s + Number(o.total), 0);
+  const monthlyOrderCount = counts?.monthlyOrderCount ?? 0;
+  const periodStartedAt = counts?.billingPeriodStartedAt ?? null;
 
   const toggleOpen = useMutation({
     mutationFn: (next: boolean) => sellerApi.updateShop({ acceptingOrders: next }),
@@ -73,12 +76,18 @@ export function SellerDashboard() {
           </Button>
         </Card>
       )}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard value={pending} label="Đơn mới" accent="orange" />
         <StatCard value={preparing} label="Đang xử lý" />
         <StatCard value={delivering} label="Đang giao" accent="orange" />
-        <StatCard value={formatPrice(revenue)} label="Doanh thu hoàn tất" accent="orange" />
+        <StatCard value={monthlyOrderCount} label="Tổng số đơn tháng" />
+        <StatCard value={formatPrice(monthlyRevenue)} label="Tổng doanh thu tháng" accent="orange" />
       </div>
+      {periodStartedAt ? (
+        <p className="text-[11px] text-[var(--color-muted)]">
+          Kỳ tính từ {new Date(periodStartedAt).toLocaleString('vi-VN')}
+        </p>
+      ) : null}
       <Card>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="font-bold">Đơn gần đây</h2>

@@ -1,7 +1,7 @@
 import { Router, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { eq, sql, desc, and, or, ilike, ne } from 'drizzle-orm';
+import { eq, sql, desc, and, or, ilike, ne, inArray } from 'drizzle-orm';
 import {
   sellers,
   profiles,
@@ -21,6 +21,7 @@ import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { ensureUserRole, ensurePhoneNotUsed, ensureEmailNotUsed } from '../auth/service.js';
 import { writeAudit } from '../../lib/audit.js';
 import { enrichOrdersList } from '../../services/commerce.js';
+import { getBillingPeriodStartedAt, resetBillingPeriod } from '../../lib/billing-period.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { createSupabaseAdmin } from '../../lib/supabase.js';
 import { passwordSchema, normalizePhoneVN } from '@langdaihoc/shared';
@@ -146,7 +147,8 @@ adminRouter.get(
   asyncHandler(async (req, res) => {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const data = await req.app.locals.db
+    const db = req.app.locals.db;
+    const data = await db
       .select({
         seller: sellers,
         email: profiles.email,
@@ -158,7 +160,63 @@ adminRouter.get(
       .orderBy(desc(sellers.createdAt))
       .limit(limit)
       .offset(offset);
-    res.json({ data });
+
+    const periodStart = await getBillingPeriodStartedAt(db);
+    const sellerIds = data.map((r: (typeof data)[number]) => r.seller.id);
+    const statsBySeller = new Map<string, { monthlyRevenue: number; monthlyOrderCount: number }>();
+    if (sellerIds.length) {
+      const rows = await db
+        .select({
+          sellerId: orders.sellerId,
+          monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::float8`,
+          monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::int`,
+        })
+        .from(orders)
+        .where(inArray(orders.sellerId, sellerIds))
+        .groupBy(orders.sellerId);
+      for (const r of rows) {
+        if (!r.sellerId) continue;
+        statsBySeller.set(r.sellerId, {
+          monthlyRevenue: Number(r.monthlyRevenue ?? 0),
+          monthlyOrderCount: Number(r.monthlyOrderCount ?? 0),
+        });
+      }
+    }
+
+    res.json({
+      data: data.map((row: (typeof data)[number]) => ({
+        ...row,
+        monthlyRevenue: statsBySeller.get(row.seller.id)?.monthlyRevenue ?? 0,
+        monthlyOrderCount: statsBySeller.get(row.seller.id)?.monthlyOrderCount ?? 0,
+      })),
+      meta: { billingPeriodStartedAt: periodStart.toISOString() },
+    });
+  }),
+);
+
+adminRouter.get(
+  '/billing-period',
+  asyncHandler(async (req, res) => {
+    const startedAt = await getBillingPeriodStartedAt(req.app.locals.db);
+    res.json({ data: { startedAt: startedAt.toISOString() } });
+  }),
+);
+
+adminRouter.post(
+  '/billing-period/reset',
+  asyncHandler(async (req, res) => {
+    const db = req.app.locals.db;
+    const prev = await getBillingPeriodStartedAt(db);
+    const startedAt = await resetBillingPeriod(db);
+    await writeAudit(db, {
+      ...auditFromReq(req),
+      action: 'billing_period.reset',
+      entityType: 'platform_settings',
+      entityId: 'billing_period_started_at',
+      oldValue: { startedAt: prev.toISOString() },
+      newValue: { startedAt: startedAt.toISOString() },
+    });
+    res.json({ data: { startedAt: startedAt.toISOString() }, message: 'Đã bắt đầu tháng mới — thống kê reset về 0' });
   }),
 );
 

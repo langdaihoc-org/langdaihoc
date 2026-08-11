@@ -4,13 +4,15 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
-import { serviceTypeLabel, sellerStatusLabel } from '@/lib/format';
+import { serviceTypeLabel, sellerStatusLabel, formatPrice } from '@/lib/format';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QueryErrorState } from '@/components/ui/query-state';
+import { useToast } from '@/components/ui/toast';
 
 export function AdminSellersPage() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const { data, isError, refetch } = useQuery({ queryKey: ['admin-sellers'], queryFn: () => adminApi.sellers() });
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -22,6 +24,20 @@ export function AdminSellersPage() {
   });
   const [shipError, setShipError] = useState<string | null>(null);
   const [deleteSeller, setDeleteSeller] = useState<{ id: string; shopName: string } | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmResetMonth, setConfirmResetMonth] = useState(false);
+
+  const periodStartedAt = data?.meta?.billingPeriodStartedAt ?? null;
+
+  const resetMonth = useMutation({
+    mutationFn: () => adminApi.resetBillingPeriod(),
+    onSuccess: (res) => {
+      setConfirmResetMonth(false);
+      qc.invalidateQueries({ queryKey: ['admin-sellers'] });
+      toast(res.message ?? 'Đã bắt đầu tháng mới — thống kê về 0', 'success');
+    },
+    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không reset được kỳ tháng', 'error'),
+  });
 
   const approve = useMutation({
     mutationFn: ({
@@ -105,10 +121,20 @@ export function AdminSellersPage() {
           <p className="text-xs text-[var(--color-muted)]">
             Duyệt hồ sơ, tạm dừng / mở lại / xóa vĩnh viễn — tên & địa chỉ do cửa hàng tự sửa ở hồ sơ seller
           </p>
+          {periodStartedAt ? (
+            <p className="mt-1 text-xs text-[var(--color-muted)]">
+              Kỳ tháng hiện tại từ {new Date(periodStartedAt).toLocaleString('vi-VN')}
+            </p>
+          ) : null}
         </div>
-        <Button size="sm" variant="outline" onClick={() => setShowShipForm((v) => !v)}>
-          {showShipForm ? 'Đóng' : '+ Thêm người nhận đồ ship hộ'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setConfirmResetMonth(true)}>
+            Bắt đầu tháng mới
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowShipForm((v) => !v)}>
+            {showShipForm ? 'Đóng' : '+ Thêm người nhận đồ ship hộ'}
+          </Button>
+        </div>
       </div>
 
       {actionError && (
@@ -225,17 +251,27 @@ export function AdminSellersPage() {
         ) : managed.map((row) => {
           const s = row.seller;
           const statusVariant = s.status === 'approved' ? 'green' : s.status === 'suspended' ? 'red' : 'orange';
+          const expanded = expandedId === s.id;
           return (
             <Card key={s.id} className="space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => setExpandedId(expanded ? null : s.id)}
+                >
                   <p className="font-semibold">{s.shopName}</p>
                   <p className="text-xs text-[var(--color-muted)]">{row.fullName} · {row.email} · {row.phone ?? '—'}</p>
                   <p className="text-xs text-[var(--color-muted)]">
                     {serviceTypeLabel(s.serviceTypes)} · {s.businessAddress || 'Chưa có địa chỉ'}
                   </p>
-                  <StatusBadge variant={statusVariant}>{sellerStatusLabel(s.status)}</StatusBadge>
-                </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <StatusBadge variant={statusVariant}>{sellerStatusLabel(s.status)}</StatusBadge>
+                    <span className="text-[11px] font-medium text-brand-green">
+                      {expanded ? 'Thu gọn' : 'Xem thống kê tháng'}
+                    </span>
+                  </div>
+                </button>
                 <div className="flex flex-wrap gap-2">
                   {s.status === 'approved' && (
                     <Button
@@ -270,6 +306,18 @@ export function AdminSellersPage() {
                   </Button>
                 </div>
               </div>
+              {expanded ? (
+                <div className="grid gap-2 border-t border-[var(--color-line)] pt-3 sm:grid-cols-2">
+                  <div className="rounded-xl bg-green-50/60 px-3 py-2">
+                    <p className="text-[11px] text-[var(--color-muted)]">Tổng số đơn tháng</p>
+                    <p className="text-lg font-bold">{row.monthlyOrderCount ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl bg-orange-50/60 px-3 py-2">
+                    <p className="text-[11px] text-[var(--color-muted)]">Tổng doanh thu tháng</p>
+                    <p className="text-lg font-bold">{formatPrice(row.monthlyRevenue ?? 0)}</p>
+                  </div>
+                </div>
+              ) : null}
             </Card>
           );
         })}
@@ -284,6 +332,17 @@ export function AdminSellersPage() {
         loading={remove.isPending}
         onCancel={() => setDeleteSeller(null)}
         onConfirm={() => deleteSeller && remove.mutate(deleteSeller.id)}
+      />
+      <ConfirmDialog
+        open={confirmResetMonth}
+        title="Bắt đầu tháng mới?"
+        description="Thống kê Tổng doanh thu tháng và Tổng số đơn tháng của mọi đối tác sẽ về 0 và tính lại từ thời điểm này cho đến khi bạn bấm lại."
+        confirmLabel="Bắt đầu tháng mới"
+        cancelLabel="Hủy"
+        variant="danger"
+        loading={resetMonth.isPending}
+        onCancel={() => setConfirmResetMonth(false)}
+        onConfirm={() => resetMonth.mutate()}
       />
     </div>
   );

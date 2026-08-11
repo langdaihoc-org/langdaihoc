@@ -28,6 +28,7 @@ import {
 } from '@langdaihoc/database';
 import { canActorTransition, canTransitionFood, canTransitionLaundry, canTransitionShipProxy, formatOrderSummary, orderStatusLabel, SHIP_PROXY_FEE_VND } from '@langdaihoc/shared';
 import { AppError } from '../middleware/error-handler.js';
+import { getBillingPeriodStartedAt } from '../lib/billing-period.js';
 
 export function generateOrderCode(type: 'food' | 'laundry' | 'ship_proxy') {
   const prefix = type === 'food' ? 'FD' : type === 'laundry' ? 'LD' : 'SP';
@@ -1263,14 +1264,28 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
       pending: 0,
       preparing: 0,
       completedRevenue: 0,
+      monthlyRevenue: 0,
+      monthlyOrderCount: 0,
+      billingPeriodStartedAt: null as string | null,
     };
   }
 
   if (role === 'seller') {
     const [seller] = await db.select().from(sellers).where(eq(sellers.userId, userId)).limit(1);
     if (!seller) {
-      return { active: 0, delivering: 0, done: 0, pending: 0, preparing: 0, completedRevenue: 0 };
+      return {
+        active: 0,
+        delivering: 0,
+        done: 0,
+        pending: 0,
+        preparing: 0,
+        completedRevenue: 0,
+        monthlyRevenue: 0,
+        monthlyOrderCount: 0,
+        billingPeriodStartedAt: null as string | null,
+      };
     }
+    const periodStart = await getBillingPeriodStartedAt(db);
     const [row] = await db
       .select({
         active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
@@ -1278,21 +1293,37 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
         done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
         pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
         preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
-        completedRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed'), 0)::float8`,
+        monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::float8`,
+        monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStart}), 0)::int`,
       })
       .from(orders)
       .where(eq(orders.sellerId, seller.id));
+    const monthlyRevenue = Number(row?.monthlyRevenue ?? 0);
+    const monthlyOrderCount = Number(row?.monthlyOrderCount ?? 0);
     return {
       active: Number(row?.active ?? 0),
       delivering: Number(row?.delivering ?? 0),
       done: Number(row?.done ?? 0),
       pending: Number(row?.pending ?? 0),
       preparing: Number(row?.preparing ?? 0),
-      completedRevenue: Number(row?.completedRevenue ?? 0),
+      completedRevenue: monthlyRevenue,
+      monthlyRevenue,
+      monthlyOrderCount,
+      billingPeriodStartedAt: periodStart.toISOString(),
     };
   }
 
-  return { active: 0, delivering: 0, done: 0, pending: 0, preparing: 0, completedRevenue: 0 };
+  return {
+    active: 0,
+    delivering: 0,
+    done: 0,
+    pending: 0,
+    preparing: 0,
+    completedRevenue: 0,
+    monthlyRevenue: 0,
+    monthlyOrderCount: 0,
+    billingPeriodStartedAt: null as string | null,
+  };
 }
 
 export async function enrichOrdersList(
