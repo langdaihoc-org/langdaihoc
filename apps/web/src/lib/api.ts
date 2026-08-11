@@ -190,9 +190,11 @@ export const ordersApi = {
         pendingCount: number;
         openCount: number;
         lateWarningCount?: number;
+        openComplaintCount?: number;
         latestCreatedAt: string | null;
         latestUpdatedAt: string | null;
         latestLateWarningAt?: string | null;
+        latestComplaintAt?: string | null;
         unreadNotifications?: number;
         latestNotificationAt?: string | null;
       };

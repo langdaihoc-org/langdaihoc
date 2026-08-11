@@ -17,8 +17,9 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
     refetchInterval: (q) => {
       const pending = q.state.data?.data?.pendingCount ?? 0;
       const late = q.state.data?.data?.lateWarningCount ?? 0;
-      // Có đơn chờ / cảnh báo trễ → poll mau hơn; yên → chậm lại để giảm tải
-      return pending > 0 || late > 0 ? 5_000 : 15_000;
+      const complaints = q.state.data?.data?.openComplaintCount ?? 0;
+      // Có đơn chờ / cảnh báo / khiếu nại → poll mau hơn
+      return pending > 0 || late > 0 || complaints > 0 ? 5_000 : 15_000;
     },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -28,7 +29,7 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   useEffect(() => {
     const pulse = pulseQuery.data?.data;
     if (!pulse) return;
-    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}`;
+    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.openComplaintCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}|${pulse.latestComplaintAt ?? ''}`;
     if (prevSig.current == null) {
       prevSig.current = sig;
       prevPending.current = pulse.pendingCount;
@@ -38,6 +39,7 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
     if (prevSig.current !== sig) {
       prevSig.current = sig;
       void qc.invalidateQueries({ queryKey: ['seller-orders'] });
+      void qc.invalidateQueries({ queryKey: ['seller-complaints'] });
       if (opts?.notifyNew && prevPending.current != null && pulse.pendingCount > prevPending.current) {
         const n = pulse.pendingCount - prevPending.current;
         toast(n === 1 ? 'Có đơn mới cần xử lý' : `${n} đơn mới cần xử lý`, 'success');

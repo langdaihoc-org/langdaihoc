@@ -24,12 +24,13 @@ const SELLER_MOBILE_MORE_BASE: DashboardLink[] = [
 
 function buildSellerNav(
   serviceTypes?: 'food' | 'laundry' | 'ship_proxy',
-  opts?: { openOrderCount?: number },
+  opts?: { openOrderCount?: number; openComplaintCount?: number },
 ) {
   const isShip = serviceTypes === 'ship_proxy';
   const productPath = '/seller/products';
   const productLink: DashboardLink = { to: productPath, label: 'Sản phẩm', Icon: Package };
   const openOrderCount = opts?.openOrderCount ?? 0;
+  const openComplaintCount = opts?.openComplaintCount ?? 0;
   const ordersLink: DashboardLink = {
     to: '/seller/orders',
     label: 'Đơn hàng',
@@ -37,16 +38,30 @@ function buildSellerNav(
     badge: openOrderCount > 0 ? openOrderCount : undefined,
     emphasize: openOrderCount > 0,
   };
+  const complaintsLink: DashboardLink = {
+    to: '/seller/complaints',
+    label: 'Khiếu nại',
+    Icon: AlertTriangle,
+    badge: openComplaintCount > 0 ? openComplaintCount : undefined,
+    emphasize: openComplaintCount > 0,
+  };
+
+  const withBadges = (list: DashboardLink[]) =>
+    list.map((l) => {
+      if (l.to === '/seller/orders') return { ...l, ...ordersLink, Icon: l.Icon };
+      if (l.to === '/seller/complaints') return { ...l, ...complaintsLink };
+      return l;
+    });
 
   const links = isShip
-    ? SELLER_LINKS_BASE.map((l) => (l.to === '/seller/orders' ? { ...l, ...ordersLink } : l))
+    ? withBadges(SELLER_LINKS_BASE)
     : (() => {
         const overviewIdx = SELLER_LINKS_BASE.findIndex((l) => l.to === '/seller');
-        return [
+        return withBadges([
           ...SELLER_LINKS_BASE.slice(0, overviewIdx + 1),
           productLink,
           ...SELLER_LINKS_BASE.slice(overviewIdx + 1),
-        ].map((l) => (l.to === '/seller/orders' ? { ...l, ...ordersLink } : l));
+        ]);
       })();
 
   const postsLink: DashboardLink = { to: '/seller/posts', label: 'Bài đăng', Icon: Newspaper };
@@ -76,7 +91,7 @@ function buildSellerNav(
         postsLink,
       ];
 
-  return { links, mobilePrimary, mobileMore: SELLER_MOBILE_MORE_BASE };
+  return { links, mobilePrimary, mobileMore: withBadges(SELLER_MOBILE_MORE_BASE) };
 }
 
 export function SellerLayout() {
@@ -90,7 +105,8 @@ export function SellerLayout() {
   const pending = shopData?.data?.status !== 'approved';
   const closed = shopData?.data?.acceptingOrders === false;
   const openOrderCount = pulseData?.data?.openCount ?? 0;
-  const nav = buildSellerNav(shopData?.data?.serviceTypes, { openOrderCount });
+  const openComplaintCount = pulseData?.data?.openComplaintCount ?? 0;
+  const nav = buildSellerNav(shopData?.data?.serviceTypes, { openOrderCount, openComplaintCount });
   return (
     <DashboardShell
       title="Trung tâm người bán"

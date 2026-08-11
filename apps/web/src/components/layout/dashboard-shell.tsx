@@ -42,6 +42,7 @@ export function DashboardShell({
   const morePaths = new Set((mobileMore ?? []).map((l) => l.to));
   const productPaths = new Set(['/seller/products', '/seller/menu', '/seller/laundry']);
   const isMoreActive = morePaths.has(pathname);
+  const moreBadgeTotal = (mobileMore ?? []).reduce((sum, l) => sum + (l.badge ?? 0), 0);
   const isNavActive = (to: string) => {
     if (to === homeTo) return pathname === to;
     if (to === '/seller/products') return productPaths.has(pathname);
@@ -168,10 +169,21 @@ export function DashboardShell({
                   onClick={() => setMoreOpen(true)}
                   className={cn(
                     'relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition-colors touch-manipulation',
-                    isMoreActive || moreOpen ? mobileAccent : 'text-[var(--color-muted)]',
+                    isMoreActive || moreOpen
+                      ? mobileAccent
+                      : moreBadgeTotal > 0
+                        ? 'text-brand-orange'
+                        : 'text-[var(--color-muted)]',
                   )}
                 >
-                  <MoreHorizontal className="size-5" />
+                  <span className="relative">
+                    <MoreHorizontal className={cn('size-5', (isMoreActive || moreOpen || moreBadgeTotal > 0) && 'stroke-[2.5]')} />
+                    {moreBadgeTotal > 0 && (
+                      <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-orange px-1 text-[9px] font-bold text-white">
+                        {moreBadgeTotal > 99 ? '99+' : moreBadgeTotal}
+                      </span>
+                    )}
+                  </span>
                   Thêm
                 </button>
               )}
@@ -201,7 +213,12 @@ export function DashboardShell({
                       )}
                     >
                       <l.Icon className="size-5 shrink-0" />
-                      {l.label}
+                      <span className="flex-1">{l.label}</span>
+                      {(l.badge ?? 0) > 0 && (
+                        <span className="min-w-5 rounded-full bg-brand-orange px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                          {l.badge! > 99 ? '99+' : l.badge}
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </div>
