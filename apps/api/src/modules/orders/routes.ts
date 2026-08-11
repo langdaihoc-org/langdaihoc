@@ -234,17 +234,18 @@ ordersRouter.get(
       if (!allowed) throw new AppError(403, 'Không có quyền', 'FORBIDDEN');
     }
 
-    const [account] = await db
+    const accounts = await db
       .select()
       .from(sellerBankAccounts)
       .where(
         and(
           eq(sellerBankAccounts.sellerId, sellerId),
-          eq(sellerBankAccounts.isDefault, true),
+          eq(sellerBankAccounts.isActive, true),
         ),
-      )
-      .limit(1);
-    res.json({ data: account ?? null });
+      );
+    const sorted = [...accounts].sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+    const preferred = sorted.find((a) => a.isDefault) ?? sorted[0] ?? null;
+    res.json({ data: preferred, accounts: sorted });
   }),
 );
 

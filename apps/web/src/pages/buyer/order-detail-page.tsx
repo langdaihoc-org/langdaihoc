@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { MapPin, Clock } from 'lucide-react';
-import { ordersApi, buyerApi, ApiError } from '@/lib/api';
+import { ordersApi, buyerApi, ApiError, type BankAccount } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,8 @@ export function OrderDetailPage() {
     refetchOnWindowFocus: true,
   });
   const [rating, setRating] = useState(5);
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [pickingBank, setPickingBank] = useState(false);
   const [complaintReason, setComplaintReason] = useState('');
   const [complaintDesc, setComplaintDesc] = useState('');
   const [complaintImages, setComplaintImages] = useState<string[]>([]);
@@ -152,6 +154,22 @@ export function OrderDetailPage() {
     queryFn: () => ordersApi.bankInfo(sellerId!),
     enabled: !!sellerId && orderPreview?.paymentMethod === 'bank_transfer',
   });
+
+  const bankAccounts: BankAccount[] = bankData?.accounts?.length
+    ? bankData.accounts
+    : bankData?.data
+      ? [bankData.data]
+      : [];
+  const selectedBank =
+    bankAccounts.find((a) => a.id === selectedBankId)
+    ?? bankAccounts.find((a) => a.isDefault)
+    ?? bankAccounts[0]
+    ?? bankData?.data
+    ?? null;
+
+  useEffect(() => {
+    if (!selectedBankId && bankData?.data?.id) setSelectedBankId(bankData.data.id);
+  }, [bankData?.data?.id, selectedBankId]);
 
   if (isLoading) return <p className="py-12 text-center">Đang tải...</p>;
   if (isError || !data?.data?.order) {
@@ -320,7 +338,7 @@ export function OrderDetailPage() {
         )}
         <div className="flex justify-between font-semibold"><span>Tổng</span><span className="text-brand-orange">{formatPrice(order.total)}</span></div>
       </Card>
-      {order.paymentMethod === 'bank_transfer' && bankData?.data && order.paymentStatus !== 'verified' && order.paymentStatus !== 'paid' && (
+      {order.paymentMethod === 'bank_transfer' && selectedBank && order.paymentStatus !== 'verified' && order.paymentStatus !== 'paid' && (
         <Card className="space-y-2 text-sm">
           <p className="font-semibold">Thông tin chuyển khoản</p>
           {order.status === 'pending' ? (
@@ -336,24 +354,77 @@ export function OrderDetailPage() {
               Chuyển khoản ngay để người nhận hộ đi lấy hàng. Gửi biên lai bên dưới.
             </p>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p>{bankData.data.bankName} · {bankData.data.accountNumber}</p>
-              <p className="text-[var(--color-muted)]">{bankData.data.accountHolder}</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-medium">
+                {selectedBank.bankName} · {selectedBank.accountNumber}
+                {selectedBank.isDefault && (
+                  <span className="ml-1.5 text-[11px] font-semibold text-brand-orange">Mặc định</span>
+                )}
+              </p>
+              <p className="text-[var(--color-muted)]">{selectedBank.accountHolder}</p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const bank = bankData.data;
-                if (!bank) return;
-                void navigator.clipboard.writeText(bank.accountNumber);
-                toast('Đã copy số tài khoản', 'success');
-              }}
-            >
-              Copy STK
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {bankAccounts.length > 1 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setPickingBank((v) => !v)}
+                >
+                  {pickingBank ? 'Đóng' : 'Đổi ngân hàng'}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard.writeText(selectedBank.accountNumber);
+                  toast('Đã copy số tài khoản', 'success');
+                }}
+              >
+                Copy STK
+              </Button>
+            </div>
           </div>
+          {pickingBank && bankAccounts.length > 1 && (
+            <div className="space-y-1.5 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-2">
+              <p className="px-1 text-[11px] font-medium text-[var(--color-muted)]">Chọn tài khoản nhận</p>
+              {bankAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedBankId(acc.id);
+                    setPickingBank(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+                    acc.id === selectedBank.id ? 'bg-sky-50 ring-1 ring-brand-orange/30' : 'hover:bg-white',
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="font-semibold">{acc.bankName}</span>
+                    {acc.isDefault && (
+                      <span className="ml-1 text-[10px] font-bold uppercase text-brand-orange">Mặc định</span>
+                    )}
+                    <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+                      {acc.accountNumber} · {acc.accountHolder}
+                    </span>
+                  </span>
+                  {acc.id === selectedBank.id && (
+                    <span className="shrink-0 text-[11px] font-semibold text-brand-orange">Đang chọn</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedBank.qrImageUrl && (
+            <img
+              src={selectedBank.qrImageUrl}
+              alt="QR chuyển khoản"
+              className="mx-auto max-h-48 rounded-xl border border-[var(--color-line)] object-contain"
+            />
+          )}
           {proofs.length === 0 && order.status !== 'cancelled' && order.status !== 'rejected' && (
             <>
               <ImageUploader

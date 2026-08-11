@@ -255,7 +255,8 @@ export const ordersApi = {
   verifyPayment: (id: string, approved: boolean, rejectionReason?: string) =>
     api(`/api/orders/${id}/verify-payment`, { method: 'POST', body: JSON.stringify({ approved, rejectionReason }) }),
   markPaid: (id: string) => api<{ data: Order }>(`/api/orders/${id}/mark-paid`, { method: 'POST' }),
-  bankInfo: (sellerId: string) => api<{ data: BankAccount | null }>(`/api/orders/bank-info/${sellerId}`),
+  bankInfo: (sellerId: string) =>
+    api<{ data: BankAccount | null; accounts?: BankAccount[] }>(`/api/orders/bank-info/${sellerId}`),
 };
 
 export const buyerApi = {
