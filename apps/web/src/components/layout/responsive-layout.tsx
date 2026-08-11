@@ -94,7 +94,11 @@ function NotificationBell() {
       {open && (
         <>
           <button type="button" className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-label="Đóng thông báo" />
-          <div className="absolute right-0 top-11 z-50 w-80 panel max-h-96 overflow-y-auto p-1.5">
+          <div
+            role="dialog"
+            aria-label="Thông báo"
+            className="fixed left-3 right-3 top-[calc(3.75rem+env(safe-area-inset-top))] z-50 mx-auto max-h-[min(24rem,70vh)] w-auto max-w-sm overflow-y-auto panel p-1.5 sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:mx-0 sm:w-80 sm:max-w-none"
+          >
             <p className="px-3 py-2 text-sm font-semibold">Thông báo</p>
             {items.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-[var(--color-muted)]">Chưa có thông báo</p>
