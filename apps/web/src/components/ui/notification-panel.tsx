@@ -12,13 +12,13 @@ function isComplaintNotif(n: Notification) {
 }
 
 function notifMeta(n: Notification) {
-  if (isComplaintNotif(n)) {
+  if (n.type === 'site_feedback' || isComplaintNotif(n)) {
     return {
       Icon: MessageCircle,
       iconWrap: 'bg-amber-100 text-amber-800',
       row: 'border-amber-200/80 bg-amber-50/90 hover:bg-amber-100/80',
       unreadRow: 'border-amber-300 bg-amber-100',
-      label: 'Khiếu nại',
+      label: n.type === 'site_feedback' ? 'Góp ý' : 'Khiếu nại',
       labelCls: 'text-amber-800',
     };
   }

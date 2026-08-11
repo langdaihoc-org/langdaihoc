@@ -8,6 +8,7 @@ import {
   Newspaper,
   Package,
   AlertTriangle,
+  MessageSquarePlus,
   User,
 } from 'lucide-react';
 import type { DashboardLink } from '@/components/layout/dashboard-shell';
@@ -35,5 +36,6 @@ export const ADMIN_LINKS: DashboardLink[] = [
   { to: '/admin/posts', label: 'Bài đăng', Icon: Newspaper },
   { to: '/admin/orders', label: 'Đơn hàng', Icon: Package },
   { to: '/admin/complaints', label: 'Khiếu nại', Icon: AlertTriangle },
+  { to: '/admin/feedback', label: 'Góp ý', Icon: MessageSquarePlus },
   { to: '/admin/profile', label: 'Hồ sơ của tôi', Icon: User },
 ];

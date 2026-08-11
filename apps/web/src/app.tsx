@@ -66,6 +66,7 @@ const AdminDashboard = lazyNamed(() => import('@/pages/admin/admin-dashboard'), 
 const AdminSellersPage = lazyNamed(() => import('@/pages/admin/admin-sellers-page'), 'AdminSellersPage');
 const AdminOrdersPage = lazyNamed(() => import('@/pages/admin/admin-orders-page'), 'AdminOrdersPage');
 const AdminComplaintsPage = lazyNamed(() => import('@/pages/admin/admin-complaints-page'), 'AdminComplaintsPage');
+const AdminFeedbackPage = lazyNamed(() => import('@/pages/admin/admin-feedback-page'), 'AdminFeedbackPage');
 const AdminBannersPage = lazyNamed(() => import('@/pages/admin/admin-banners-page'), 'AdminBannersPage');
 const AdminPostsPage = lazyNamed(() => import('@/pages/admin/admin-posts-page'), 'AdminPostsPage');
 const AdminUsersPage = lazyNamed(() => import('@/pages/admin/admin-users-page'), 'AdminUsersPage');
@@ -157,6 +158,7 @@ export function App() {
                     <Route path="posts" element={<AdminPostsPage />} />
                     <Route path="orders" element={<AdminOrdersPage />} />
                     <Route path="complaints" element={<AdminComplaintsPage />} />
+                    <Route path="feedback" element={<AdminFeedbackPage />} />
                     <Route path="profile" element={<AdminProfilePage />} />
                   </Route>
 

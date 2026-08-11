@@ -143,6 +143,11 @@ export const catalogApi = {
   foodItem: (id: string) => api<{ data: FoodItem }>(`/api/catalog/food/${id}`),
   laundry: (params?: string) => api<{ data: LaundryService[] }>(`/api/catalog/laundry${params ? `?${params}` : ''}`),
   categories: (type?: string) => api<{ data: Category[] }>(`/api/catalog/categories${type ? `?type=${type}` : ''}`),
+  submitFeedback: (body: { type: 'feedback' | 'bug'; message: string; contact?: string; pageUrl?: string }) =>
+    api<{ data: { id: string }; message?: string }>('/api/catalog/feedback', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 export const cartApi = {
@@ -419,6 +424,9 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
+  feedback: () => api<{ data: SiteFeedback[] }>('/api/admin/feedback'),
+  updateFeedback: (id: string, body: { status: 'new' | 'read' | 'done' }) =>
+    api<{ data: SiteFeedback }>(`/api/admin/feedback/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   uploadImage: (body: {
     bucket: 'post-images' | 'banner-images';
     contentType: string;
@@ -647,7 +655,7 @@ export interface Address {
 
 export interface Notification {
   id: string; type: string; title: string; body: string; readAt?: string | null; createdAt: string;
-  data?: { orderId?: string; complaintId?: string; orderCode?: string };
+  data?: { orderId?: string; complaintId?: string; orderCode?: string; feedbackId?: string; type?: string };
 }
 
 export interface BankAccount {
@@ -731,4 +739,17 @@ export interface AdminCategory {
 export interface AuditLog {
   id: string; action: string; entityType: string; entityId?: string | null;
   actorRole?: string | null; actorName?: string | null; createdAt: string;
+}
+
+export interface SiteFeedback {
+  id: string;
+  type: 'feedback' | 'bug' | string;
+  message: string;
+  contact?: string | null;
+  pageUrl?: string | null;
+  userId?: string | null;
+  status: 'new' | 'read' | 'done' | string;
+  createdAt: string;
+  userName?: string | null;
+  userEmail?: string | null;
 }

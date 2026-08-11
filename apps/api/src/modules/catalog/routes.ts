@@ -1,8 +1,12 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { categories } from '@langdaihoc/database';
+import { categories, siteFeedback, profiles } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { setPublicCatalogCache } from '../../lib/http-cache.js';
+import { optionalAuth } from '../../middleware/auth.js';
+import { notifyUser } from '../../services/commerce.js';
 import {
   getFoodCatalog,
   getFoodItemPublic,
@@ -17,6 +21,66 @@ import {
 } from '../../services/commerce.js';
 
 export const catalogRouter = Router();
+
+const feedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 8 : 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Gửi góp ý quá nhiều, thử lại sau', code: 'RATE_LIMIT' } },
+});
+
+catalogRouter.post(
+  '/feedback',
+  feedbackLimiter,
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        type: z.enum(['feedback', 'bug']),
+        message: z.string().trim().min(10).max(2000),
+        contact: z.string().trim().max(200).optional(),
+        pageUrl: z.string().trim().max(500).optional(),
+      })
+      .parse(req.body);
+
+    const db = req.app.locals.db;
+    const contact =
+      body.contact?.trim()
+      || req.user?.email
+      || req.user?.phone
+      || null;
+
+    const [row] = await db
+      .insert(siteFeedback)
+      .values({
+        type: body.type,
+        message: body.message.trim(),
+        contact,
+        pageUrl: body.pageUrl?.trim() || null,
+        userId: req.user?.id ?? null,
+        status: 'new',
+      })
+      .returning();
+
+    const admins = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.role, 'admin'));
+    const title = body.type === 'bug' ? 'Báo lỗi mới từ trang' : 'Góp ý mới từ trang';
+    const preview = body.message.length > 100 ? `${body.message.slice(0, 100)}…` : body.message;
+    await Promise.all(
+      admins.map((a: { id: string }) =>
+        notifyUser(db, a.id, 'site_feedback', title, preview, {
+          feedbackId: row.id,
+          type: body.type,
+        }),
+      ),
+    );
+
+    res.status(201).json({ data: { id: row.id }, message: 'Đã gửi cảm ơn bạn!' });
+  }),
+);
 
 /** Một round-trip cho trang chủ — giảm latency cold/cross-region. */
 catalogRouter.get(

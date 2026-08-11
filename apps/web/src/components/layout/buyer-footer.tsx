@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '@/components/ui/brand';
+import { SiteFeedbackTrigger } from '@/components/layout/site-feedback-form';
 
 const SITE_URL = 'https://langdaihoc.xyz';
 const SUPPORT_EMAIL = 'langdaihoc.work@gmail.com';
@@ -24,6 +25,7 @@ export function BuyerFooter() {
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-semibold">Hỗ trợ</h4>
           <p className="text-sm text-[var(--color-muted)]">Làng đại học</p>
+          <SiteFeedbackTrigger className="w-fit" />
           <Link to="/terms" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]">
             Điều khoản sử dụng
           </Link>

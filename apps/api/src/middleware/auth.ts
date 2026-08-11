@@ -153,3 +153,43 @@ export function requireActiveBuyer(req: Request, _res: Response, next: NextFunct
 
   next();
 }
+
+/** Gắn req.user nếu có phiên — không bắt buộc đăng nhập. */
+export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const accessToken = await resolveAccessToken(req, res);
+    if (!accessToken) {
+      next();
+      return;
+    }
+    const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
+    if (error || !data.user) {
+      next();
+      return;
+    }
+    const db = req.app.locals.db;
+    const [profile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.id, data.user.id))
+      .limit(1);
+    if (!profile || profile.status === 'deleted' || profile.status === 'suspended') {
+      next();
+      return;
+    }
+    req.user = {
+      id: profile.id,
+      email: profile.email,
+      phone: profile.phone ?? null,
+      role: profile.role as UserRole,
+      status: profile.status,
+      fullName: profile.fullName,
+      avatarUrl: profile.avatarUrl ?? null,
+      emailVerified: Boolean(data.user.email_confirmed_at),
+      hasPassword: authUserHasPassword(data.user),
+    };
+    next();
+  } catch {
+    next();
+  }
+}

@@ -15,6 +15,7 @@ import {
   carts,
   reviews,
   foodItems,
+  siteFeedback,
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
@@ -1199,5 +1200,46 @@ adminRouter.delete(
       oldValue: existing,
     });
     res.json({ data: { id: postId } });
+  }),
+);
+
+adminRouter.get(
+  '/feedback',
+  asyncHandler(async (req, res) => {
+    const db = req.app.locals.db;
+    const rows = await db
+      .select({
+        feedback: siteFeedback,
+        userName: profiles.fullName,
+        userEmail: profiles.email,
+      })
+      .from(siteFeedback)
+      .leftJoin(profiles, eq(siteFeedback.userId, profiles.id))
+      .orderBy(desc(siteFeedback.createdAt))
+      .limit(100);
+    res.json({
+      data: rows.map((r: (typeof rows)[number]) => ({
+        ...r.feedback,
+        userName: r.userName,
+        userEmail: r.userEmail,
+      })),
+    });
+  }),
+);
+
+adminRouter.patch(
+  '/feedback/:id',
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const { status } = z.object({ status: z.enum(['new', 'read', 'done']) }).parse(req.body);
+    const db = req.app.locals.db;
+    const [existing] = await db.select().from(siteFeedback).where(eq(siteFeedback.id, id)).limit(1);
+    if (!existing) throw new AppError(404, 'Không tìm thấy góp ý', 'NOT_FOUND');
+    const [updated] = await db
+      .update(siteFeedback)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(siteFeedback.id, id))
+      .returning();
+    res.json({ data: updated });
   }),
 );
