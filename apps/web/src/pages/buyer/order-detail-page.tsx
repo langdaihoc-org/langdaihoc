@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, paymentMethodLabel, complaintStatusLabel } from '@/lib/format';
-import { buildVietQrImageUrl, transferMemoLast3 } from '@/lib/vietqr';
+import { buildVietQrImageUrl, transferMemoLast3, bankLogoUrl } from '@/lib/vietqr';
 import { OrderTimeline } from '@/components/ui/order-timeline';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { LaundryQuoteCard } from '@/components/marketplace/laundry-quote-card';
@@ -356,14 +356,26 @@ export function OrderDetailPage() {
             </p>
           )}
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-medium">
-                {selectedBank.bankName} · {selectedBank.accountNumber}
-                {selectedBank.isDefault && (
-                  <span className="ml-1.5 text-[11px] font-semibold text-brand-orange">Mặc định</span>
-                )}
-              </p>
-              <p className="text-[var(--color-muted)]">{selectedBank.accountHolder}</p>
+            <div className="flex min-w-0 items-start gap-2.5">
+              {bankLogoUrl(selectedBank.bankName) && (
+                <img
+                  src={bankLogoUrl(selectedBank.bankName)!}
+                  alt=""
+                  className="mt-0.5 size-8 shrink-0 rounded-md bg-white object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {selectedBank.bankName} · {selectedBank.accountNumber}
+                  {selectedBank.isDefault && (
+                    <span className="ml-1.5 text-[11px] font-semibold text-brand-orange">Mặc định</span>
+                  )}
+                </p>
+                <p className="text-[var(--color-muted)]">{selectedBank.accountHolder}</p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {bankAccounts.length > 1 && (
@@ -399,11 +411,21 @@ export function OrderDetailPage() {
                     setPickingBank(false);
                   }}
                   className={cn(
-                    'flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+                    'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                     acc.id === selectedBank.id ? 'bg-sky-50 ring-1 ring-brand-orange/30' : 'hover:bg-white',
                   )}
                 >
-                  <span className="min-w-0">
+                  {bankLogoUrl(acc.bankName) && (
+                    <img
+                      src={bankLogoUrl(acc.bankName)!}
+                      alt=""
+                      className="mt-0.5 size-7 shrink-0 rounded-md bg-white object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
                     <span className="font-semibold">{acc.bankName}</span>
                     {acc.isDefault && (
                       <span className="ml-1 text-[10px] font-bold uppercase text-brand-orange">Mặc định</span>

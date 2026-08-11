@@ -7,8 +7,24 @@ import { StatusBadge } from '@/components/ui/brand';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useSellerShop } from './seller-shared';
-import { VIETQR_BANK_OPTIONS } from '@/lib/vietqr';
+import { VIETQR_BANK_OPTIONS, bankLogoUrl } from '@/lib/vietqr';
 import { cn } from '@/lib/utils';
+
+function BankLogo({ name, className }: { name: string; className?: string }) {
+  const src = bankLogoUrl(name);
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      className={cn('size-7 shrink-0 rounded-md object-contain bg-white', className)}
+      loading="lazy"
+      onError={(e) => {
+        e.currentTarget.style.display = 'none';
+      }}
+    />
+  );
+}
 
 export function SellerBankPage() {
   const qc = useQueryClient();
@@ -21,6 +37,7 @@ export function SellerBankPage() {
   const [deleteAcc, setDeleteAcc] = useState<{ id: string; label: string } | null>(null);
   const accounts = data?.data ?? [];
   const selectedBank = VIETQR_BANK_OPTIONS.find((b) => b.id === bankId) ?? VIETQR_BANK_OPTIONS[0];
+  const isMomo = selectedBank.id === 'MOMO';
 
   const addMut = useMutation({
     mutationFn: () =>
@@ -56,10 +73,13 @@ export function SellerBankPage() {
       <h1 className="font-bold">Tài khoản thanh toán</h1>
       {accounts.map((a) => (
         <Card key={a.id} className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="font-semibold">{a.bankName}</p>
-            <p className="text-sm">{a.accountNumber} · {a.accountHolder}</p>
-            {a.isDefault && <StatusBadge variant="green">Mặc định</StatusBadge>}
+          <div className="flex min-w-0 items-start gap-2.5">
+            <BankLogo name={a.bankName} className="mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-semibold">{a.bankName}</p>
+              <p className="text-sm">{a.accountNumber} · {a.accountHolder}</p>
+              {a.isDefault && <StatusBadge variant="green">Mặc định</StatusBadge>}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {!a.isDefault && approved && (
@@ -88,7 +108,7 @@ export function SellerBankPage() {
         <h2 className="font-semibold">Thêm tài khoản</h2>
         {!approved && <p className="text-sm text-amber-700">Chờ duyệt cửa hàng để thêm tài khoản.</p>}
         <div>
-          <p className="mb-1.5 text-sm font-medium text-gray-700">Ngân hàng</p>
+          <p className="mb-1.5 text-sm font-medium text-gray-700">Ngân hàng / ví</p>
           <div className="max-h-48 overflow-y-auto rounded-xl border border-[var(--color-line)] bg-white [scrollbar-width:thin]">
             {VIETQR_BANK_OPTIONS.map((b) => (
               <button
@@ -97,21 +117,33 @@ export function SellerBankPage() {
                 disabled={!approved}
                 onClick={() => setBankId(b.id)}
                 className={cn(
-                  'flex w-full items-center justify-between border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm last:border-b-0 disabled:opacity-50',
+                  'flex w-full items-center gap-2.5 border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm last:border-b-0 disabled:opacity-50',
                   bankId === b.id
                     ? 'bg-sky-50 font-semibold text-brand-orange-dark'
                     : 'text-[var(--color-ink)] hover:bg-[var(--color-surface)]',
                 )}
               >
-                <span>{b.label}</span>
+                <BankLogo name={b.id} />
+                <span className="min-w-0 flex-1">{b.label}</span>
                 {bankId === b.id && <span className="text-xs text-brand-orange">Đã chọn</span>}
               </button>
             ))}
           </div>
           <p className="mt-1 text-[11px] text-[var(--color-muted)]">Lướt dọc để chọn · đang chọn: {selectedBank.label}</p>
         </div>
-        <Input label="Số tài khoản" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} disabled={!approved} />
-        <Input label="Chủ tài khoản" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} disabled={!approved} />
+        <Input
+          label={isMomo ? 'Số điện thoại MoMo' : 'Số tài khoản'}
+          value={accountNumber}
+          onChange={(e) => setAccountNumber(e.target.value)}
+          disabled={!approved}
+          placeholder={isMomo ? 'VD: 0901234567' : undefined}
+        />
+        <Input
+          label={isMomo ? 'Tên chủ ví MoMo' : 'Chủ tài khoản'}
+          value={accountHolder}
+          onChange={(e) => setAccountHolder(e.target.value)}
+          disabled={!approved}
+        />
         <Button
           onClick={() => addMut.mutate()}
           loading={addMut.isPending}

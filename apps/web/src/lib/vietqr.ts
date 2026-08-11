@@ -1,24 +1,25 @@
 /** Ngân hàng phổ biến — seller lướt chọn, map thẳng mã VietQR. */
 export const VIETQR_BANK_OPTIONS = [
-  { id: 'MB', label: 'MB Bank' },
-  { id: 'TCB', label: 'Techcombank' },
-  { id: 'VCB', label: 'Vietcombank' },
-  { id: 'VPB', label: 'VPBank' },
-  { id: 'ACB', label: 'ACB' },
-  { id: 'BIDV', label: 'BIDV' },
-  { id: 'VIB', label: 'VIB' },
-  { id: 'TPB', label: 'TPBank' },
-  { id: 'MSB', label: 'MSB' },
-  { id: 'OCB', label: 'OCB' },
-  { id: 'SHB', label: 'SHB' },
-  { id: 'STB', label: 'Sacombank' },
-  { id: 'VBA', label: 'Agribank' },
-  { id: 'HDB', label: 'HDBank' },
-  { id: 'SEAB', label: 'SeABank' },
-  { id: 'LPB', label: 'LPBank' },
-  { id: 'EIB', label: 'Eximbank' },
-  { id: 'CAKE', label: 'CAKE' },
-  { id: 'TIMO', label: 'Timo' },
+  { id: 'MOMO', label: 'MoMo', logoFile: 'momo' },
+  { id: 'MB', label: 'MB Bank', logoFile: 'MB' },
+  { id: 'TCB', label: 'Techcombank', logoFile: 'TCB' },
+  { id: 'VCB', label: 'Vietcombank', logoFile: 'VCB' },
+  { id: 'VPB', label: 'VPBank', logoFile: 'VPB' },
+  { id: 'ACB', label: 'ACB', logoFile: 'ACB' },
+  { id: 'BIDV', label: 'BIDV', logoFile: 'BIDV' },
+  { id: 'VIB', label: 'VIB', logoFile: 'VIB' },
+  { id: 'TPB', label: 'TPBank', logoFile: 'TPB' },
+  { id: 'MSB', label: 'MSB', logoFile: 'MSB' },
+  { id: 'OCB', label: 'OCB', logoFile: 'OCB' },
+  { id: 'SHB', label: 'SHB', logoFile: 'SHB' },
+  { id: 'STB', label: 'Sacombank', logoFile: 'STB' },
+  { id: 'VBA', label: 'Agribank', logoFile: 'VBA' },
+  { id: 'HDB', label: 'HDBank', logoFile: 'HDB' },
+  { id: 'SEAB', label: 'SeABank', logoFile: 'SEAB' },
+  { id: 'LPB', label: 'LPBank', logoFile: 'LPB' },
+  { id: 'EIB', label: 'Eximbank', logoFile: 'EIB' },
+  { id: 'CAKE', label: 'CAKE', logoFile: 'CAKE' },
+  { id: 'TIMO', label: 'Timo', logoFile: 'TIMO' },
 ] as const;
 
 /** Map tên ngân hàng seller nhập tay → mã VietQR (BIN / short name). */
@@ -48,6 +49,7 @@ const BANK_ALIASES: { id: string; aliases: string[] }[] = [
   { id: 'IVB', aliases: ['indovina'] },
   { id: 'CAKE', aliases: ['cake'] },
   { id: 'TIMO', aliases: ['timo'] },
+  { id: 'MOMO', aliases: ['momo', 'ví momo', 'vi momo'] },
   { id: 'MB', aliases: ['mb'] },
 ];
 
@@ -94,8 +96,23 @@ export function resolveVietQrBankId(bankName: string): string | null {
     if (aliasMatches(n, row.alias)) return row.id;
   }
 
+  if (/^momo$/i.test(raw)) return 'MOMO';
   if (/^[a-z0-9]{2,8}$/i.test(raw)) return raw.toUpperCase();
   return null;
+}
+
+/** Logo từ CDN VietQR — ẩn nếu load lỗi. */
+export function bankLogoUrl(bankIdOrName: string): string | null {
+  const raw = bankIdOrName.trim();
+  if (!raw) return null;
+  const opt = VIETQR_BANK_OPTIONS.find(
+    (b) => b.id.toLowerCase() === raw.toLowerCase() || normalizeBankText(b.label) === normalizeBankText(raw),
+  );
+  if (opt) return `https://cdn.vietqr.io/img/${opt.logoFile}.png`;
+  const id = resolveVietQrBankId(raw);
+  if (!id) return null;
+  const file = id === 'MOMO' ? 'momo' : id;
+  return `https://cdn.vietqr.io/img/${file}.png`;
 }
 
 /** Nội dung CK = 3 số đuôi SĐT (fallback: 3 ký tự cuối mã đơn). */
