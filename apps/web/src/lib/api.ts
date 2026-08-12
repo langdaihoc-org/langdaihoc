@@ -202,6 +202,7 @@ export const ordersApi = {
         latestComplaintAt?: string | null;
         unreadNotifications?: number;
         latestNotificationAt?: string | null;
+        version?: number;
       };
     }>('/api/orders/pulse'),
   get: (id: string) => api<{ data: OrderDetailResponse }>(`/api/orders/${id}`),

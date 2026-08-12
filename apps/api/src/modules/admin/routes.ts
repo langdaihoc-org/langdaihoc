@@ -16,12 +16,16 @@ import {
   reviews,
   foodItems,
   siteFeedback,
+  sellerCounters,
+  buyerCounters,
+  sellerDailyStats,
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { ensureUserRole, ensurePhoneNotUsed, ensureEmailNotUsed } from '../auth/service.js';
 import { writeAudit } from '../../lib/audit.js';
 import { enrichOrdersList } from '../../services/commerce.js';
+import { refreshSellerCounters } from '../../services/counters.js';
 import { getBillingPeriodStartedAt, resetBillingPeriod } from '../../lib/billing-period.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { createSupabaseAdmin } from '../../lib/supabase.js';
@@ -169,13 +173,18 @@ adminRouter.get(
     if (sellerIds.length) {
       const rows = await db
         .select({
-          sellerId: orders.sellerId,
-          monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::float8`,
-          monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::int`,
+          sellerId: sellerDailyStats.sellerId,
+          monthlyRevenue: sql<number>`coalesce(sum(${sellerDailyStats.revenue}), 0)::float8`,
+          monthlyOrderCount: sql<number>`coalesce(sum(${sellerDailyStats.completedOrders}), 0)::int`,
         })
-        .from(orders)
-        .where(inArray(orders.sellerId, sellerIds))
-        .groupBy(orders.sellerId);
+        .from(sellerDailyStats)
+        .where(
+          and(
+            inArray(sellerDailyStats.sellerId, sellerIds),
+            sql`${sellerDailyStats.day} >= (${periodStartIso}::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date`,
+          ),
+        )
+        .groupBy(sellerDailyStats.sellerId);
       for (const r of rows) {
         if (!r.sellerId) continue;
         statsBySeller.set(r.sellerId, {
@@ -320,11 +329,16 @@ adminRouter.delete(
       throw new AppError(400, 'Không thể tự xóa tài khoản của chính mình', 'CANNOT_SELF_MODIFY');
     }
 
-    const [orderRow] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(orders)
-      .where(eq(orders.sellerId, sellerId));
-    if ((orderRow?.count ?? 0) > 0) {
+    // Đơn cũ đã bị retention xóa nên phải hỏi counter lịch sử, không chỉ bảng orders.
+    const [[orderRow], [counterRow]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(orders).where(eq(orders.sellerId, sellerId)),
+      db
+        .select({ lifetimeOrders: sellerCounters.lifetimeOrders, openCount: sellerCounters.openCount })
+        .from(sellerCounters)
+        .where(eq(sellerCounters.sellerId, sellerId))
+        .limit(1),
+    ]);
+    if ((orderRow?.count ?? 0) > 0 || (counterRow?.lifetimeOrders ?? 0) > 0 || (counterRow?.openCount ?? 0) > 0) {
       throw new AppError(
         409,
         'Đối tác còn lịch sử đơn hàng — không thể xóa vĩnh viễn. Hãy tạm dừng thay vì xóa.',
@@ -599,19 +613,29 @@ adminRouter.delete(
     const [existing] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
     if (!existing) throw new AppError(404, 'Không tìm thấy người dùng', 'NOT_FOUND');
 
-    const [{ count: buyerOrderCount }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(orders)
-      .where(eq(orders.buyerId, userId));
+    const [[{ count: liveBuyerOrders }], [buyerCounterRow]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(orders).where(eq(orders.buyerId, userId)),
+      db
+        .select({ lifetimeCompleted: buyerCounters.lifetimeCompleted, openCount: buyerCounters.openCount })
+        .from(buyerCounters)
+        .where(eq(buyerCounters.userId, userId))
+        .limit(1),
+    ]);
+    const buyerOrderCount =
+      (liveBuyerOrders ?? 0) + (buyerCounterRow?.lifetimeCompleted ?? 0) + (buyerCounterRow?.openCount ?? 0);
 
     const [sellerRow] = await db.select({ id: sellers.id }).from(sellers).where(eq(sellers.userId, userId)).limit(1);
     let sellerOrderCount = 0;
     if (sellerRow) {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(orders)
-        .where(eq(orders.sellerId, sellerRow.id));
-      sellerOrderCount = row?.count ?? 0;
+      const [[row], [counter]] = await Promise.all([
+        db.select({ count: sql<number>`count(*)::int` }).from(orders).where(eq(orders.sellerId, sellerRow.id)),
+        db
+          .select({ lifetimeOrders: sellerCounters.lifetimeOrders, openCount: sellerCounters.openCount })
+          .from(sellerCounters)
+          .where(eq(sellerCounters.sellerId, sellerRow.id))
+          .limit(1),
+      ]);
+      sellerOrderCount = (row?.count ?? 0) + (counter?.lifetimeOrders ?? 0) + (counter?.openCount ?? 0);
     }
 
     if ((buyerOrderCount ?? 0) > 0 || sellerOrderCount > 0) {
@@ -886,6 +910,7 @@ adminRouter.post(
       .update(complaints)
       .set({ updatedAt: new Date(), status: 'processing' })
       .where(eq(complaints.id, complaint.id));
+    await refreshSellerCounters(db, complaint.sellerId);
     res.status(201).json({ data: message });
   }),
 );
@@ -905,9 +930,15 @@ adminRouter.patch(
     const [existing] = await db.select().from(complaints).where(eq(complaints.id, complaintId)).limit(1);
     if (!existing) throw new AppError(404, 'Không tìm thấy khiếu nại', 'NOT_FOUND');
 
+    const closing = status === 'resolved' || status === 'rejected';
     const [updated] = await db
       .update(complaints)
-      .set({ status, adminResolution, updatedAt: new Date() })
+      .set({
+        status,
+        adminResolution,
+        closedAt: closing ? (existing.closedAt ?? new Date()) : null,
+        updatedAt: new Date(),
+      })
       .where(eq(complaints.id, complaintId))
       .returning();
     if (updated && adminResolution?.trim()) {
@@ -928,6 +959,8 @@ adminRouter.patch(
       newValue: { status: updated?.status, adminResolution: updated?.adminResolution },
     });
 
+    await refreshSellerCounters(db, existing.sellerId);
+
     res.json({ data: updated });
   }),
 );
@@ -936,22 +969,27 @@ adminRouter.get(
   '/stats',
   asyncHandler(async (req, res) => {
     const db = req.app.locals.db;
-    const [[buyers], [sellerCount], [orderCount], [pendingSellers], [openComplaints], [processingOrders]] = await Promise.all([
+    // Tổng đơn / đơn đang chạy / khiếu nại mở lấy từ counter — orders chỉ còn 7 ngày gần nhất.
+    const [[buyers], [sellerCount], [pendingSellers], [aggregate]] = await Promise.all([
       db.select({ c: sql<number>`count(*)::int` }).from(profiles).where(eq(profiles.role, 'buyer')),
       db.select({ c: sql<number>`count(*)::int` }).from(sellers),
-      db.select({ c: sql<number>`count(*)::int` }).from(orders),
       db.select({ c: sql<number>`count(*)::int` }).from(sellers).where(eq(sellers.status, 'pending')),
-      db.select({ c: sql<number>`count(*)::int` }).from(complaints).where(sql`${complaints.status} in ('new', 'processing', 'waiting_seller')`),
-      db.select({ c: sql<number>`count(*)::int` }).from(orders).where(sql`${orders.status} not in ('completed', 'cancelled', 'rejected')`),
+      db
+        .select({
+          lifetimeOrders: sql<number>`coalesce(sum(${sellerCounters.lifetimeOrders}), 0)::int`,
+          openOrders: sql<number>`coalesce(sum(${sellerCounters.openCount}), 0)::int`,
+          openComplaints: sql<number>`coalesce(sum(${sellerCounters.openComplaintCount}), 0)::int`,
+        })
+        .from(sellerCounters),
     ]);
     res.json({
       data: {
         buyers: buyers?.c ?? 0,
         sellers: sellerCount?.c ?? 0,
-        orders: orderCount?.c ?? 0,
+        orders: Number(aggregate?.lifetimeOrders ?? 0) + Number(aggregate?.openOrders ?? 0),
         pendingSellers: pendingSellers?.c ?? 0,
-        openComplaints: openComplaints?.c ?? 0,
-        processingOrders: processingOrders?.c ?? 0,
+        openComplaints: Number(aggregate?.openComplaints ?? 0),
+        processingOrders: Number(aggregate?.openOrders ?? 0),
       },
     });
   }),

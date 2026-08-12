@@ -25,10 +25,12 @@ import {
   sellerBankAccounts,
   profiles,
   checkoutIdempotencyKeys,
+  sellerDailyStats,
 } from '@langdaihoc/database';
 import { canActorTransition, canTransitionFood, canTransitionLaundry, canTransitionShipProxy, formatOrderSummary, orderStatusLabel, SHIP_PROXY_FEE_VND } from '@langdaihoc/shared';
 import { AppError } from '../middleware/error-handler.js';
 import { getBillingPeriodStartedAt } from '../lib/billing-period.js';
+import { refreshOrderCounters, recordOrderCompleted } from './counters.js';
 
 export function generateOrderCode(type: 'food' | 'laundry' | 'ship_proxy') {
   const prefix = type === 'food' ? 'FD' : type === 'laundry' ? 'LD' : 'SP';
@@ -724,6 +726,8 @@ export async function checkoutFood(
       });
     }
 
+    await refreshOrderCounters(conn, { sellerId: order.sellerId, buyerId });
+
     return { ...order, summary: orderSummary };
   };
 
@@ -888,6 +892,8 @@ export async function createLaundryOrder(
       orderId: order.id,
     });
 
+    await refreshOrderCounters(tx, { sellerId: order.sellerId, buyerId });
+
     await tx.insert(checkoutIdempotencyKeys).values({
       userId: buyerId,
       key: idempotencyKey,
@@ -1021,6 +1027,8 @@ export async function createShipProxyOrder(
       orderId: order.id,
     });
 
+    await refreshOrderCounters(tx, { sellerId: order.sellerId, buyerId });
+
     await tx.insert(checkoutIdempotencyKeys).values({
       userId: buyerId,
       key: idempotencyKey,
@@ -1137,6 +1145,20 @@ export async function transitionOrder(
     actorRole,
     note,
   });
+
+  // Cộng dồn đúng một lần: `from !== 'completed'` + optimistic lock ở trên đảm bảo
+  // không có hai transition song song nào cùng ghi nhận một đơn.
+  if (toStatus === 'completed' && from !== 'completed') {
+    await recordOrderCompleted(db, {
+      orderId,
+      sellerId: order.sellerId,
+      buyerId: order.buyerId,
+      total: updated.total,
+      completedAt: updated.completedAt ?? new Date(),
+    });
+  }
+
+  await refreshOrderCounters(db, { sellerId: order.sellerId, buyerId: order.buyerId });
 
   const [seller] = await db
     .select({ shopName: sellers.shopName })
@@ -1287,20 +1309,34 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
     }
     const periodStart = await getBillingPeriodStartedAt(db);
     const periodStartIso = periodStart.toISOString();
-    const [row] = await db
-      .select({
-        active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
-        delivering: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('delivering','returning')), 0)::int`,
-        done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
-        pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
-        preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
-        monthlyRevenue: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::float8`,
-        monthlyOrderCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed' and coalesce(${orders.completedAt}, ${orders.updatedAt}) >= ${periodStartIso}::timestamptz), 0)::int`,
-      })
-      .from(orders)
-      .where(eq(orders.sellerId, seller.id));
-    const monthlyRevenue = Number(row?.monthlyRevenue ?? 0);
-    const monthlyOrderCount = Number(row?.monthlyOrderCount ?? 0);
+    // Badge tab đếm trên orders (chỉ còn đơn mở + đơn đóng trong 7 ngày nên rất nhẹ),
+    // còn doanh thu kỳ đọc từ seller_daily_stats vì đơn cũ đã bị retention xóa.
+    const [[row], [periodRow]] = await Promise.all([
+      db
+        .select({
+          active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
+          delivering: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('delivering','returning')), 0)::int`,
+          done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
+          pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
+          preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
+        })
+        .from(orders)
+        .where(eq(orders.sellerId, seller.id)),
+      db
+        .select({
+          revenue: sql<number>`coalesce(sum(${sellerDailyStats.revenue}), 0)::float8`,
+          orderCount: sql<number>`coalesce(sum(${sellerDailyStats.completedOrders}), 0)::int`,
+        })
+        .from(sellerDailyStats)
+        .where(
+          and(
+            eq(sellerDailyStats.sellerId, seller.id),
+            sql`${sellerDailyStats.day} >= (${periodStartIso}::timestamptz at time zone 'Asia/Ho_Chi_Minh')::date`,
+          ),
+        ),
+    ]);
+    const monthlyRevenue = Number(periodRow?.revenue ?? 0);
+    const monthlyOrderCount = Number(periodRow?.orderCount ?? 0);
     return {
       active: Number(row?.active ?? 0),
       delivering: Number(row?.delivering ?? 0),
@@ -1409,6 +1445,7 @@ export async function enrichOrdersList(
         .from(complaints)
         .where(inArray(complaints.orderId, orderIds));
       for (const c of complaintRows) {
+        if (!c.orderId) continue;
         complaintByOrder.set(c.orderId, {
           id: c.id,
           reason: c.reason,
@@ -1460,24 +1497,30 @@ export async function getSellerRating(db: Database, sellerId: string) {
   return map.get(sellerId) ?? { average: 0, count: 0 };
 }
 
-/** Batch rating cho danh sách seller — tránh N+1 trên catalog. */
+/**
+ * Batch rating cho danh sách seller — đọc tổng đã cộng dồn trên sellers,
+ * không AVG lại bảng reviews (và không phụ thuộc việc reviews có bị dọn hay không).
+ */
 export async function getSellerRatingsMap(db: Database, sellerIds: string[]) {
   if (sellerIds.length === 0) return new Map<string, { average: number; count: number }>();
 
   const rows = await db
     .select({
-      sellerId: reviews.sellerId,
-      avg: sql<number>`coalesce(avg(${reviews.rating}), 0)`,
-      count: sql<number>`count(*)::int`,
+      sellerId: sellers.id,
+      sum: sellers.ratingSum,
+      count: sellers.ratingCount,
     })
-    .from(reviews)
-    .where(inArray(reviews.sellerId, sellerIds))
-    .groupBy(reviews.sellerId);
+    .from(sellers)
+    .where(inArray(sellers.id, sellerIds));
 
   const map = new Map<string, { average: number; count: number }>();
   for (const id of sellerIds) map.set(id, { average: 0, count: 0 });
   for (const row of rows) {
-    map.set(row.sellerId, { average: Number(row.avg ?? 0), count: Number(row.count ?? 0) });
+    const count = Number(row.count ?? 0);
+    map.set(row.sellerId, {
+      average: count > 0 ? Number(row.sum ?? 0) / count : 0,
+      count,
+    });
   }
   return map;
 }

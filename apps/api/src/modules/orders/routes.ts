@@ -17,6 +17,8 @@ import {
   sellerBankAccounts,
   carts,
   notifications,
+  sellerCounters,
+  buyerCounters,
 } from '@langdaihoc/database';
 import type { Database } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
@@ -32,6 +34,7 @@ import {
   isPgUniqueViolation,
   notifyUser,
 } from '../../services/commerce.js';
+import { refreshSellerCounters, bumpSellerRating } from '../../services/counters.js';
 import { formatOrderSummary } from '@langdaihoc/shared';
 import { paramId } from '../../lib/params.js';
 import {
@@ -106,25 +109,8 @@ ordersRouter.get(
         return;
       }
 
-      const [[row], [complaintRow], [notifRow]] = await Promise.all([
-        db
-          .select({
-            pendingCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
-            openCount: sql<number>`coalesce(count(*) filter (where ${orders.status} not in ('completed', 'cancelled', 'rejected', 'needs_support')), 0)::int`,
-            lateWarningCount: sql<number>`coalesce(count(*) filter (where ${orders.lateDeliveryWarnedAt} is not null and ${orders.status} not in ('completed', 'cancelled', 'rejected', 'needs_support')), 0)::int`,
-            latestCreatedAt: sql<string | null>`max(${orders.createdAt})`,
-            latestUpdatedAt: sql<string | null>`max(${orders.updatedAt})`,
-            latestLateWarningAt: sql<string | null>`max(${orders.lateDeliveryWarnedAt})`,
-          })
-          .from(orders)
-          .where(eq(orders.sellerId, seller.id)),
-        db
-          .select({
-            openComplaintCount: sql<number>`coalesce(count(*) filter (where ${complaints.status} not in ('resolved', 'rejected')), 0)::int`,
-            latestComplaintAt: sql<string | null>`max(${complaints.updatedAt})`,
-          })
-          .from(complaints)
-          .where(eq(complaints.sellerId, seller.id)),
+      const [[row], [notifRow]] = await Promise.all([
+        db.select().from(sellerCounters).where(eq(sellerCounters.sellerId, seller.id)).limit(1),
         db
           .select({
             unreadNotifications: sql<number>`coalesce(count(*) filter (where ${notifications.readAt} is null), 0)::int`,
@@ -136,16 +122,17 @@ ordersRouter.get(
 
       res.json({
         data: {
-          pendingCount: Number(row?.pendingCount ?? 0),
-          openCount: Number(row?.openCount ?? 0),
-          lateWarningCount: Number(row?.lateWarningCount ?? 0),
-          openComplaintCount: Number(complaintRow?.openComplaintCount ?? 0),
-          latestCreatedAt: row?.latestCreatedAt ?? null,
-          latestUpdatedAt: row?.latestUpdatedAt ?? null,
-          latestLateWarningAt: row?.latestLateWarningAt ?? null,
-          latestComplaintAt: complaintRow?.latestComplaintAt ?? null,
+          pendingCount: row?.pendingCount ?? 0,
+          openCount: row?.openCount ?? 0,
+          lateWarningCount: row?.lateWarningCount ?? 0,
+          openComplaintCount: row?.openComplaintCount ?? 0,
+          latestCreatedAt: row?.latestOrderAt ?? null,
+          latestUpdatedAt: row?.latestChangeAt ?? null,
+          latestLateWarningAt: row?.lateWarningCount ? (row?.latestChangeAt ?? null) : null,
+          latestComplaintAt: row?.openComplaintCount ? (row?.latestChangeAt ?? null) : null,
           unreadNotifications: Number(notifRow?.unreadNotifications ?? 0),
           latestNotificationAt: notifRow?.latestNotificationAt ?? null,
+          version: row?.version ?? 0,
         },
       });
       return;
@@ -153,16 +140,7 @@ ordersRouter.get(
 
     if (role === 'buyer') {
       const [[orderRow], [notifRow]] = await Promise.all([
-        db
-          .select({
-            // Đơn cần buyer phản hồi (vd. chốt giá giặt) → poll mau hơn
-            pendingCount: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'waiting_price_confirmation'), 0)::int`,
-            openCount: sql<number>`coalesce(count(*) filter (where ${orders.status} not in ('completed', 'cancelled', 'rejected', 'needs_support')), 0)::int`,
-            latestCreatedAt: sql<string | null>`max(${orders.createdAt})`,
-            latestUpdatedAt: sql<string | null>`max(${orders.updatedAt})`,
-          })
-          .from(orders)
-          .where(eq(orders.buyerId, req.user!.id)),
+        db.select().from(buyerCounters).where(eq(buyerCounters.userId, req.user!.id)).limit(1),
         db
           .select({
             unreadNotifications: sql<number>`coalesce(count(*) filter (where ${notifications.readAt} is null), 0)::int`,
@@ -174,12 +152,14 @@ ordersRouter.get(
 
       res.json({
         data: {
-          pendingCount: Number(orderRow?.pendingCount ?? 0),
-          openCount: Number(orderRow?.openCount ?? 0),
-          latestCreatedAt: orderRow?.latestCreatedAt ?? null,
-          latestUpdatedAt: orderRow?.latestUpdatedAt ?? null,
+          // Đơn cần buyer phản hồi (vd. chốt giá giặt) → poll mau hơn
+          pendingCount: orderRow?.pendingCount ?? 0,
+          openCount: orderRow?.openCount ?? 0,
+          latestCreatedAt: orderRow?.latestOrderAt ?? null,
+          latestUpdatedAt: orderRow?.latestChangeAt ?? null,
           unreadNotifications: Number(notifRow?.unreadNotifications ?? 0),
           latestNotificationAt: notifRow?.latestNotificationAt ?? null,
+          version: orderRow?.version ?? 0,
         },
       });
       return;
@@ -674,6 +654,8 @@ ordersRouter.post(
       );
     }
 
+    await refreshSellerCounters(db, order.sellerId);
+
     res.json({
       data: updated,
       message: 'Đã gửi cảnh báo cho quán',
@@ -856,6 +838,7 @@ ordersRouter.post(
         .insert(reviews)
         .values({
           orderId: order.id,
+          orderCode: order.orderCode,
           buyerId: req.user!.id,
           sellerId: order.sellerId,
           rating: body.rating,
@@ -863,6 +846,7 @@ ordersRouter.post(
           tags: body.tags,
         })
         .returning();
+      await bumpSellerRating(db, order.sellerId, body.rating, 1);
       res.status(201).json({ data: review });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -890,6 +874,11 @@ ordersRouter.patch(
     if (!order || order.buyerId !== req.user!.id || order.status !== 'completed') {
       throw new AppError(400, 'Không thể sửa đánh giá đơn này', 'INVALID_REVIEW');
     }
+    const [previous] = await db
+      .select({ rating: reviews.rating })
+      .from(reviews)
+      .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
+      .limit(1);
     const [updated] = await db
       .update(reviews)
       .set({
@@ -901,6 +890,7 @@ ordersRouter.patch(
       .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
       .returning();
     if (!updated) throw new AppError(404, 'Chưa có đánh giá để sửa', 'NOT_FOUND');
+    await bumpSellerRating(db, order.sellerId, body.rating - (previous?.rating ?? body.rating), 0);
     res.json({ data: updated });
   }),
 );
@@ -933,6 +923,7 @@ ordersRouter.post(
         .insert(complaints)
         .values({
           orderId: order.id,
+          orderCode: order.orderCode,
           buyerId: req.user!.id,
           sellerId: order.sellerId,
           reason: body.reason,
@@ -963,6 +954,7 @@ ordersRouter.post(
           { orderId: order.id, complaintId: complaint.id, orderCode: order.orderCode },
         );
       }
+      await refreshSellerCounters(db, order.sellerId);
       res.status(201).json({ data: complaint });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -1003,6 +995,7 @@ ordersRouter.post(
       authorRole: 'buyer',
       body: 'Người mua gửi khiếu nại lên admin để xử lý.',
     });
+    await refreshSellerCounters(db, order.sellerId);
     res.json({ data: updated, message: 'Đã gửi khiếu nại lên admin' });
   }),
 );
@@ -1052,6 +1045,7 @@ ordersRouter.post(
         { orderId: order.id, complaintId: complaint.id, orderCode: order.orderCode },
       );
     }
+    await refreshSellerCounters(db, order.sellerId);
     res.status(201).json({ data: message });
   }),
 );

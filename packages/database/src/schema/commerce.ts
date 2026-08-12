@@ -235,6 +235,8 @@ export const orders = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    /** Đã cộng vào seller_daily_stats — chặn rollup cộng trùng khi retention dọn đơn. */
+    statsRecordedAt: timestamp('stats_recorded_at', { withTimezone: true }),
   },
   (t) => [
     index('orders_buyer_idx').on(t.buyerId, t.createdAt),
@@ -348,10 +350,11 @@ export const reviews = pgTable(
   'reviews',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    /** Null sau khi đơn bị dọn theo retention — đánh giá vẫn sống độc lập. */
     orderId: uuid('order_id')
-      .notNull()
-      .references(() => orders.id)
+      .references(() => orders.id, { onDelete: 'set null' })
       .unique(),
+    orderCode: varchar('order_code', { length: 30 }),
     buyerId: uuid('buyer_id')
       .notNull()
       .references(() => profiles.id),
@@ -375,9 +378,9 @@ export const complaints = pgTable(
   'complaints',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    orderId: uuid('order_id')
-      .notNull()
-      .references(() => orders.id),
+    /** Null sau khi đơn bị dọn theo retention — hồ sơ khiếu nại vẫn giữ để đối chất. */
+    orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+    orderCode: varchar('order_code', { length: 30 }),
     buyerId: uuid('buyer_id')
       .notNull()
       .references(() => profiles.id),
@@ -389,6 +392,8 @@ export const complaints = pgTable(
     evidenceUrls: text('evidence_urls').array(),
     status: complaintStatusEnum('status').notNull().default('new'),
     adminResolution: text('admin_resolution'),
+    /** Mốc đóng hồ sơ (resolved/rejected) — dùng cho retention 30 ngày. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

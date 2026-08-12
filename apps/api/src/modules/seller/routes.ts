@@ -22,6 +22,7 @@ import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { loadFoodItemExtras, mapFoodItemExtras, notifyUser } from '../../services/commerce.js';
+import { refreshSellerCounters } from '../../services/counters.js';
 import { paramId } from '../../lib/params.js';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
 
@@ -806,7 +807,8 @@ sellerRouter.get(
       })
       .from(complaints)
       .innerJoin(profiles, eq(complaints.buyerId, profiles.id))
-      .innerJoin(orders, eq(complaints.orderId, orders.id))
+      // Đơn có thể đã bị retention dọn — khiếu nại vẫn phải hiện, dùng orderCode đã lưu.
+      .leftJoin(orders, eq(complaints.orderId, orders.id))
       .where(eq(complaints.sellerId, seller.id))
       .orderBy(desc(complaints.updatedAt), desc(complaints.createdAt));
     res.json({
@@ -827,11 +829,11 @@ sellerRouter.get(
           },
           order: {
             id: row.complaint.orderId,
-            orderCode: row.orderCode,
+            orderCode: row.orderCode ?? row.complaint.orderCode,
             status: row.orderStatus,
             type: row.orderType,
             total: row.orderTotal,
-            createdAt: row.orderCreatedAt,
+            createdAt: row.orderCreatedAt ?? row.complaint.createdAt,
           },
         };
       }),
@@ -913,6 +915,7 @@ sellerRouter.post(
       preview,
       { orderId: complaint.orderId, complaintId: complaint.id },
     );
+    await refreshSellerCounters(db, seller.id);
     res.status(201).json({ data: message });
   }),
 );
@@ -949,7 +952,7 @@ sellerRouter.post(
     }
     const [updated] = await db
       .update(complaints)
-      .set({ status: 'resolved', updatedAt: new Date() })
+      .set({ status: 'resolved', closedAt: new Date(), updatedAt: new Date() })
       .where(eq(complaints.id, complaint.id))
       .returning();
     await db.insert(complaintMessages).values({
@@ -966,6 +969,7 @@ sellerRouter.post(
       'Người bán đã đóng khiếu nại của bạn.',
       { orderId: complaint.orderId, complaintId: complaint.id },
     );
+    await refreshSellerCounters(db, seller.id);
     res.json({ data: updated, message: 'Đã đóng khiếu nại' });
   }),
 );

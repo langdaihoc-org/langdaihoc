@@ -87,6 +87,9 @@ export const sellers = pgTable(
     /** Phí nhận hộ (VND) — chỉ dùng khi serviceTypes = ship_proxy */
     shipProxyFee: numeric('ship_proxy_fee', { precision: 12, scale: 0 }).notNull().default('15000'),
     acceptingOrders: boolean('accepting_orders').notNull().default(true),
+    /** Rating tổng hợp — giữ độc lập với bảng reviews để không phải AVG khi đọc catalog. */
+    ratingSum: integer('rating_sum').notNull().default(0),
+    ratingCount: integer('rating_count').notNull().default(0),
     status: sellerStatusEnum('status').notNull().default('pending'),
     rejectionReason: text('rejection_reason'),
     approvedAt: timestamp('approved_at', { withTimezone: true }),

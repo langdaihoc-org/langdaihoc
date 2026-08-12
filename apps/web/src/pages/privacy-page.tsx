@@ -247,9 +247,19 @@ export function PrivacyPage() {
               chuyển khoản, timeline trạng thái). Đơn đang xử lý không bị xóa tự động.
             </li>
             <li>
-              Khiếu nại và đánh giá gắn với đơn đã kết thúc cũng được xóa theo đơn sau 7 ngày (kèm
-              tin nhắn khiếu nại và ảnh bằng chứng nếu có).
+              Khiếu nại đã đóng (được giải quyết hoặc bị từ chối): xóa sau 30 ngày kể từ khi đóng, kèm
+              tin nhắn khiếu nại và ảnh bằng chứng. Khiếu nại chưa đóng không bị xóa theo đơn.
             </li>
+            <li>
+              Đánh giá cửa hàng: nội dung nhận xét xóa sau 90 ngày. Điểm trung bình và số lượt đánh
+              giá của cửa hàng được giữ ở dạng số liệu tổng hợp, không kèm danh tính người đánh giá.
+            </li>
+            <li>
+              Số liệu tổng hợp theo ngày của cửa hàng (số đơn hoàn tất, doanh thu) được giữ để đối
+              soát; số liệu này không chứa thông tin cá nhân của người mua.
+            </li>
+            <li>Giỏ hàng bỏ quên: xóa các món trong giỏ sau 30 ngày không thao tác.</li>
+            <li>Góp ý / báo lỗi đã xử lý xong: xóa sau 90 ngày.</li>
             <li>Bài đăng trên feed: xóa sau 7 ngày kể từ ngày tạo (kèm ảnh bài đăng).</li>
             <li>
               Hồ sơ, địa chỉ đã lưu, cửa hàng và danh mục món/dịch vụ được giữ khi tài khoản/dịch vụ
