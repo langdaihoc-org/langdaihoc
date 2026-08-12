@@ -632,6 +632,7 @@ export async function checkoutFood(
     phone: string;
     paymentMethod: 'cash' | 'bank_transfer';
     desiredDeliveryAt?: string;
+    desiredDeliveryUntil?: string;
     notes?: string;
   },
   idempotencyKey: string,
@@ -703,6 +704,9 @@ export async function checkoutFood(
         recipientPhone: data.phone || address.phone,
         deliveryAddress: address,
         desiredDeliveryAt: data.desiredDeliveryAt ? new Date(data.desiredDeliveryAt) : null,
+        desiredDeliveryUntil: data.desiredDeliveryUntil
+          ? new Date(data.desiredDeliveryUntil)
+          : null,
       })
       .returning();
 
@@ -1285,6 +1289,7 @@ const ORDER_LIST_COLUMNS = {
   pickupAddress: orders.pickupAddress,
   returnAddress: orders.returnAddress,
   desiredDeliveryAt: orders.desiredDeliveryAt,
+  desiredDeliveryUntil: orders.desiredDeliveryUntil,
   lateDeliveryWarnedAt: orders.lateDeliveryWarnedAt,
   pickupScheduledAt: orders.pickupScheduledAt,
   version: orders.version,
@@ -1311,6 +1316,7 @@ export type OrderListRow = {
   pickupAddress: unknown;
   returnAddress: unknown;
   desiredDeliveryAt: Date | null;
+  desiredDeliveryUntil: Date | null;
   lateDeliveryWarnedAt: Date | null;
   pickupScheduledAt: Date | null;
   version: number;

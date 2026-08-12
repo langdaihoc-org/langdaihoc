@@ -3,7 +3,7 @@ import { ordersApi, ApiError, type Order, type PaymentProof } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel } from '@/lib/format';
+import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel, formatDateTimeVi, formatDeliveryWish } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { useState, useMemo, useEffect } from 'react';
@@ -281,7 +281,7 @@ export function SellerOrdersPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
-                      <span className="flex items-center gap-1"><Clock className="size-3" />{new Date(o.createdAt).toLocaleString('vi')}</span>
+                      <span className="flex items-center gap-1"><Clock className="size-3" />{formatDateTimeVi(o.createdAt)}</span>
                       {o.buyerName && <span className="flex items-center gap-1"><User className="size-3" />{o.buyerName}</span>}
                       <span className="font-semibold text-brand-orange">{formatPrice(o.total)}</span>
                     </div>
@@ -290,7 +290,7 @@ export function SellerOrdersPage() {
                       <p className="rounded-xl border border-amber-400 bg-amber-300 px-3 py-2 text-xs font-semibold text-amber-950">
                         Khách cảnh báo trễ đơn · chưa được gọi giao
                         <span className="mt-0.5 block font-normal text-amber-950/80">
-                          {new Date(o.lateDeliveryWarnedAt).toLocaleString('vi')}
+                          {formatDateTimeVi(o.lateDeliveryWarnedAt)}
                         </span>
                       </p>
                     )}
@@ -302,7 +302,7 @@ export function SellerOrdersPage() {
                       >
                         Khiếu nại từ khách · {o.complaint.reason}
                         <span className="mt-0.5 block font-normal text-amber-950/80">
-                          {new Date(o.complaint.createdAt).toLocaleString('vi')}
+                          {formatDateTimeVi(o.complaint.createdAt)}
                         </span>
                       </Link>
                     )}
@@ -360,7 +360,7 @@ export function SellerOrdersPage() {
                         {o.desiredDeliveryAt && (
                           <p className="flex items-center gap-1 text-[var(--color-muted)]">
                             <Clock className="size-3" />
-                            Mong muốn: {new Date(o.desiredDeliveryAt).toLocaleString('vi')}
+                            Mong muốn: {formatDeliveryWish(o.desiredDeliveryAt, o.desiredDeliveryUntil)}
                           </p>
                         )}
                       </div>
@@ -385,10 +385,10 @@ export function SellerOrdersPage() {
                       <div className="space-y-1 rounded-xl bg-black/[0.02] p-3 text-sm">
                         <p><span className="text-[var(--color-muted)]">Số shipper:</span> {o.shipProxy.trackingCode}</p>
                         <p><span className="text-[var(--color-muted)]">Lấy tại:</span> {o.shipProxy.pickupLocation}</p>
-                        <p><span className="text-[var(--color-muted)]">Giờ lấy:</span> {new Date(o.shipProxy.pickupAt).toLocaleString('vi')}</p>
+                        <p><span className="text-[var(--color-muted)]">Giờ lấy:</span> {formatDateTimeVi(o.shipProxy.pickupAt)}</p>
                         <p><span className="text-[var(--color-muted)]">SĐT nhận đơn hàng:</span> {o.shipProxy.receivePhone}</p>
                         <p><span className="text-[var(--color-muted)]">Giao lại:</span> {o.shipProxy.returnAddressText}</p>
-                        <p><span className="text-[var(--color-muted)]">Giờ giao lại:</span> {new Date(o.shipProxy.returnAt).toLocaleString('vi')}</p>
+                        <p><span className="text-[var(--color-muted)]">Giờ giao lại:</span> {formatDateTimeVi(o.shipProxy.returnAt)}</p>
                         <p>
                           <span className="text-[var(--color-muted)]">SĐT khách:</span>{' '}
                           <a href={`tel:${o.shipProxy.contactPhone}`} className="font-semibold text-brand-orange">{o.shipProxy.contactPhone}</a>
@@ -424,10 +424,10 @@ export function SellerOrdersPage() {
                           </p>
                         )}
                         {o.pickupScheduledAt && (
-                          <p className="flex items-center gap-1"><Clock className="size-3" />Lấy đồ: {new Date(o.pickupScheduledAt).toLocaleString('vi')}</p>
+                          <p className="flex items-center gap-1"><Clock className="size-3" />Lấy đồ: {formatDateTimeVi(o.pickupScheduledAt)}</p>
                         )}
                         {o.desiredDeliveryAt && o.type === 'laundry' && (
-                          <p className="flex items-center gap-1"><Clock className="size-3" />Giao lại: {new Date(o.desiredDeliveryAt).toLocaleString('vi')}</p>
+                          <p className="flex items-center gap-1"><Clock className="size-3" />Giao lại: {formatDateTimeVi(o.desiredDeliveryAt)}</p>
                         )}
                       </div>
                     )}

@@ -593,6 +593,7 @@ export interface Order {
   laundry?: LaundryOrderDetail | null;
   shipProxy?: ShipProxyOrderDetail | null;
   desiredDeliveryAt?: string | null;
+  desiredDeliveryUntil?: string | null;
   lateDeliveryWarnedAt?: string | null;
   complaint?: {
     id: string;

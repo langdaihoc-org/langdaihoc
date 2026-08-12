@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { sellerApi, ordersApi, ApiError, type Complaint } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { orderStatusLabel, formatPrice, orderDisplayTitle, orderTypeLabel } from '@/lib/format';
+import { orderStatusLabel, formatPrice, orderDisplayTitle, orderTypeLabel, formatDateTimeVi, formatDeliveryWish } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { useToast } from '@/components/ui/toast';
 import { ComplaintThread } from '@/components/marketplace/complaint-thread';
@@ -332,7 +332,7 @@ export function SellerComplaintsPage() {
                 {o.desiredDeliveryAt && (
                   <p className="flex items-center gap-1 text-[var(--color-muted)]">
                     <Clock className="size-3" />
-                    Mong muốn: {new Date(o.desiredDeliveryAt).toLocaleString('vi')}
+                    Mong muốn: {formatDeliveryWish(o.desiredDeliveryAt, o.desiredDeliveryUntil)}
                   </p>
                 )}
               </div>
@@ -365,7 +365,7 @@ export function SellerComplaintsPage() {
               <div className="space-y-1 rounded-xl bg-black/[0.02] p-3 text-sm">
                 <p><span className="text-[var(--color-muted)]">Số shipper:</span> {orderDetail.shipProxy.trackingCode}</p>
                 <p><span className="text-[var(--color-muted)]">Lấy tại:</span> {orderDetail.shipProxy.pickupLocation}</p>
-                <p><span className="text-[var(--color-muted)]">Giờ lấy:</span> {new Date(orderDetail.shipProxy.pickupAt).toLocaleString('vi')}</p>
+                <p><span className="text-[var(--color-muted)]">Giờ lấy:</span> {formatDateTimeVi(orderDetail.shipProxy.pickupAt)}</p>
                 <p><span className="text-[var(--color-muted)]">Giao lại:</span> {orderDetail.shipProxy.returnAddressText}</p>
                 <p>
                   <span className="text-[var(--color-muted)]">SĐT khách:</span>{' '}

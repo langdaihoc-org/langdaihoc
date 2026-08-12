@@ -5,16 +5,10 @@ import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/brand';
 import { Input } from '@/components/ui/input';
 import { MapPin, PenLine, BookUser } from 'lucide-react';
-import {
-  DORM_HANDOFF_POINTS,
-  dormHandoffLabel,
-  normalizeDormHandoff,
-  type DormHandoffPoint,
-} from '@/lib/dorm-handoff';
 
 export function formatAddressLine(a: Pick<Address, 'detail' | 'dormName' | 'roomNumber'>) {
-  const handoff = dormHandoffLabel(a.roomNumber);
-  return [a.detail, a.dormName, handoff].filter(Boolean).join(' · ');
+  // Không hiện "Giao tại tòa/rào" — điểm giao nằm trong thông tin quán.
+  return [a.detail, a.dormName].filter(Boolean).join(' · ');
 }
 
 export type ManualAddressDraft = {
@@ -22,8 +16,6 @@ export type ManualAddressDraft = {
   phone: string;
   detail: string;
   dormName: string;
-  /** Điểm giao KTX: toa | rao (lưu vào roomNumber) */
-  roomNumber: DormHandoffPoint | '';
   saveToProfile: boolean;
 };
 
@@ -36,7 +28,6 @@ const emptyDraft = (phone = ''): ManualAddressDraft => ({
   phone,
   detail: '',
   dormName: '',
-  roomNumber: 'toa',
   saveToProfile: true,
 });
 
@@ -44,12 +35,9 @@ export function isAddressSelectionReady(sel: AddressSelection | null): boolean {
   if (!sel) return false;
   if (sel.mode === 'saved') return !!sel.addressId;
   const d = sel.draft;
-  const base =
-    d.recipientName.trim().length >= 2 && d.phone.trim().length >= 9 && d.detail.trim().length >= 5;
-  if (!base) return false;
-  // Có KTX thì bắt buộc chọn tòa / rào
-  if (d.dormName.trim() && !d.roomNumber) return false;
-  return true;
+  return (
+    d.recipientName.trim().length >= 2 && d.phone.trim().length >= 9 && d.detail.trim().length >= 5
+  );
 }
 
 /** Resolve selection to a saved address id (creates address when mode is manual). */
@@ -62,7 +50,6 @@ export async function resolveAddressId(sel: AddressSelection): Promise<string> {
     phone: d.phone.trim(),
     detail: d.detail.trim(),
     dormName: dormName || undefined,
-    roomNumber: dormName ? d.roomNumber || 'toa' : undefined,
     addressType: dormName ? 'dorm' : 'other',
     isDefault: d.saveToProfile,
   });
@@ -216,40 +203,9 @@ export function AddressPicker({
           <Input
             label="KTX / Tòa"
             value={draft.dormName}
-            onChange={(e) => {
-              const dormName = e.target.value;
-              setDraft({
-                dormName,
-                roomNumber: dormName.trim() ? draft.roomNumber || 'toa' : '',
-              });
-            }}
+            onChange={(e) => setDraft({ dormName: e.target.value })}
             placeholder="KTX B, KTX A..."
           />
-          {draft.dormName.trim() ? (
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium">Điểm giao *</label>
-              <div className="grid grid-cols-2 gap-2">
-                {DORM_HANDOFF_POINTS.map((p) => {
-                  const active = draft.roomNumber === p.value;
-                  return (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setDraft({ roomNumber: p.value })}
-                      className={cn(
-                        'rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors',
-                        active
-                          ? 'border-brand-orange bg-orange-50 text-brand-orange'
-                          : 'border-[var(--color-line)] text-[var(--color-ink)] hover:border-brand-orange/40',
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -263,5 +219,3 @@ export function AddressPicker({
     </div>
   );
 }
-
-export { normalizeDormHandoff };

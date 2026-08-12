@@ -6,7 +6,7 @@ import { ordersApi, buyerApi, ApiError, type BankAccount } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, paymentMethodLabel, complaintStatusLabel } from '@/lib/format';
+import { formatPrice, orderStatusLabel, orderDisplayTitle, paymentStatusLabel, paymentMethodLabel, complaintStatusLabel, formatDateTimeVi, formatDeliveryWish } from '@/lib/format';
 import { buildVietQrImageUrl, transferMemoLast3, bankLogoUrl } from '@/lib/vietqr';
 import { OrderTimeline } from '@/components/ui/order-timeline';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
@@ -196,9 +196,9 @@ export function OrderDetailPage() {
   });
   const foodItems = items ?? [];
   const canWarnLate = Boolean(
-    order.desiredDeliveryAt
+    (order.desiredDeliveryUntil || order.desiredDeliveryAt)
       && !order.lateDeliveryWarnedAt
-      && nowMs >= new Date(order.desiredDeliveryAt).getTime() - 10 * 60 * 1000,
+      && nowMs >= new Date(order.desiredDeliveryUntil || order.desiredDeliveryAt!).getTime() - 10 * 60 * 1000,
   );
 
   return (
@@ -212,7 +212,7 @@ export function OrderDetailPage() {
           <div className="min-w-0">
             <h1 className="font-bold leading-snug">{orderTitle}</h1>
             <p className="mt-1 text-xs text-[var(--color-muted)]">Mã đơn: {order.orderCode}</p>
-            <p className="text-xs text-[var(--color-muted)]">{new Date(order.createdAt).toLocaleString('vi')}</p>
+            <p className="text-xs text-[var(--color-muted)]">{formatDateTimeVi(order.createdAt)}</p>
           </div>
           <StatusBadge variant={order.type === 'food' ? 'orange' : 'green'}>{orderStatusLabel(order.status, order.type)}</StatusBadge>
         </div>
@@ -289,7 +289,7 @@ export function OrderDetailPage() {
           {order.desiredDeliveryAt && (
             <p className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
               <Clock className="size-3.5" />
-              Mong muốn giao: {new Date(order.desiredDeliveryAt).toLocaleString('vi')}
+              Mong muốn giao: {formatDeliveryWish(order.desiredDeliveryAt, order.desiredDeliveryUntil)}
             </p>
           )}
           {order.type === 'food'
@@ -298,7 +298,7 @@ export function OrderDetailPage() {
             <div className="border-t border-[var(--color-line)] pt-2">
               {order.lateDeliveryWarnedAt ? (
                 <p className="text-xs text-amber-800">
-                  Đã gửi cảnh báo trễ đơn lúc {new Date(order.lateDeliveryWarnedAt).toLocaleString('vi')}
+                  Đã gửi cảnh báo trễ đơn lúc {formatDateTimeVi(order.lateDeliveryWarnedAt)}
                 </p>
               ) : canWarnLate ? (
                 <div className="space-y-1.5">
@@ -542,9 +542,9 @@ export function OrderDetailPage() {
           <p className="font-semibold">Chi tiết nhận đồ ship hộ</p>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Số shipper</span><span className="text-right font-medium">{shipProxy.trackingCode}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Vị trí lấy</span><span className="text-right">{shipProxy.pickupLocation}</span></div>
-          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giờ lấy</span><span>{new Date(shipProxy.pickupAt).toLocaleString('vi')}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giờ lấy</span><span>{formatDateTimeVi(shipProxy.pickupAt)}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">SĐT nhận đơn hàng</span><span>{shipProxy.receivePhone}</span></div>
-          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giờ nhận lại</span><span>{new Date(shipProxy.returnAt).toLocaleString('vi')}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giờ nhận lại</span><span>{formatDateTimeVi(shipProxy.returnAt)}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Địa chỉ nhận lại</span><span className="text-right">{shipProxy.returnAddressText}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">SĐT của bạn</span><span>{shipProxy.contactPhone}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giá tiền hàng</span><span className="font-semibold">{formatPrice(shipProxy.packageValue ?? 0)}</span></div>
@@ -581,13 +581,13 @@ export function OrderDetailPage() {
           {order.pickupScheduledAt && (
             <p className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
               <Clock className="size-3.5" />
-              Lấy đồ: {new Date(order.pickupScheduledAt).toLocaleString('vi')}
+              Lấy đồ: {formatDateTimeVi(order.pickupScheduledAt)}
             </p>
           )}
           {order.desiredDeliveryAt && (
             <p className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
               <Clock className="size-3.5" />
-              Giao lại: {new Date(order.desiredDeliveryAt).toLocaleString('vi')}
+              Giao lại: {formatDateTimeVi(order.desiredDeliveryAt)}
             </p>
           )}
         </Card>
@@ -740,7 +740,7 @@ export function OrderDetailPage() {
       <Card>
         <p className="font-semibold mb-2 text-sm">Lịch sử</p>
         {(history as { toStatus: string; createdAt: string }[])?.map((h, i) => (
-          <p key={i} className="text-xs text-[var(--color-muted)]">{new Date(h.createdAt).toLocaleString('vi')} → {orderStatusLabel(h.toStatus, order.type)}</p>
+          <p key={i} className="text-xs text-[var(--color-muted)]">{formatDateTimeVi(h.createdAt)} → {orderStatusLabel(h.toStatus, order.type)}</p>
         ))}
       </Card>
     </div>

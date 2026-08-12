@@ -387,6 +387,7 @@ ordersRouter.post(
         phone: z.string().min(9),
         paymentMethod: z.enum(['cash', 'bank_transfer']),
         desiredDeliveryAt: z.string().optional(),
+        desiredDeliveryUntil: z.string().optional(),
         notes: z.string().optional(),
         idempotencyKey: z.string().uuid().optional(),
       })
@@ -591,14 +592,15 @@ ordersRouter.post(
     if (['completed', 'cancelled', 'rejected', 'needs_support'].includes(order.status)) {
       throw new AppError(400, 'Đơn đã kết thúc', 'ORDER_CLOSED');
     }
-    if (!order.desiredDeliveryAt) {
+    const dueAt = order.desiredDeliveryUntil ?? order.desiredDeliveryAt;
+    if (!dueAt) {
       throw new AppError(400, 'Đơn chưa có giờ giao mong muốn', 'NO_DELIVERY_TIME');
     }
     if (order.lateDeliveryWarnedAt) {
       throw new AppError(409, 'Bạn đã gửi cảnh báo cho đơn này', 'ALREADY_WARNED');
     }
 
-    const due = new Date(order.desiredDeliveryAt).getTime();
+    const due = new Date(dueAt).getTime();
     const openAt = due - 10 * 60 * 1000;
     if (Number.isNaN(due) || Date.now() < openAt) {
       throw new AppError(
@@ -624,7 +626,15 @@ ordersRouter.post(
       .where(eq(sellers.id, order.sellerId))
       .limit(1);
     if (seller) {
-      const when = new Date(order.desiredDeliveryAt).toLocaleString('vi-VN');
+      const when = order.desiredDeliveryUntil
+        ? `${new Date(order.desiredDeliveryAt!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}–${new Date(order.desiredDeliveryUntil).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${new Date(order.desiredDeliveryAt!).toLocaleDateString('vi-VN')}`
+        : new Date(dueAt).toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          });
       await notifyUser(
         db,
         seller.userId,

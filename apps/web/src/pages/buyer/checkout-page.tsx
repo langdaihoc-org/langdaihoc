@@ -42,6 +42,7 @@ export function CheckoutPage() {
       phone: addressSel?.mode === 'manual' ? addressSel.draft.phone || phone : phone,
       paymentMethod,
       desiredDeliveryAt: windowToDate(deliveryWindow, 'from').toISOString(),
+      desiredDeliveryUntil: windowToDate(deliveryWindow, 'to').toISOString(),
       notes: notes || undefined,
     }, idempotencyKey),
     onSuccess: (res) => {

@@ -224,6 +224,8 @@ export const orders = pgTable(
     recipientPhone: varchar('recipient_phone', { length: 20 }),
     deliveryAddress: jsonb('delivery_address'),
     desiredDeliveryAt: timestamp('desired_delivery_at', { withTimezone: true }),
+    /** Kết thúc cửa sổ giao mong muốn (đồ ăn) */
+    desiredDeliveryUntil: timestamp('desired_delivery_until', { withTimezone: true }),
     /** Buyer báo quán sắp tới giờ giao mà chưa được gọi */
     lateDeliveryWarnedAt: timestamp('late_delivery_warned_at', { withTimezone: true }),
     pickupAddress: jsonb('pickup_address'),

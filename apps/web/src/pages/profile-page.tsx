@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { useEffect, useState } from 'react';
-import { DORM_HANDOFF_POINTS, normalizeDormHandoff } from '@/lib/dorm-handoff';
-import { cn } from '@/lib/utils';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -37,7 +35,6 @@ export function ProfilePage() {
     phone: '',
     detail: '',
     dormName: '',
-    roomNumber: 'toa' as string,
     isDefault: false,
   });
 
@@ -117,10 +114,12 @@ export function ProfilePage() {
     mutationFn: () => {
       const dormName = addrForm.dormName.trim();
       const payload = {
-        ...addrForm,
+        recipientName: addrForm.recipientName,
+        phone: addrForm.phone,
+        detail: addrForm.detail,
         dormName: dormName || undefined,
-        roomNumber: dormName ? (normalizeDormHandoff(addrForm.roomNumber) || 'toa') : undefined,
         addressType: dormName ? 'dorm' as const : 'other' as const,
+        isDefault: addrForm.isDefault,
       };
       return editingId ? buyerApi.updateAddress(editingId, payload) : buyerApi.addAddress(payload);
     },
@@ -128,7 +127,7 @@ export function ProfilePage() {
       qc.invalidateQueries({ queryKey: ['addresses'] });
       setShowAddrForm(false);
       setEditingId(null);
-      setAddrForm({ recipientName: '', phone: '', detail: '', dormName: '', roomNumber: 'toa', isDefault: false });
+      setAddrForm({ recipientName: '', phone: '', detail: '', dormName: '', isDefault: false });
     },
   });
   const deleteAddrMut = useMutation({
@@ -157,7 +156,6 @@ export function ProfilePage() {
       phone: a.phone,
       detail: a.detail,
       dormName: a.dormName ?? '',
-      roomNumber: normalizeDormHandoff(a.roomNumber) || 'toa',
       isDefault: a.isDefault ?? false,
     });
     setShowAddrForm(true);
@@ -356,41 +354,9 @@ export function ProfilePage() {
             <Input
               label="KTX / Tòa"
               value={addrForm.dormName}
-              onChange={(e) => {
-                const dormName = e.target.value;
-                setAddrForm({
-                  ...addrForm,
-                  dormName,
-                  roomNumber: dormName.trim() ? addrForm.roomNumber || 'toa' : '',
-                });
-              }}
+              onChange={(e) => setAddrForm({ ...addrForm, dormName: e.target.value })}
               placeholder="KTX B, KTX A..."
             />
-            {addrForm.dormName.trim() ? (
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium">Điểm giao</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {DORM_HANDOFF_POINTS.map((p) => {
-                    const active = addrForm.roomNumber === p.value;
-                    return (
-                      <button
-                        key={p.value}
-                        type="button"
-                        onClick={() => setAddrForm({ ...addrForm, roomNumber: p.value })}
-                        className={cn(
-                          'rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors',
-                          active
-                            ? 'border-brand-orange-dark bg-sky-50 text-brand-orange-dark'
-                            : 'border-[var(--color-line)] hover:border-brand-orange/40',
-                        )}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={addrForm.isDefault} onChange={(e) => setAddrForm({ ...addrForm, isDefault: e.target.checked })} />
               Đặt làm mặc định
