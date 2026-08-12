@@ -709,6 +709,22 @@ ordersRouter.post(
         .insert(paymentProofs)
         .values({ orderId, imageUrl, status: 'proof_uploaded' })
         .returning();
+
+      const [seller] = await tx
+        .select({ userId: sellers.userId })
+        .from(sellers)
+        .where(eq(sellers.id, order.sellerId))
+        .limit(1);
+      if (seller) {
+        await notifyUser(
+          tx,
+          seller.userId,
+          'payment_proof',
+          'Khách đã gửi biên lai',
+          `Đơn ${order.orderCode} có biên lai chuyển khoản chờ duyệt.`,
+          { orderId, orderCode: order.orderCode },
+        );
+      }
       return row;
     });
     res.status(201).json({ data: proof });
@@ -759,6 +775,17 @@ ordersRouter.post(
           reviewedBy: req.user!.id,
         })
         .where(eq(paymentProofs.orderId, id));
+
+      await notifyUser(
+        tx,
+        order.buyerId,
+        approved ? 'payment_verified' : 'payment_rejected',
+        approved ? 'Đã xác nhận thanh toán' : 'Biên lai bị từ chối',
+        approved
+          ? `Quán đã xác nhận chuyển khoản cho đơn ${order.orderCode}.`
+          : `Quán từ chối biên lai đơn ${order.orderCode}${rejectionReason ? `: ${rejectionReason}` : ''}. Vui lòng gửi lại.`,
+        { orderId: id, orderCode: order.orderCode },
+      );
       return ord;
     });
     void updated;

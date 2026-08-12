@@ -40,6 +40,9 @@ const FEEDBACK_DAYS = 90;
 const ROLLUP_GRACE_MINUTES = 60;
 /** pg_advisory_xact_lock key — an toàn với connection pool (nhả khi commit/rollback). */
 const RETENTION_LOCK_KEY = 7_714_201;
+const RETENTION_JOB = 'data-retention';
+/** Khởi động lại (mỗi lần deploy) chỉ chạy nếu lượt gần nhất đã quá số giờ này. */
+const STARTUP_MIN_HOURS = 20;
 
 const SETTLED_STATUSES = ['completed', 'cancelled', 'rejected'] as const;
 const CHUNK = 200;
@@ -140,19 +143,15 @@ export type RetentionDbResult = {
  * URL file được thu thập để xóa sau khi transaction commit.
  */
 export async function runDataRetentionDb(db: DbConn): Promise<RetentionDbResult> {
-  const staleNotifs = await db
-    .select({ id: notifications.id, userId: notifications.userId })
-    .from(notifications)
-    .where(lt(notifications.createdAt, cutoff(NOTIFICATIONS_DAYS)));
-  const notifUserIds = [...new Set(staleNotifs.map((n) => n.userId))];
-  if (staleNotifs.length) {
-    await db.delete(notifications).where(
-      inArray(
-        notifications.id,
-        staleNotifs.map((n) => n.id),
-      ),
-    );
-  }
+  /**
+   * Xóa thẳng theo điều kiện thay vì gom id rồi `in (...)`: ở mức ~10k đơn/ngày
+   * lượng thông báo quá hạn vượt giới hạn 65535 bind parameter của Postgres.
+   */
+  const deletedNotifs = await db
+    .delete(notifications)
+    .where(lt(notifications.createdAt, cutoff(NOTIFICATIONS_DAYS)))
+    .returning({ userId: notifications.userId });
+  const notifUserIds = [...new Set(deletedNotifs.map((n) => n.userId))];
   if (notifUserIds.length) {
     await refreshUnreadForUsers(db, notifUserIds);
   }
@@ -276,7 +275,7 @@ export async function runDataRetentionDb(db: DbConn): Promise<RetentionDbResult>
     .returning({ id: siteFeedback.id });
 
   return {
-    notifications: staleNotifs.length,
+    notifications: deletedNotifs.length,
     idempotencyKeys: deletedIdempotency.length,
     auditLogs: deletedAudit.length,
     orders: deletedOrders,
@@ -320,18 +319,29 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
 }
 
 export function scheduleDataRetention(db: Database, supabase?: SupabaseClient) {
-  const run = async () => {
+  const run = async (trigger: 'startup' | 'daily') => {
     try {
+      // Railway deploy lại là một lần khởi động process; không để mỗi lần deploy
+      // kéo theo một lượt quét/xoá nặng giữa giờ cao điểm.
+      const minHours = trigger === 'startup' ? STARTUP_MIN_HOURS : 0;
+
       // DB trong txn ngắn + advisory lock; storage HTTP sau commit để không giữ lock.
-      const dbResult = await db.transaction(async (tx) => {
+      const outcome = await db.transaction(async (tx) => {
         const locked = await tryRetentionXactLock(tx);
-        if (!locked) return null;
+        if (!locked) return 'locked' as const;
+        const claimed = await claimRetentionRun(tx, minHours);
+        if (!claimed) return 'too-soon' as const;
         return runDataRetentionDb(tx);
       });
-      if (dbResult == null) {
+      if (outcome === 'locked') {
         console.log('[retention] skipped — another instance holds the advisory lock');
         return;
       }
+      if (outcome === 'too-soon') {
+        console.log(`[retention] skipped — đã chạy trong ${minHours}h qua`);
+        return;
+      }
+      const dbResult = outcome;
 
       let paymentProofFiles = 0;
       let complaintEvidenceFiles = 0;
@@ -367,8 +377,24 @@ export function scheduleDataRetention(db: Database, supabase?: SupabaseClient) {
     }
   };
 
-  void run();
-  return scheduleDailyAtMidnight('retention', run);
+  void run('startup');
+  return scheduleDailyAtMidnight('retention', () => run('daily'));
+}
+
+/**
+ * Ghi mốc chạy và trả về việc có được phép chạy hay không.
+ * `minHours = 0` (lịch 0h) luôn qua; lượt khởi động phải chờ đủ khoảng cách.
+ */
+async function claimRetentionRun(db: DbConn, minHours: number): Promise<boolean> {
+  const rows = await db.execute<{ claimed: boolean }>(sql`
+    insert into job_runs (job, last_run_at)
+    values (${RETENTION_JOB}, now())
+    on conflict (job) do update set last_run_at = now()
+    where job_runs.last_run_at < now() - make_interval(hours => ${minHours}::int)
+    returning true as claimed
+  `);
+  const list = Array.isArray(rows) ? rows : (rows as { rows?: { claimed: boolean }[] }).rows;
+  return Boolean(list?.[0]);
 }
 
 async function tryRetentionXactLock(db: DbConn): Promise<boolean> {

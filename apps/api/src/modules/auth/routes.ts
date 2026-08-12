@@ -18,7 +18,7 @@ import {
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, invalidateAuthCache } from '../../middleware/auth.js';
 import {
   setSessionCookies,
   setRecoveryCookies,
@@ -447,6 +447,7 @@ authRouter.post(
       }
     }
 
+    invalidateAuthCache(accessToken, refreshToken);
     clearSessionCookies(res);
     res.json({ message: 'Đã đăng xuất' });
   }),

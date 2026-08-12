@@ -26,15 +26,16 @@ const NAV = [
 ];
 
 function NotificationBell() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
+  // Cùng queryKey với useBuyerLive — chỉ đọc ké cache, không tự đặt interval.
   const { data: pulseData } = useQuery({
     queryKey: ['buyer-orders-pulse'],
     queryFn: () => ordersApi.pulse(),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && user?.role === 'buyer',
     staleTime: 8_000,
   });
 

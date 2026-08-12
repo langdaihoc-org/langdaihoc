@@ -69,6 +69,10 @@ async function resolveIdempotentOrder(db: Database, buyerId: string, idempotency
   return enriched ?? existingOrder;
 }
 
+/**
+ * Ghi thông báo và tăng bộ đếm chưa đọc trong cùng một transaction — lệch giữa hai
+ * bước này làm badge sai vĩnh viễn vì không có job đối soát định kỳ.
+ */
 export async function notifyUser(
   db: DbConn,
   userId: string,
@@ -78,15 +82,17 @@ export async function notifyUser(
   data?: Record<string, unknown>,
 ) {
   const now = new Date();
-  await db.insert(notifications).values({
-    userId,
-    type,
-    title,
-    body,
-    data: data ?? null,
-    createdAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(notifications).values({
+      userId,
+      type,
+      title,
+      body,
+      data: data ?? null,
+      createdAt: now,
+    });
+    await bumpUnreadForUser(tx, userId, now);
   });
-  await bumpUnreadForUser(db, userId, now);
 }
 
 export async function getApprovedSellers(
@@ -1055,7 +1061,28 @@ export async function createShipProxyOrder(
   });
 }
 
+/**
+ * Đổi trạng thái đơn: cập nhật orders, ghi lịch sử, cộng dồn thống kê, làm mới
+ * counter và bắn thông báo.
+ *
+ * Toàn bộ phải cùng commit hoặc cùng rollback — nếu không, một lỗi giữa chừng có
+ * thể để lại đơn `completed` mà doanh thu chưa được ghi nhận. Caller nào đã mở
+ * transaction thì lời gọi này thành savepoint lồng bên trong.
+ */
 export async function transitionOrder(
+  db: DbConn,
+  orderId: string,
+  toStatus: string,
+  actorId: string,
+  actorRole: string,
+  note?: string,
+) {
+  return db.transaction((tx) =>
+    runOrderTransition(tx, orderId, toStatus, actorId, actorRole, note),
+  );
+}
+
+async function runOrderTransition(
   db: DbConn,
   orderId: string,
   toStatus: string,

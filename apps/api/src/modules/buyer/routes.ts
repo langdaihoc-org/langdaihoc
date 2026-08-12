@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { eq, and, isNull, gte, sql } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
+import type { Database } from '@langdaihoc/database';
 import { profileUpdateSchema } from '@langdaihoc/shared';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole, requireActiveBuyer } from '../../middleware/auth.js';
@@ -237,12 +238,14 @@ buyerRouter.get(
 buyerRouter.patch(
   '/notifications/read-all',
   asyncHandler(async (req, res) => {
-    const db = req.app.locals.db;
-    await db
-      .update(notifications)
-      .set({ readAt: new Date() })
-      .where(and(eq(notifications.userId, req.user!.id), isNull(notifications.readAt)));
-    await clearUnreadForUser(db, req.user!.id);
+    const db: Database = req.app.locals.db;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(notifications)
+        .set({ readAt: new Date() })
+        .where(and(eq(notifications.userId, req.user!.id), isNull(notifications.readAt)));
+      await clearUnreadForUser(tx, req.user!.id);
+    });
     res.json({ message: 'ok' });
   }),
 );
@@ -250,19 +253,21 @@ buyerRouter.patch(
 buyerRouter.patch(
   '/notifications/:id/read',
   asyncHandler(async (req, res) => {
-    const db = req.app.locals.db;
-    const [updated] = await db
-      .update(notifications)
-      .set({ readAt: new Date() })
-      .where(
-        and(
-          eq(notifications.id, String(req.params.id)),
-          eq(notifications.userId, req.user!.id),
-          isNull(notifications.readAt),
-        ),
-      )
-      .returning({ id: notifications.id });
-    if (updated) await decrementUnreadForUser(db, req.user!.id);
+    const db: Database = req.app.locals.db;
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(notifications)
+        .set({ readAt: new Date() })
+        .where(
+          and(
+            eq(notifications.id, String(req.params.id)),
+            eq(notifications.userId, req.user!.id),
+            isNull(notifications.readAt),
+          ),
+        )
+        .returning({ id: notifications.id });
+      if (updated) await decrementUnreadForUser(tx, req.user!.id);
+    });
     res.json({ message: 'ok' });
   }),
 );

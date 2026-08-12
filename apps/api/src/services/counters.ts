@@ -167,6 +167,10 @@ export async function bumpSellerRating(
 /**
  * Tăng unread sau khi insert notification.
  * Cập nhật buyer_counters theo userId; nếu user là seller thì cập nhật luôn seller_counters.
+ *
+ * Cố ý KHÔNG đụng `latest_change_at`: pulse phơi cột đó ra thành `latestUpdatedAt`,
+ * tức dấu hiệu "đơn có thay đổi". Nếu thông báo cũng bump cột này thì mỗi thông báo
+ * sẽ khiến FE tải lại toàn bộ danh sách đơn.
  */
 export async function bumpUnreadForUser(conn: DbConn, userId: string, at: Date = new Date()) {
   const atIso = at.toISOString();
@@ -176,7 +180,6 @@ export async function bumpUnreadForUser(conn: DbConn, userId: string, at: Date =
     on conflict (user_id) do update set
       unread_count = buyer_counters.unread_count + 1,
       latest_notification_at = excluded.latest_notification_at,
-      latest_change_at = now(),
       version = buyer_counters.version + 1,
       updated_at = now()
   `);
@@ -191,7 +194,6 @@ export async function bumpUnreadForUser(conn: DbConn, userId: string, at: Date =
     on conflict (seller_id) do update set
       unread_count = seller_counters.unread_count + 1,
       latest_notification_at = excluded.latest_notification_at,
-      latest_change_at = now(),
       version = seller_counters.version + 1,
       updated_at = now()
   `);
@@ -202,7 +204,6 @@ export async function clearUnreadForUser(conn: DbConn, userId: string) {
   await conn.execute(sql`
     update buyer_counters set
       unread_count = 0,
-      latest_change_at = now(),
       version = version + 1,
       updated_at = now()
     where user_id = ${userId}
@@ -210,7 +211,6 @@ export async function clearUnreadForUser(conn: DbConn, userId: string) {
   await conn.execute(sql`
     update seller_counters sc set
       unread_count = 0,
-      latest_change_at = now(),
       version = version + 1,
       updated_at = now()
     from sellers s
@@ -223,7 +223,6 @@ export async function decrementUnreadForUser(conn: DbConn, userId: string) {
   await conn.execute(sql`
     update buyer_counters set
       unread_count = greatest(0, unread_count - 1),
-      latest_change_at = now(),
       version = version + 1,
       updated_at = now()
     where user_id = ${userId} and unread_count > 0
@@ -231,7 +230,6 @@ export async function decrementUnreadForUser(conn: DbConn, userId: string) {
   await conn.execute(sql`
     update seller_counters sc set
       unread_count = greatest(0, unread_count - 1),
-      latest_change_at = now(),
       version = version + 1,
       updated_at = now()
     from sellers s
@@ -245,6 +243,14 @@ export async function decrementUnreadForUser(conn: DbConn, userId: string) {
 export async function refreshUnreadForUsers(conn: DbConn, userIds: string[]) {
   const unique = [...new Set(userIds.filter(Boolean))];
   if (unique.length === 0) return;
+  // Mỗi id là một bind parameter — chia lô để không chạm giới hạn của Postgres.
+  const BATCH = 500;
+  for (let i = 0; i < unique.length; i += BATCH) {
+    await refreshUnreadBatch(conn, unique.slice(i, i + BATCH));
+  }
+}
+
+async function refreshUnreadBatch(conn: DbConn, unique: string[]) {
   const idList = sql.join(
     unique.map((id) => sql`${id}::uuid`),
     sql`, `,
@@ -265,7 +271,6 @@ export async function refreshUnreadForUsers(conn: DbConn, userIds: string[]) {
     on conflict (user_id) do update set
       unread_count = excluded.unread_count,
       latest_notification_at = excluded.latest_notification_at,
-      latest_change_at = now(),
       version = buyer_counters.version + 1,
       updated_at = now()
   `);
@@ -287,7 +292,6 @@ export async function refreshUnreadForUsers(conn: DbConn, userIds: string[]) {
     on conflict (seller_id) do update set
       unread_count = excluded.unread_count,
       latest_notification_at = excluded.latest_notification_at,
-      latest_change_at = now(),
       version = seller_counters.version + 1,
       updated_at = now()
   `);

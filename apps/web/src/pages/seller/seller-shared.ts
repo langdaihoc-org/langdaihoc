@@ -7,7 +7,9 @@ import { useToast } from '@/components/ui/toast';
 export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const prevSig = useRef<string | null>(null);
+  const prevOrdersSig = useRef<string | null>(null);
+  const prevComplaintsSig = useRef<string | null>(null);
+  const prevNotifSig = useRef<string | null>(null);
   const prevPending = useRef<number | null>(null);
   const prevLateWarning = useRef<number | null>(null);
 
@@ -29,18 +31,24 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
   useEffect(() => {
     const pulse = pulseQuery.data?.data;
     if (!pulse) return;
-    const sig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.openComplaintCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}|${pulse.latestComplaintAt ?? ''}|${pulse.unreadNotifications ?? 0}|${pulse.latestNotificationAt ?? ''}`;
-    if (prevSig.current == null) {
-      prevSig.current = sig;
+
+    // Tách riêng để một thông báo mới không kéo theo việc tải lại toàn bộ list đơn.
+    const ordersSig = `${pulse.pendingCount}|${pulse.openCount}|${pulse.lateWarningCount ?? 0}|${pulse.latestCreatedAt}|${pulse.latestUpdatedAt}|${pulse.latestLateWarningAt ?? ''}`;
+    const complaintsSig = `${pulse.openComplaintCount ?? 0}|${pulse.latestComplaintAt ?? ''}`;
+    const notifSig = `${pulse.unreadNotifications ?? 0}|${pulse.latestNotificationAt ?? ''}`;
+
+    if (prevOrdersSig.current == null) {
+      prevOrdersSig.current = ordersSig;
+      prevComplaintsSig.current = complaintsSig;
+      prevNotifSig.current = notifSig;
       prevPending.current = pulse.pendingCount;
       prevLateWarning.current = pulse.lateWarningCount ?? 0;
       return;
     }
-    if (prevSig.current !== sig) {
-      prevSig.current = sig;
+
+    if (prevOrdersSig.current !== ordersSig) {
+      prevOrdersSig.current = ordersSig;
       void qc.invalidateQueries({ queryKey: ['seller-orders'] });
-      void qc.invalidateQueries({ queryKey: ['seller-complaints'] });
-      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
       if (opts?.notifyNew && prevPending.current != null && pulse.pendingCount > prevPending.current) {
         const n = pulse.pendingCount - prevPending.current;
         toast(n === 1 ? 'Có đơn mới cần xử lý' : `${n} đơn mới cần xử lý`, 'success');
@@ -51,6 +59,16 @@ export function useSellerOrdersLive(opts?: { notifyNew?: boolean }) {
         toast('Khách cảnh báo trễ đơn — kiểm tra đơn sắp tới giờ giao', 'error');
       }
       prevLateWarning.current = late;
+    }
+
+    if (prevComplaintsSig.current !== complaintsSig) {
+      prevComplaintsSig.current = complaintsSig;
+      void qc.invalidateQueries({ queryKey: ['seller-complaints'] });
+    }
+
+    if (prevNotifSig.current !== notifSig) {
+      prevNotifSig.current = notifSig;
+      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
     }
   }, [pulseQuery.data?.data, qc, toast, opts?.notifyNew]);
 }

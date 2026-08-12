@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import type { UserRole } from '@langdaihoc/shared';
 import { eq } from 'drizzle-orm';
 import { profiles } from '@langdaihoc/database';
@@ -37,16 +38,99 @@ declare global {
   }
 }
 
-async function resolveAccessToken(req: Request, res: Response): Promise<string | null> {
+/**
+ * Cache phiên đã xác thực theo access token.
+ *
+ * FE poll `/orders/pulse` mỗi 5–30s; nếu không cache thì mỗi lần poll tốn một
+ * HTTP round-trip sang Supabase Auth cộng một query profiles, và đó mới là phần
+ * đắt nhất của request chứ không phải truy vấn counter.
+ *
+ * TTL ngắn nên khoá/xoá tài khoản trễ nhất là `AUTH_CACHE_TTL_MS` mới có hiệu lực.
+ */
+const AUTH_CACHE_TTL_MS = Math.max(0, Number(process.env.AUTH_CACHE_TTL_MS ?? 30_000) || 0);
+const AUTH_CACHE_MAX = 10_000;
+const authCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+
+/**
+ * Đọc `exp` từ payload JWT mà KHÔNG xác minh chữ ký — chỉ dùng để rút ngắn thời
+ * gian cache, không bao giờ dùng để cấp quyền. Token vào cache đều đã được
+ * Supabase xác minh trước đó.
+ */
+function jwtExpiryMs(token: string): number | null {
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      exp?: number;
+    };
+    return typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function sweepAuthCache() {
+  const now = Date.now();
+  for (const [token, entry] of authCache) {
+    if (entry.expiresAt <= now) authCache.delete(token);
+  }
+  if (authCache.size >= AUTH_CACHE_MAX) authCache.clear();
+}
+
+function readAuthCache(token: string): AuthUser | null {
+  const entry = authCache.get(token);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    authCache.delete(token);
+    return null;
+  }
+  return entry.user;
+}
+
+function writeAuthCache(token: string, user: AuthUser) {
+  if (AUTH_CACHE_TTL_MS === 0) return;
+  const tokenExpiry = jwtExpiryMs(token) ?? Number.POSITIVE_INFINITY;
+  const expiresAt = Math.min(Date.now() + AUTH_CACHE_TTL_MS, tokenExpiry);
+  if (expiresAt <= Date.now()) return;
+  if (authCache.size >= AUTH_CACHE_MAX) sweepAuthCache();
+  authCache.set(token, { user, expiresAt });
+}
+
+/** Gọi khi logout / đổi mật khẩu để phiên cũ không sống thêm hết TTL. */
+export function invalidateAuthCache(...tokens: (string | null | undefined)[]) {
+  for (const token of tokens) {
+    if (token) authCache.delete(token);
+  }
+}
+
+/** Khoá/xoá tài khoản: admin không cầm token của user nên phải quét theo id. */
+export function invalidateAuthCacheForUser(userId: string) {
+  for (const [token, entry] of authCache) {
+    if (entry.user.id === userId) authCache.delete(token);
+  }
+}
+
+/** Token client gửi lên, chưa xác minh — chỉ dùng để tra cache. */
+function presentedAccessToken(req: Request): string | null {
   const rawAuth = req.headers.authorization;
   const bearer =
     rawAuth && /^Bearer\s+/i.test(rawAuth) ? rawAuth.replace(/^Bearer\s+/i, '').trim() : undefined;
-  const accessToken = (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer;
+  return (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer ?? null;
+}
+
+type ResolvedSession = { token: string; supabaseUser: SupabaseUser };
+
+/**
+ * Xác minh access token, tự gia hạn bằng refresh cookie khi hết hạn.
+ * Trả luôn user đã xác minh để caller không phải gọi `getUser` lần nữa.
+ */
+async function resolveSession(req: Request, res: Response): Promise<ResolvedSession | null> {
+  const accessToken = presentedAccessToken(req);
   const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
 
   if (accessToken) {
     const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
-    if (!error && data.user) return accessToken;
+    if (!error && data.user) return { token: accessToken, supabaseUser: data.user };
   }
 
   // Access hết hạn / thiếu — gia hạn bằng refresh cookie (giữ “ghi nhớ đăng nhập”).
@@ -55,63 +139,73 @@ async function resolveAccessToken(req: Request, res: Response): Promise<string |
   const { data, error } = await getSupabaseAnon().auth.refreshSession({
     refresh_token: refreshToken,
   });
-  if (error || !data.session?.access_token) {
+  if (error || !data.session?.access_token || !data.user) {
     clearSessionCookies(res);
     return null;
   }
 
   setSessionCookies(res, data.session, wantsRememberMe(req));
-  return data.session.access_token;
+  return { token: data.session.access_token, supabaseUser: data.user };
+}
+
+async function loadAuthUser(
+  db: Request['app']['locals']['db'],
+  supabaseUser: SupabaseUser,
+): Promise<AuthUser> {
+  const [profile] = await db
+    .select()
+    .from(profiles)
+    .where(eq(profiles.id, supabaseUser.id))
+    .limit(1);
+
+  if (!profile || profile.status === 'deleted') {
+    throw new AppError(401, 'Tài khoản không tồn tại', 'UNAUTHORIZED');
+  }
+
+  if (profile.status === 'suspended') {
+    throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
+  }
+
+  const emailVerified = Boolean(supabaseUser.email_confirmed_at);
+  let status = profile.status;
+  if (emailVerified && status === 'pending_email_verification') {
+    await syncProfileStatusOnLogin(db, profile.id, emailVerified);
+    status = 'active';
+  }
+
+  return {
+    id: profile.id,
+    email: profile.email,
+    phone: profile.phone ?? null,
+    role: profile.role as UserRole,
+    status,
+    fullName: profile.fullName,
+    avatarUrl: profile.avatarUrl ?? null,
+    emailVerified,
+    hasPassword: authUserHasPassword(supabaseUser),
+  };
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const accessToken = await resolveAccessToken(req, res);
+    const presented = presentedAccessToken(req);
+    if (presented) {
+      const cached = readAuthCache(presented);
+      if (cached) {
+        req.user = cached;
+        next();
+        return;
+      }
+    }
 
-    if (!accessToken) {
+    const session = await resolveSession(req, res);
+    if (!session) {
       throw new AppError(401, 'Bạn cần đăng nhập', 'UNAUTHORIZED');
     }
 
-    const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
-
-    if (error || !data.user) {
-      throw new AppError(401, 'Phiên đăng nhập không hợp lệ', 'UNAUTHORIZED');
-    }
-
-    const db = req.app.locals.db;
-    const [profile] = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.id, data.user.id))
-      .limit(1);
-
-    if (!profile || profile.status === 'deleted') {
-      throw new AppError(401, 'Tài khoản không tồn tại', 'UNAUTHORIZED');
-    }
-
-    if (profile.status === 'suspended') {
-      throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
-    }
-
-    const emailVerified = Boolean(data.user.email_confirmed_at);
-    let status = profile.status;
-    if (emailVerified && status === 'pending_email_verification') {
-      await syncProfileStatusOnLogin(db, profile.id, emailVerified);
-      status = 'active';
-    }
-    const role = profile.role as UserRole;
-
-    req.user = {
-      id: profile.id,
-      email: profile.email,
-      phone: profile.phone ?? null,
-      role,
-      status,
-      fullName: profile.fullName,
-      avatarUrl: profile.avatarUrl ?? null,
-      emailVerified,
-      hasPassword: authUserHasPassword(data.user),
-    };
+    const user = await loadAuthUser(req.app.locals.db, session.supabaseUser);
+    writeAuthCache(session.token, user);
+    req.user = user;
 
     next();
   } catch (err) {
@@ -157,37 +251,25 @@ export function requireActiveBuyer(req: Request, _res: Response, next: NextFunct
 /** Gắn req.user nếu có phiên — không bắt buộc đăng nhập. */
 export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const accessToken = await resolveAccessToken(req, res);
-    if (!accessToken) {
+    const presented = presentedAccessToken(req);
+    if (presented) {
+      const cached = readAuthCache(presented);
+      if (cached) {
+        req.user = cached;
+        next();
+        return;
+      }
+    }
+
+    const session = await resolveSession(req, res);
+    if (!session) {
       next();
       return;
     }
-    const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
-    if (error || !data.user) {
-      next();
-      return;
-    }
-    const db = req.app.locals.db;
-    const [profile] = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.id, data.user.id))
-      .limit(1);
-    if (!profile || profile.status === 'deleted' || profile.status === 'suspended') {
-      next();
-      return;
-    }
-    req.user = {
-      id: profile.id,
-      email: profile.email,
-      phone: profile.phone ?? null,
-      role: profile.role as UserRole,
-      status: profile.status,
-      fullName: profile.fullName,
-      avatarUrl: profile.avatarUrl ?? null,
-      emailVerified: Boolean(data.user.email_confirmed_at),
-      hasPassword: authUserHasPassword(data.user),
-    };
+
+    const user = await loadAuthUser(req.app.locals.db, session.supabaseUser);
+    writeAuthCache(session.token, user);
+    req.user = user;
     next();
   } catch {
     next();

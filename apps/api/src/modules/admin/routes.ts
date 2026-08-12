@@ -21,7 +21,7 @@ import {
   sellerDailyStats,
 } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, requireRole } from '../../middleware/auth.js';
+import { requireAuth, requireRole, invalidateAuthCacheForUser } from '../../middleware/auth.js';
 import { ensureUserRole, ensurePhoneNotUsed, ensureEmailNotUsed } from '../auth/service.js';
 import { writeAudit } from '../../lib/audit.js';
 import { enrichOrdersList } from '../../services/commerce.js';
@@ -403,6 +403,7 @@ adminRouter.delete(
 
     // Xóa profile → cascade sellers (+ món, dịch vụ giặt, STK, posts…).
     await db.delete(profiles).where(eq(profiles.id, existing.userId));
+    invalidateAuthCacheForUser(existing.userId);
 
     res.json({ data: { id: sellerId, deleted: true } });
   }),
@@ -587,6 +588,8 @@ adminRouter.patch(
         .where(and(eq(sellers.userId, userId), eq(sellers.status, 'suspended')));
     }
 
+    invalidateAuthCacheForUser(userId);
+
     await writeAudit(db, {
       ...auditFromReq(req),
       action: `user.${body.status}`,
@@ -672,6 +675,7 @@ adminRouter.delete(
     }
 
     await db.delete(profiles).where(eq(profiles.id, userId));
+    invalidateAuthCacheForUser(userId);
 
     res.json({ data: { id: userId, deleted: true } });
   }),
