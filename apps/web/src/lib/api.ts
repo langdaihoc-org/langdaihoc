@@ -104,7 +104,7 @@ export const authApi = {
   changePassword: (body: unknown) =>
     api<{ message: string }>('/api/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
   setPassword: (body: { newPassword: string; confirmPassword: string }) =>
-    api<{ message: string }>('/api/auth/set-password', { method: 'POST', body: JSON.stringify(body) }),
+    api<{ message: string; user?: AuthUser }>('/api/auth/set-password', { method: 'POST', body: JSON.stringify(body) }),
   resendVerification: (identifier: string) =>
     api<{ message: string }>('/api/auth/resend-verification', {
       method: 'POST',

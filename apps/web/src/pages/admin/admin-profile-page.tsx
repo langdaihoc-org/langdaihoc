@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/components/ui/toast';
 
 export function AdminProfilePage() {
-  const { user, refetch } = useAuth();
+  const { user, refetch, setSessionUser } = useAuth();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(user?.fullName ?? '');
@@ -32,6 +32,7 @@ export function AdminProfilePage() {
         avatarUrl,
       }),
     onSuccess: async (res) => {
+      if (res.user) setSessionUser(res.user);
       await refetch();
       setEditing(false);
       toast(res.message ?? 'Đã lưu hồ sơ', 'success');

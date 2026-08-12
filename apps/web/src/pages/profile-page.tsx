@@ -98,11 +98,13 @@ export function ProfilePage() {
 
   const setPwdMut = useMutation({
     mutationFn: () => authApi.setPassword(newPwdForm),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setPwdMsg(res.message);
       setPwdError('');
       setNewPwdForm({ newPassword: '', confirmPassword: '' });
-      refetch();
+      if (res.user) setSessionUser(res.user);
+      else if (user) setSessionUser({ ...user, hasPassword: true });
+      await refetch();
       toast('Đã tạo mật khẩu', 'success');
     },
     onError: (e) => {

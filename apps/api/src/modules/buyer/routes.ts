@@ -4,9 +4,17 @@ import { z } from 'zod';
 import { eq, and, isNull, gte, sql, desc } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
 import type { Database } from '@langdaihoc/database';
-import { profileUpdateSchema } from '@langdaihoc/shared';
+import { profileUpdateSchema, type UserRole } from '@langdaihoc/shared';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, requireRole, requireActiveBuyer, invalidateAuthCacheForUser } from '../../middleware/auth.js';
+import {
+  requireAuth,
+  requireRole,
+  requireActiveBuyer,
+  invalidateAuthCacheForUser,
+  primeAuthCache,
+  type AuthUser,
+} from '../../middleware/auth.js';
+import { ACCESS_TOKEN_COOKIE } from '../../lib/supabase.js';
 import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
 import { getFrontendUrl } from '../../lib/env.js';
 import { createSupabaseAnon } from '../../lib/supabase.js';
@@ -30,18 +38,21 @@ async function buyerAuthUserFromProfile(
   },
   opts: { emailVerified: boolean; hasPassword: boolean },
 ) {
-  const seller =
-    profile.role === 'seller' ? await getSellerByUserId(db, profile.id) : null;
-  return {
+  const role = profile.role as UserRole;
+  const seller = role === 'seller' ? await getSellerByUserId(db, profile.id) : null;
+  const authUser: AuthUser = {
     id: profile.id,
     email: profile.email,
     phone: profile.phone ?? null,
-    role: profile.role,
+    role,
     status: profile.status,
     fullName: profile.fullName,
     avatarUrl: profile.avatarUrl ?? null,
     emailVerified: opts.emailVerified,
     hasPassword: opts.hasPassword,
+  };
+  return {
+    ...authUser,
     sellerStatus: seller?.status ?? null,
     shopName: seller?.shopName ?? null,
   };
@@ -227,6 +238,7 @@ buyerRouter.patch(
           emailVerified: false,
           hasPassword: req.user!.hasPassword,
         });
+        primeAuthCache(req.cookies[ACCESS_TOKEN_COOKIE], user);
         res.json({
           data: updatedEmail,
           user,
@@ -259,6 +271,7 @@ buyerRouter.patch(
       emailVerified: req.user!.emailVerified,
       hasPassword: req.user!.hasPassword,
     });
+    primeAuthCache(req.cookies[ACCESS_TOKEN_COOKIE], user);
 
     res.json({
       data: updated,

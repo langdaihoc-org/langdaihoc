@@ -18,7 +18,7 @@ import {
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, invalidateAuthCache, invalidateAuthCacheForUser } from '../../middleware/auth.js';
+import { requireAuth, invalidateAuthCache, invalidateAuthCacheForUser, primeAuthCache } from '../../middleware/auth.js';
 import {
   setSessionCookies,
   setRecoveryCookies,
@@ -530,6 +530,7 @@ authRouter.patch(
       req.user!.emailVerified,
       req.user!.hasPassword,
     );
+    primeAuthCache(req.cookies[ACCESS_TOKEN_COOKIE], user);
     res.json({ data: updated, user, message: 'Đã cập nhật hồ sơ' });
   }),
 );
@@ -733,6 +734,7 @@ authRouter.post(
     }
 
     const input = setPasswordSchema.parse(req.body);
+    const db = req.app.locals.db;
     const supabaseAdmin = req.app.locals.supabaseAdmin;
     const accessToken = req.cookies[ACCESS_TOKEN_COOKIE];
 
@@ -747,7 +749,28 @@ authRouter.post(
       await supabaseAdmin.auth.admin.signOut(accessToken, 'others').catch(() => undefined);
     }
 
-    res.json({ message: 'Đã tạo mật khẩu. Từ giờ bạn có thể đăng nhập bằng email và mật khẩu.' });
+    invalidateAuthCacheForUser(req.user!.id);
+    const user = await buildAuthUserPayload(
+      db,
+      {
+        id: req.user!.id,
+        email: req.user!.email,
+        role: req.user!.role,
+        status: req.user!.status,
+        fullName: req.user!.fullName,
+        phone: req.user!.phone,
+        avatarUrl: req.user!.avatarUrl,
+      },
+      req.user!.emailVerified,
+      true,
+    );
+    // JWT hiện tại chưa có identity email — seed cache để /me không ghi đè hasPassword=false.
+    primeAuthCache(accessToken, user);
+
+    res.json({
+      message: 'Đã tạo mật khẩu. Từ giờ bạn có thể đăng nhập bằng email và mật khẩu.',
+      user,
+    });
   }),
 );
 

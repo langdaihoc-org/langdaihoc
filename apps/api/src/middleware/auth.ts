@@ -111,6 +111,14 @@ export function invalidateAuthCacheForUser(userId: string) {
   }
 }
 
+/**
+ * Ghi đè cache sau mutation (vd. set-password): JWT cũ chưa có claim mới
+ * nhưng /me vẫn phải trả đúng trạng thái trong TTL.
+ */
+export function primeAuthCache(token: string | null | undefined, user: AuthUser) {
+  if (token) writeAuthCache(token, user);
+}
+
 /** Token client gửi lên, chưa xác minh — chỉ dùng để tra cache. */
 function presentedAccessToken(req: Request): string | null {
   const rawAuth = req.headers.authorization;
