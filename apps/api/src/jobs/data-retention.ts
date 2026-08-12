@@ -1,12 +1,14 @@
-import { lt, and, inArray, desc, sql } from 'drizzle-orm';
+import { lt, and, inArray, sql } from 'drizzle-orm';
 import type { Database, DbConn } from '@langdaihoc/database';
 import {
   notifications,
-  orderStatusHistory,
   auditLogs,
   orders,
   checkoutIdempotencyKeys,
   paymentProofs,
+  complaints,
+  reviews,
+  posts,
 } from '@langdaihoc/database';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { scheduleDailyAtMidnight } from './daily-schedule.js';
@@ -18,130 +20,170 @@ const NOTIFICATIONS_DAYS = 7;
 const IDEMPOTENCY_DAYS = 14;
 /** Audit log — 30 ngày */
 const AUDIT_DAYS = 30;
-/** Timeline trạng thái đơn (rút gọn về 1 bản cuối) — 7 ngày */
-const ORDER_HISTORY_DAYS = 7;
-/** Biên lai CK — xóa theo đơn đã hoàn tất/huỷ (cutoff theo updatedAt khi settled) */
-const PROOF_DAYS = ORDER_HISTORY_DAYS;
+/** Đơn đã kết thúc (completed/cancelled/rejected) + khiếu nại/review theo đơn — 7 ngày */
+const SETTLED_ORDER_DAYS = 7;
+/** Bài đăng feed — 7 ngày (theo createdAt) */
+const POSTS_DAYS = 7;
 /** pg_advisory_xact_lock key — an toàn với connection pool (nhả khi commit/rollback). */
 const RETENTION_LOCK_KEY = 7_714_201;
+
+const SETTLED_STATUSES = ['completed', 'cancelled', 'rejected'] as const;
+const CHUNK = 200;
 
 function cutoff(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
 /** @deprecated — giữ để compat smoke/import cũ */
-export function retentionCutoff(days = ORDER_HISTORY_DAYS) {
+export function retentionCutoff(days = SETTLED_ORDER_DAYS) {
   return cutoff(days);
 }
 
-/** Purge ephemeral data. Orders/reviews/complaints/master data không bị xóa. */
+function collectUrls(...parts: Array<string | string[] | null | undefined>): string[] {
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part) continue;
+    if (Array.isArray(part)) {
+      for (const u of part) {
+        if (typeof u === 'string' && u.trim()) out.push(u.trim());
+      }
+    } else if (typeof part === 'string' && part.trim()) {
+      out.push(part.trim());
+    }
+  }
+  return out;
+}
+
+/**
+ * Purge theo lịch:
+ * - Thông báo / idempotency / audit (như cũ)
+ * - Đơn settled >7 ngày → xóa khiếu nại (+ messages cascade), review, rồi orders
+ *   (items / laundry / ship_proxy / status history / payment_proofs cascade)
+ * - Bài đăng >7 ngày (+ ảnh storage)
+ *
+ * Không xóa đơn đang mở (pending/accepted/…).
+ */
 export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
-  // 1. Thông báo — 7 ngày
   const deletedNotifications = await db
     .delete(notifications)
     .where(lt(notifications.createdAt, cutoff(NOTIFICATIONS_DAYS)))
     .returning({ id: notifications.id });
 
-  // 2. Idempotency keys — 14 ngày
   const deletedIdempotency = await db
     .delete(checkoutIdempotencyKeys)
     .where(lt(checkoutIdempotencyKeys.createdAt, cutoff(IDEMPOTENCY_DAYS)))
     .returning({ id: checkoutIdempotencyKeys.id });
 
-  // 3. Audit log — 30 ngày
   const deletedAudit = await db
     .delete(auditLogs)
     .where(lt(auditLogs.createdAt, cutoff(AUDIT_DAYS)))
     .returning({ id: auditLogs.id });
 
-  // 4. Biên lai CK + timeline — xử lý theo chunk settled orders (tránh load cả bảng)
+  let deletedProofFiles = 0;
+  let deletedComplaintEvidenceFiles = 0;
+  let deletedComplaints = 0;
+  let deletedReviews = 0;
+  let deletedOrders = 0;
+  let deletedPosts = 0;
+  let deletedPostFiles = 0;
+
+  // --- Đơn settled quá hạn ---
   const settled = await db
     .select({ id: orders.id })
     .from(orders)
     .where(
       and(
-        inArray(orders.status, ['completed', 'cancelled', 'rejected']),
-        lt(orders.updatedAt, cutoff(PROOF_DAYS)),
+        inArray(orders.status, [...SETTLED_STATUSES]),
+        lt(orders.updatedAt, cutoff(SETTLED_ORDER_DAYS)),
       ),
     );
-
-  let deletedProofs = 0;
-  let deletedProofFiles = 0;
-  let deletedHistory = 0;
-  const chunkSize = 500;
 
   if (settled.length > 0) {
     const orderIds = settled.map((r) => r.id);
 
-    for (let i = 0; i < orderIds.length; i += chunkSize) {
-      const chunk = orderIds.slice(i, i + chunkSize);
-      const rows = await db
+    for (let i = 0; i < orderIds.length; i += CHUNK) {
+      const chunk = orderIds.slice(i, i + CHUNK);
+
+      // Storage: biên lai CK
+      const proofRows = await db
         .select({ id: paymentProofs.id, imageUrl: paymentProofs.imageUrl })
         .from(paymentProofs)
         .where(inArray(paymentProofs.orderId, chunk));
-
-      if (rows.length === 0) continue;
-
-      let filesOk = true;
-      if (supabase) {
-        const removed = await removeStorageObjects(
+      if (supabase && proofRows.length) {
+        deletedProofFiles += await removeStorageObjects(
           supabase,
-          rows.map((r) => r.imageUrl),
+          proofRows.map((r) => r.imageUrl),
         );
-        deletedProofFiles += removed;
-        // Chỉ xóa DB khi storage remove không báo lỗi từng chunk — removeStorageObjects
-        // trả số object đã xóa; nếu 0 trong khi có URL thì giữ row để thử lại.
-        if (removed < rows.length) {
-          filesOk = false;
-          console.error(
-            `[retention] skip DB proof delete: removed ${removed}/${rows.length} files`,
-          );
-        }
       }
 
-      if (!filesOk) continue;
-
-      const removed = await db
-        .delete(paymentProofs)
-        .where(inArray(paymentProofs.id, rows.map((r) => r.id)))
-        .returning({ id: paymentProofs.id });
-      deletedProofs += removed.length;
-    }
-
-    // 4b. Timeline — chunk theo orderIds
-    for (let i = 0; i < orderIds.length; i += chunkSize) {
-      const chunk = orderIds.slice(i, i + chunkSize);
-      const history = await db
+      // Storage: bằng chứng khiếu nại
+      const complaintRows = await db
         .select({
-          id: orderStatusHistory.id,
-          orderId: orderStatusHistory.orderId,
-          createdAt: orderStatusHistory.createdAt,
+          id: complaints.id,
+          evidenceUrls: complaints.evidenceUrls,
         })
-        .from(orderStatusHistory)
-        .where(inArray(orderStatusHistory.orderId, chunk))
-        .orderBy(desc(orderStatusHistory.createdAt));
-
-      const keepLatest = new Set<string>();
-      const staleIds: string[] = [];
-      const historyCutoff = cutoff(ORDER_HISTORY_DAYS);
-      for (const row of history) {
-        if (!keepLatest.has(row.orderId)) {
-          keepLatest.add(row.orderId);
-          continue;
-        }
-        if (row.createdAt < historyCutoff) staleIds.push(row.id);
-      }
-
-      if (staleIds.length) {
-        for (let j = 0; j < staleIds.length; j += chunkSize) {
-          const idChunk = staleIds.slice(j, j + chunkSize);
-          const removed = await db
-            .delete(orderStatusHistory)
-            .where(inArray(orderStatusHistory.id, idChunk))
-            .returning({ id: orderStatusHistory.id });
-          deletedHistory += removed.length;
+        .from(complaints)
+        .where(inArray(complaints.orderId, chunk));
+      if (supabase && complaintRows.length) {
+        const evidence = complaintRows.flatMap((r) => collectUrls(r.evidenceUrls));
+        if (evidence.length) {
+          deletedComplaintEvidenceFiles += await removeStorageObjects(supabase, evidence);
         }
       }
+
+      // FK no-cascade: complaints (messages cascade), reviews → rồi orders
+      if (complaintRows.length) {
+        const removed = await db
+          .delete(complaints)
+          .where(inArray(complaints.id, complaintRows.map((r) => r.id)))
+          .returning({ id: complaints.id });
+        deletedComplaints += removed.length;
+      } else {
+        const removed = await db
+          .delete(complaints)
+          .where(inArray(complaints.orderId, chunk))
+          .returning({ id: complaints.id });
+        deletedComplaints += removed.length;
+      }
+
+      const removedReviews = await db
+        .delete(reviews)
+        .where(inArray(reviews.orderId, chunk))
+        .returning({ id: reviews.id });
+      deletedReviews += removedReviews.length;
+
+      const removedOrders = await db
+        .delete(orders)
+        .where(inArray(orders.id, chunk))
+        .returning({ id: orders.id });
+      deletedOrders += removedOrders.length;
+    }
+  }
+
+  // --- Bài đăng quá hạn ---
+  const stalePosts = await db
+    .select({
+      id: posts.id,
+      imageUrl: posts.imageUrl,
+      imageUrls: posts.imageUrls,
+    })
+    .from(posts)
+    .where(lt(posts.createdAt, cutoff(POSTS_DAYS)));
+
+  if (stalePosts.length > 0) {
+    for (let i = 0; i < stalePosts.length; i += CHUNK) {
+      const chunk = stalePosts.slice(i, i + CHUNK);
+      if (supabase) {
+        const urls = chunk.flatMap((p) => collectUrls(p.imageUrl, p.imageUrls));
+        if (urls.length) {
+          deletedPostFiles += await removeStorageObjects(supabase, urls);
+        }
+      }
+      const removed = await db
+        .delete(posts)
+        .where(inArray(posts.id, chunk.map((p) => p.id)))
+        .returning({ id: posts.id });
+      deletedPosts += removed.length;
     }
   }
 
@@ -149,9 +191,13 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     notifications: deletedNotifications.length,
     idempotencyKeys: deletedIdempotency.length,
     auditLogs: deletedAudit.length,
-    paymentProofs: deletedProofs,
+    orders: deletedOrders,
+    complaints: deletedComplaints,
+    reviews: deletedReviews,
     paymentProofFiles: deletedProofFiles,
-    orderStatusHistory: deletedHistory,
+    complaintEvidenceFiles: deletedComplaintEvidenceFiles,
+    posts: deletedPosts,
+    postFiles: deletedPostFiles,
   };
 }
 

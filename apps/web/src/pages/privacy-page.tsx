@@ -243,25 +243,21 @@ export function PrivacyPage() {
             <li>Khóa chống tạo trùng đơn: 14 ngày.</li>
             <li>Nhật ký thao tác quản trị: 30 ngày.</li>
             <li>
-              Biên lai chuyển khoản: dự kiến xóa sau 7 ngày kể từ khi đơn hoàn tất, bị hủy hoặc bị từ
-              chối; có thể giữ lâu hơn nếu việc xóa tệp thất bại để hệ thống thử lại an toàn.
+              Đơn đã hoàn tất, bị hủy hoặc bị từ chối: xóa sau 7 ngày (kèm món/chi tiết đơn, biên lai
+              chuyển khoản, timeline trạng thái). Đơn đang xử lý không bị xóa tự động.
             </li>
             <li>
-              Các mốc lịch sử trạng thái cũ của đơn đã kết thúc được rút gọn sau 7 ngày; trạng thái
-              gần nhất vẫn được giữ cùng đơn.
+              Khiếu nại và đánh giá gắn với đơn đã kết thúc cũng được xóa theo đơn sau 7 ngày (kèm
+              tin nhắn khiếu nại và ảnh bằng chứng nếu có).
+            </li>
+            <li>Bài đăng trên feed: xóa sau 7 ngày kể từ ngày tạo (kèm ảnh bài đăng).</li>
+            <li>
+              Hồ sơ, địa chỉ đã lưu, cửa hàng và danh mục món/dịch vụ được giữ khi tài khoản/dịch vụ
+              còn hoạt động hoặc khi cần cho nghĩa vụ pháp lý.
             </li>
             <li>
-              Hồ sơ, địa chỉ, đơn hàng, đánh giá, khiếu nại, cửa hàng và nội dung chính chưa có lịch
-              xóa tự động; được giữ khi tài khoản/dịch vụ còn hoạt động hoặc khi cần cho giao dịch,
-              đối soát, giải quyết tranh chấp và nghĩa vụ pháp lý.
-            </li>
-            <li>
-              Ảnh bằng chứng khiếu nại hiện chưa có lịch xóa tự động và được giữ cùng hồ sơ khiếu
-              nại cho đến khi có yêu cầu hợp lệ hoặc không còn mục đích/căn cứ lưu giữ.
-            </li>
-            <li>
-              Ảnh công khai được giữ đến khi nội dung bị xóa hoặc được thay thế; bản sao lưu/hạ tầng
-              phân phối có thể cần thêm thời gian hợp lý để hết hiệu lực.
+              Ảnh công khai khác được giữ đến khi nội dung bị xóa hoặc được thay thế; bản sao lưu/hạ
+              tầng phân phối có thể cần thêm thời gian hợp lý để hết hiệu lực.
             </li>
           </ul>
           <p>
