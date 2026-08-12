@@ -10,7 +10,7 @@ import {
 } from '../lib/supabase.js';
 import { setSessionCookies, wantsRememberMe, clearSessionCookies } from '../lib/session.js';
 import { AppError } from './error-handler.js';
-import { syncProfileStatusOnLogin, authUserHasPassword } from '../modules/auth/service.js';
+import { syncProfileStatusOnLogin, authUserHasPassword, isAuthEmailVerified } from '../modules/auth/service.js';
 import { verifyJwtLocally, type LocalJwtPayload } from '../lib/jwt-verify.js';
 
 let supabaseAnon: ReturnType<typeof createSupabaseAnon> | null = null;
@@ -177,8 +177,8 @@ async function loadAuthUser(
   }
 
   const emailVerified = session.supabaseUser
-    ? Boolean(session.supabaseUser.email_confirmed_at)
-    : Boolean(session.jwtPayload!.email_confirmed_at);
+    ? isAuthEmailVerified(session.supabaseUser)
+    : isAuthEmailVerified(session.jwtPayload!);
   let status = profile.status;
   if (emailVerified && status === 'pending_email_verification') {
     await syncProfileStatusOnLogin(db, profile.id, emailVerified);

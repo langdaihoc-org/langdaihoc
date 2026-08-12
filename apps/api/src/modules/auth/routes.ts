@@ -46,6 +46,7 @@ import {
   ensureUserRole,
   ensureProfileForOAuthUser,
   authUserHasPassword,
+  isAuthEmailVerified,
   roleHomePath,
   createAuthUserForRegister,
   sendSignupVerificationEmail,
@@ -321,9 +322,9 @@ authRouter.post(
       throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
     }
 
-    const emailVerified = Boolean(data.user.email_confirmed_at);
+    const emailVerified = isAuthEmailVerified(data.user);
 
-    // Prod: Auth chưa xác minh → không tạo phiên.
+    // Prod: Auth chưa xác minh → không tạo phiên (Google đã tin cậy qua isAuthEmailVerified).
     if (!emailVerified) {
       const supabaseAdmin = req.app.locals.supabaseAdmin;
       await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global').catch(() => undefined);
@@ -373,10 +374,8 @@ authRouter.post(
     }
 
     const authUser = userData.user;
-    const emailVerified = Boolean(authUser.email_confirmed_at);
-    if (!emailVerified) {
-      throw new AppError(403, 'Email Google chưa được xác minh', 'EMAIL_NOT_VERIFIED');
-    }
+    // Google đã xác minh email — không bắt xác minh riêng trong app.
+    const emailVerified = isAuthEmailVerified(authUser);
 
     const profile = await ensureProfileForOAuthUser(db, authUser);
 

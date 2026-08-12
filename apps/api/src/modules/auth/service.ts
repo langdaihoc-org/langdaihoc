@@ -386,8 +386,29 @@ export function authUserHasPassword(authUser: {
   return authUser.app_metadata?.provider === 'email';
 }
 
+/** Google (và claim xác minh trên JWT/user) — không bắt xác minh email riêng. */
+export function isAuthEmailVerified(authUser: {
+  email_confirmed_at?: string | null;
+  identities?: { provider: string }[] | null;
+  app_metadata?: { providers?: unknown; provider?: unknown } | null;
+  user_metadata?: Record<string, unknown> | null;
+}): boolean {
+  if (authUser.email_confirmed_at) return true;
+  const metaVerified = authUser.user_metadata?.email_verified;
+  if (metaVerified === true || metaVerified === 'true') return true;
+
+  const identities = authUser.identities;
+  if (identities?.some((i) => i.provider === 'google')) return true;
+
+  const providers = authUser.app_metadata?.providers;
+  if (Array.isArray(providers) && providers.includes('google')) return true;
+  if (authUser.app_metadata?.provider === 'google') return true;
+
+  return false;
+}
+
 /**
- * Google OAuth: có profile thì dùng; chưa có thì tạo buyer active (email Google đã xác minh).
+ * Google OAuth: có profile thì dùng; chưa có thì tạo buyer active (email Google đã tin cậy).
  * Seller/admin đăng nhập Google nếu đã có hồ sơ — không tự tạo seller.
  */
 export async function ensureProfileForOAuthUser(
@@ -405,9 +426,6 @@ export async function ensureProfileForOAuthUser(
   const email = authUser.email?.trim().toLowerCase();
   if (!email) {
     throw new AppError(400, 'Tài khoản Google thiếu email', 'OAUTH_NO_EMAIL');
-  }
-  if (!authUser.email_confirmed_at) {
-    throw new AppError(403, 'Email Google chưa được xác minh', 'EMAIL_NOT_VERIFIED');
   }
 
   const meta = authUser.user_metadata ?? {};
