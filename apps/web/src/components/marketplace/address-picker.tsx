@@ -6,9 +6,20 @@ import { StatusBadge } from '@/components/ui/brand';
 import { Input } from '@/components/ui/input';
 import { MapPin, PenLine, BookUser } from 'lucide-react';
 
+/** Bỏ "Giao tại tòa/rào" nếu còn dính trong chuỗi địa chỉ cũ. */
+function stripDormHandoffText(value: string | null | undefined): string {
+  if (!value?.trim()) return '';
+  return value
+    .replace(/\s*[·•\-–—|/]\s*Giao tại (?:tòa|rào)(?:\s*\([^)]*\))?/gi, '')
+    .replace(/^Giao tại (?:tòa|rào)(?:\s*\([^)]*\))?\s*[·•\-–—|/]?\s*/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function formatAddressLine(a: Pick<Address, 'detail' | 'dormName' | 'roomNumber'>) {
   // Không hiện "Giao tại tòa/rào" — điểm giao nằm trong thông tin quán.
-  return [a.detail, a.dormName].filter(Boolean).join(' · ');
+  // Không dùng roomNumber (trước đây lưu toa/rao).
+  return [stripDormHandoffText(a.detail), stripDormHandoffText(a.dormName)].filter(Boolean).join(' · ');
 }
 
 export type ManualAddressDraft = {
