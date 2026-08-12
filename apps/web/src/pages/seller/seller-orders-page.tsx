@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, ApiError, type Order } from '@/lib/api';
+import { ordersApi, ApiError, type Order, type PaymentProof } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,7 @@ export function SellerOrdersPage() {
   const [counts, setCounts] = useState({ active: 0, delivering: 0, done: 0 });
   const { data, isLoading, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ['seller-orders', tab, page],
-    queryFn: () => ordersApi.list(page, PAGE_SIZE, { scope: tab }),
+    queryFn: () => ordersApi.list(page, PAGE_SIZE, { scope: tab, view: 'summary' }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
   });
@@ -109,6 +109,26 @@ export function SellerOrdersPage() {
   const [quoteNote, setQuoteNote] = useState('');
   const [confirmAction, setConfirmAction] = useState<null | { type: 'reject' | 'reject_ck'; id: string; code: string }>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
+  // Lazy proof fetch: map orderId -> proofs (null = chưa fetch, [] = đang fetch)
+  const [lazyProofs, setLazyProofs] = useState<Map<string, PaymentProof[] | 'loading'>>(new Map());
+
+  const fetchAndShowProofs = async (orderId: string) => {
+    const existing = lazyProofs.get(orderId);
+    if (existing === 'loading') return;
+    if (Array.isArray(existing) && existing.length > 0) {
+      setProofPreview(existing[0].imageUrl);
+      return;
+    }
+    setLazyProofs((prev) => new Map(prev).set(orderId, 'loading'));
+    try {
+      const res = await ordersApi.get(orderId);
+      const proofs = res.data.proofs ?? [];
+      setLazyProofs((prev) => new Map(prev).set(orderId, proofs));
+      if (proofs.length > 0) setProofPreview(proofs[0].imageUrl);
+    } catch {
+      setLazyProofs((prev) => { const next = new Map(prev); next.delete(orderId); return next; });
+    }
+  };
   const statusMut = useMutation({
     mutationFn: ({ id, status, note }: { id: string; status: string; note?: string }) =>
       ordersApi.updateStatus(id, status, note),
@@ -421,30 +441,46 @@ export function SellerOrdersPage() {
                       <span className="rounded-full bg-black/[0.04] px-2 py-0.5">{paymentMethodLabel(o.paymentMethod)} · {paymentStatusLabel(o.paymentStatus)}</span>
                     </div>
 
-                    {o.proofs && o.proofs.length > 0 && (
-                      <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                        <p className="text-xs font-semibold text-amber-950">Biên lai chuyển khoản</p>
-                        <div className="flex flex-wrap gap-2">
-                          {o.proofs.map((p) => (
+                    {o.paymentMethod === 'bank_transfer' && o.paymentStatus !== 'unpaid' && (() => {
+                      const proofState = lazyProofs.get(o.id);
+                      const loading = proofState === 'loading';
+                      const fetched = Array.isArray(proofState) ? proofState : null;
+                      return (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                          <p className="mb-2 text-xs font-semibold text-amber-950">Biên lai chuyển khoản</p>
+                          {fetched && fetched.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {fetched.map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="group relative overflow-hidden rounded-lg border border-[var(--color-line)] bg-white"
+                                  onClick={() => setProofPreview(p.imageUrl)}
+                                >
+                                  <img
+                                    src={p.imageUrl}
+                                    alt="Biên lai CK"
+                                    className="h-24 w-24 object-cover transition group-hover:opacity-90"
+                                  />
+                                  <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] font-medium text-white">
+                                    Xem ảnh
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
                             <button
-                              key={p.id}
                               type="button"
-                              className="group relative overflow-hidden rounded-lg border border-[var(--color-line)] bg-white"
-                              onClick={() => setProofPreview(p.imageUrl)}
+                              disabled={loading}
+                              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                              onClick={() => fetchAndShowProofs(o.id)}
                             >
-                              <img
-                                src={p.imageUrl}
-                                alt="Biên lai CK"
-                                className="h-24 w-24 object-cover transition group-hover:opacity-90"
-                              />
-                              <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] font-medium text-white">
-                                Xem ảnh
-                              </span>
+                              {loading ? 'Đang tải…' : 'Xem biên lai'}
                             </button>
-                          ))}
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {tab === 'active' && (
                       <div className="flex flex-col gap-2 border-t border-[var(--color-line)] pt-3 sm:flex-row sm:flex-wrap">

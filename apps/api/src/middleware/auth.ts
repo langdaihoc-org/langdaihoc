@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+﻿import type { Request, Response, NextFunction } from 'express';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import type { UserRole } from '@langdaihoc/shared';
 import { eq } from 'drizzle-orm';
@@ -11,6 +11,7 @@ import {
 import { setSessionCookies, wantsRememberMe, clearSessionCookies } from '../lib/session.js';
 import { AppError } from './error-handler.js';
 import { syncProfileStatusOnLogin, authUserHasPassword } from '../modules/auth/service.js';
+import { verifyJwtLocally, type LocalJwtPayload } from '../lib/jwt-verify.js';
 
 let supabaseAnon: ReturnType<typeof createSupabaseAnon> | null = null;
 function getSupabaseAnon() {
@@ -118,7 +119,9 @@ function presentedAccessToken(req: Request): string | null {
   return (req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined) ?? bearer ?? null;
 }
 
-type ResolvedSession = { token: string; supabaseUser: SupabaseUser };
+type ResolvedSession =
+  | { token: string; supabaseUser: SupabaseUser; jwtPayload: null }
+  | { token: string; supabaseUser: null; jwtPayload: LocalJwtPayload };
 
 /**
  * Xác minh access token, tự gia hạn bằng refresh cookie khi hết hạn.
@@ -129,11 +132,22 @@ async function resolveSession(req: Request, res: Response): Promise<ResolvedSess
   const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
 
   if (accessToken) {
-    const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
-    if (!error && data.user) return { token: accessToken, supabaseUser: data.user };
+    try {
+      const payload = await verifyJwtLocally(accessToken);
+      if (payload?.sub) {
+        return { token: accessToken, supabaseUser: null, jwtPayload: payload };
+      }
+      // payload null = het han — thu refresh ben duoi
+    } catch {
+      // JWKS khong lay duoc fallback sang remote getUser
+      const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
+      if (!error && data.user) {
+        return { token: accessToken, supabaseUser: data.user, jwtPayload: null };
+      }
+    }
   }
 
-  // Access hết hạn / thiếu — gia hạn bằng refresh cookie (giữ “ghi nhớ đăng nhập”).
+  // Access het han / thieu — gia han bang refresh cookie
   if (!refreshToken) return null;
 
   const { data, error } = await getSupabaseAnon().auth.refreshSession({
@@ -145,33 +159,39 @@ async function resolveSession(req: Request, res: Response): Promise<ResolvedSess
   }
 
   setSessionCookies(res, data.session, wantsRememberMe(req));
-  return { token: data.session.access_token, supabaseUser: data.user };
+  return { token: data.session.access_token, supabaseUser: data.user, jwtPayload: null };
 }
 
 async function loadAuthUser(
   db: Request['app']['locals']['db'],
-  supabaseUser: SupabaseUser,
+  session: ResolvedSession,
 ): Promise<AuthUser> {
-  const [profile] = await db
-    .select()
-    .from(profiles)
-    .where(eq(profiles.id, supabaseUser.id))
-    .limit(1);
+  const userId = session.supabaseUser?.id ?? session.jwtPayload!.sub;
+  const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
   if (!profile || profile.status === 'deleted') {
-    throw new AppError(401, 'Tài khoản không tồn tại', 'UNAUTHORIZED');
+    throw new AppError(401, 'Tai khoan khong ton tai', 'UNAUTHORIZED');
   }
-
   if (profile.status === 'suspended') {
-    throw new AppError(403, 'Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.', 'SUSPENDED');
+    throw new AppError(403, 'Tai khoan da bi khoa. Vui long lien he ho tro.', 'SUSPENDED');
   }
 
-  const emailVerified = Boolean(supabaseUser.email_confirmed_at);
+  const emailVerified = session.supabaseUser
+    ? Boolean(session.supabaseUser.email_confirmed_at)
+    : Boolean(session.jwtPayload!.email_confirmed_at);
   let status = profile.status;
   if (emailVerified && status === 'pending_email_verification') {
     await syncProfileStatusOnLogin(db, profile.id, emailVerified);
     status = 'active';
   }
+
+  const hasPassword = session.supabaseUser
+    ? authUserHasPassword(session.supabaseUser)
+    : (() => {
+        const providers = session.jwtPayload!.app_metadata?.providers;
+        if (Array.isArray(providers)) return providers.includes('email');
+        return session.jwtPayload!.app_metadata?.provider === 'email';
+      })();
 
   return {
     id: profile.id,
@@ -182,7 +202,7 @@ async function loadAuthUser(
     fullName: profile.fullName,
     avatarUrl: profile.avatarUrl ?? null,
     emailVerified,
-    hasPassword: authUserHasPassword(supabaseUser),
+    hasPassword,
   };
 }
 
@@ -203,7 +223,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       throw new AppError(401, 'Bạn cần đăng nhập', 'UNAUTHORIZED');
     }
 
-    const user = await loadAuthUser(req.app.locals.db, session.supabaseUser);
+    const user = await loadAuthUser(req.app.locals.db, session);
     writeAuthCache(session.token, user);
     req.user = user;
 
@@ -267,7 +287,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const user = await loadAuthUser(req.app.locals.db, session.supabaseUser);
+    const user = await loadAuthUser(req.app.locals.db, session);
     writeAuthCache(session.token, user);
     req.user = user;
     next();
