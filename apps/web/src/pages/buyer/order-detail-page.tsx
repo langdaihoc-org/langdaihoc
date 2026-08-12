@@ -41,6 +41,7 @@ export function OrderDetailPage() {
   const [complaintReason, setComplaintReason] = useState('');
   const [complaintDesc, setComplaintDesc] = useState('');
   const [complaintImages, setComplaintImages] = useState<string[]>([]);
+  const [showComplaintForm, setShowComplaintForm] = useState(false);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [rejectPriceOpen, setRejectPriceOpen] = useState(false);
@@ -651,45 +652,69 @@ export function OrderDetailPage() {
             </Card>
           )}
           {!complaint ? (
-            <Card>
-              <p className="font-semibold mb-2">Khiếu nại tới người bán</p>
-              <p className="mb-2 text-xs text-[var(--color-muted)]">Gửi cho quán trước. Nếu chưa ổn, bạn có thể gửi tiếp lên admin.</p>
-              <Input label="Lý do ngắn" value={complaintReason} onChange={(e) => setComplaintReason(e.target.value)} placeholder="Ví dụ: Giao sai món" />
-              {complaintReason.trim().length > 0 && complaintReason.trim().length < 3 && (
-                <p className="mt-1 text-xs text-red-600">Lý do cần tối thiểu 3 ký tự</p>
-              )}
-              <textarea
-                value={complaintDesc}
-                onChange={(e) => setComplaintDesc(e.target.value)}
-                placeholder="Mô tả chi tiết vấn đề..."
-                rows={3}
-                className="mt-2 w-full rounded-xl border border-[var(--color-line)] px-3 py-2 text-sm"
-              />
-              <p className={cn('mt-1 text-xs', complaintDesc.trim().length < 10 ? 'text-red-600' : 'text-[var(--color-muted)]')}>
-                {complaintDesc.trim().length < 10
-                  ? `Mô tả cần thêm ${10 - complaintDesc.trim().length} ký tự (tối thiểu 10)`
-                  : `${complaintDesc.trim().length} ký tự`}
-              </p>
-              <div className="mt-3">
-                <MultiImageUploader
-                  label="Đính kèm ảnh minh chứng (tuỳ chọn, tối đa 10)"
-                  value={complaintImages}
-                  onChange={setComplaintImages}
-                  onUpload={(file) => uploadBuyerImage(buyerApi.uploadImage, file, id!)}
-                  max={10}
+            showComplaintForm ? (
+              <Card>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">Khiếu nại tới người bán</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">Gửi cho quán trước. Nếu chưa ổn, bạn có thể gửi tiếp lên admin.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0"
+                    onClick={() => setShowComplaintForm(false)}
+                  >
+                    Đóng
+                  </Button>
+                </div>
+                <Input label="Lý do ngắn" value={complaintReason} onChange={(e) => setComplaintReason(e.target.value)} placeholder="Ví dụ: Giao sai món" />
+                {complaintReason.trim().length > 0 && complaintReason.trim().length < 3 && (
+                  <p className="mt-1 text-xs text-red-600">Lý do cần tối thiểu 3 ký tự</p>
+                )}
+                <textarea
+                  value={complaintDesc}
+                  onChange={(e) => setComplaintDesc(e.target.value)}
+                  placeholder="Mô tả chi tiết vấn đề..."
+                  rows={3}
+                  className="mt-2 w-full rounded-xl border border-[var(--color-line)] px-3 py-2 text-sm"
                 />
-              </div>
-              <Button
-                className="mt-3"
-                variant="outline"
-                size="sm"
-                onClick={() => complaintMut.mutate()}
-                disabled={complaintReason.trim().length < 3 || complaintDesc.trim().length < 10}
-                loading={complaintMut.isPending}
-              >
-                Gửi tới người bán
-              </Button>
-            </Card>
+                <p className={cn('mt-1 text-xs', complaintDesc.trim().length < 10 ? 'text-red-600' : 'text-[var(--color-muted)]')}>
+                  {complaintDesc.trim().length < 10
+                    ? `Mô tả cần thêm ${10 - complaintDesc.trim().length} ký tự (tối thiểu 10)`
+                    : `${complaintDesc.trim().length} ký tự`}
+                </p>
+                <div className="mt-3">
+                  <MultiImageUploader
+                    label="Đính kèm ảnh minh chứng (tuỳ chọn, tối đa 10)"
+                    value={complaintImages}
+                    onChange={setComplaintImages}
+                    onUpload={(file) => uploadBuyerImage(buyerApi.uploadImage, file, id!)}
+                    max={10}
+                  />
+                </div>
+                <Button
+                  className="mt-3"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => complaintMut.mutate()}
+                  disabled={complaintReason.trim().length < 3 || complaintDesc.trim().length < 10}
+                  loading={complaintMut.isPending}
+                >
+                  Gửi tới người bán
+                </Button>
+              </Card>
+            ) : (
+              <Card className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold">Gặp vấn đề với đơn?</p>
+                  <p className="text-xs text-[var(--color-muted)]">Chỉ mở form nếu bạn muốn khiếu nại — không bắt buộc.</p>
+                </div>
+                <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setShowComplaintForm(true)}>
+                  Gửi khiếu nại
+                </Button>
+              </Card>
+            )
           ) : (
             <Card className="space-y-3">
               <p className="mb-1 font-semibold">Khiếu nại</p>
