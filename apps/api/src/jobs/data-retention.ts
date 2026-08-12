@@ -16,6 +16,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { scheduleDailyAtMidnight } from './daily-schedule.js';
 import { removeStorageObjects } from '../lib/storage.js';
+import { refreshUnreadForUsers } from '../services/counters.js';
 
 /** Thông báo inbox — 7 ngày */
 const NOTIFICATIONS_DAYS = 7;
@@ -71,15 +72,6 @@ function collectUrls(...parts: Array<string | string[] | null | undefined>): str
   return out;
 }
 
-/**
- * Cộng nốt các đơn completed chưa từng được ghi nhận vào seller_daily_stats
- * (đơn phát sinh trước khi có counter, hoặc lỡ sót) rồi đánh dấu để không cộng lần hai.
- * Chạy trước bước xóa đơn, trong cùng transaction.
- *
- * Chỉ nhận đơn đã đóng lâu hơn ROLLUP_GRACE: transitionOrder ghi trạng thái và ghi
- * stats_recorded_at ở hai câu lệnh khác nhau, nên đơn vừa hoàn thành có thể tạm thời
- * ở trạng thái completed mà chưa kịp gắn cờ — cộng lúc đó sẽ ra doanh thu gấp đôi.
- */
 async function rollupUnaccountedOrders(db: DbConn) {
   await db.execute(sql`
     with picked as (
@@ -127,22 +119,43 @@ async function rollupUnaccountedOrders(db: DbConn) {
   `);
 }
 
+export type RetentionDbResult = {
+  notifications: number;
+  idempotencyKeys: number;
+  auditLogs: number;
+  orders: number;
+  complaints: number;
+  reviews: number;
+  posts: number;
+  cartItems: number;
+  feedback: number;
+  notifUserIds: string[];
+  proofUrls: string[];
+  complaintEvidenceUrls: string[];
+  postUrls: string[];
+};
+
 /**
- * Purge theo lịch:
- * - Thông báo / idempotency / audit (như cũ)
- * - Rollup doanh thu còn sót → seller_daily_stats, rồi xóa đơn settled >7 ngày
- *   (items / laundry / ship_proxy / status history / payment_proofs cascade;
- *    reviews & complaints chỉ bị gỡ liên kết order_id)
- * - Đánh giá >90 ngày, khiếu nại đã đóng >30 ngày, bài đăng >7 ngày (+ ảnh storage)
- * - Giỏ hàng bỏ quên >30 ngày, góp ý đã xử lý >90 ngày
- *
- * Không xóa đơn đang mở (pending/accepted/…).
+ * Phần DB thuần — không gọi storage HTTP.
+ * URL file được thu thập để xóa sau khi transaction commit.
  */
-export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
-  const deletedNotifications = await db
-    .delete(notifications)
-    .where(lt(notifications.createdAt, cutoff(NOTIFICATIONS_DAYS)))
-    .returning({ id: notifications.id });
+export async function runDataRetentionDb(db: DbConn): Promise<RetentionDbResult> {
+  const staleNotifs = await db
+    .select({ id: notifications.id, userId: notifications.userId })
+    .from(notifications)
+    .where(lt(notifications.createdAt, cutoff(NOTIFICATIONS_DAYS)));
+  const notifUserIds = [...new Set(staleNotifs.map((n) => n.userId))];
+  if (staleNotifs.length) {
+    await db.delete(notifications).where(
+      inArray(
+        notifications.id,
+        staleNotifs.map((n) => n.id),
+      ),
+    );
+  }
+  if (notifUserIds.length) {
+    await refreshUnreadForUsers(db, notifUserIds);
+  }
 
   const deletedIdempotency = await db
     .delete(checkoutIdempotencyKeys)
@@ -154,19 +167,17 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     .where(lt(auditLogs.createdAt, cutoff(AUDIT_DAYS)))
     .returning({ id: auditLogs.id });
 
-  let deletedProofFiles = 0;
-  let deletedComplaintEvidenceFiles = 0;
+  let deletedOrders = 0;
   let deletedComplaints = 0;
   let deletedReviews = 0;
-  let deletedOrders = 0;
   let deletedPosts = 0;
-  let deletedPostFiles = 0;
   let deletedCartItems = 0;
-  let deletedFeedback = 0;
+  const proofUrls: string[] = [];
+  const complaintEvidenceUrls: string[] = [];
+  const postUrls: string[] = [];
 
   await rollupUnaccountedOrders(db);
 
-  // --- Đơn settled quá hạn ---
   const settled = await db
     .select({ id: orders.id })
     .from(orders)
@@ -179,24 +190,14 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
 
   if (settled.length > 0) {
     const orderIds = settled.map((r) => r.id);
-
     for (let i = 0; i < orderIds.length; i += CHUNK) {
       const chunk = orderIds.slice(i, i + CHUNK);
-
-      // Storage: biên lai CK (bản ghi cascade theo orders)
       const proofRows = await db
-        .select({ id: paymentProofs.id, imageUrl: paymentProofs.imageUrl })
+        .select({ imageUrl: paymentProofs.imageUrl })
         .from(paymentProofs)
         .where(inArray(paymentProofs.orderId, chunk));
-      if (supabase && proofRows.length) {
-        deletedProofFiles += await removeStorageObjects(
-          supabase,
-          proofRows.map((r) => r.imageUrl),
-        );
-      }
+      proofUrls.push(...collectUrls(...proofRows.map((r) => r.imageUrl)));
 
-      // reviews.order_id / complaints.order_id là ON DELETE SET NULL — hồ sơ vẫn sống
-      // theo hạn riêng của nó, chỉ mất liên kết tới đơn đã xóa.
       const removedOrders = await db
         .delete(orders)
         .where(inArray(orders.id, chunk))
@@ -205,14 +206,12 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     }
   }
 
-  // --- Đánh giá quá hạn (điểm trung bình đã nằm ở sellers.rating_sum/rating_count) ---
   const staleReviews = await db
     .delete(reviews)
     .where(lt(reviews.createdAt, cutoff(REVIEWS_DAYS)))
     .returning({ id: reviews.id });
   deletedReviews = staleReviews.length;
 
-  // --- Khiếu nại đã đóng quá hạn (+ ảnh bằng chứng, messages cascade) ---
   const closedComplaints = await db
     .select({ id: complaints.id, evidenceUrls: complaints.evidenceUrls })
     .from(complaints)
@@ -226,12 +225,7 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
 
   for (let i = 0; i < closedComplaints.length; i += CHUNK) {
     const chunk = closedComplaints.slice(i, i + CHUNK);
-    if (supabase) {
-      const evidence = chunk.flatMap((r) => collectUrls(r.evidenceUrls));
-      if (evidence.length) {
-        deletedComplaintEvidenceFiles += await removeStorageObjects(supabase, evidence);
-      }
-    }
+    complaintEvidenceUrls.push(...chunk.flatMap((r) => collectUrls(r.evidenceUrls)));
     const removed = await db
       .delete(complaints)
       .where(inArray(complaints.id, chunk.map((r) => r.id)))
@@ -239,7 +233,6 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     deletedComplaints += removed.length;
   }
 
-  // --- Bài đăng quá hạn ---
   const stalePosts = await db
     .select({
       id: posts.id,
@@ -252,12 +245,7 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
   if (stalePosts.length > 0) {
     for (let i = 0; i < stalePosts.length; i += CHUNK) {
       const chunk = stalePosts.slice(i, i + CHUNK);
-      if (supabase) {
-        const urls = chunk.flatMap((p) => collectUrls(p.imageUrl, p.imageUrls));
-        if (urls.length) {
-          deletedPostFiles += await removeStorageObjects(supabase, urls);
-        }
-      }
+      postUrls.push(...chunk.flatMap((p) => collectUrls(p.imageUrl, p.imageUrls)));
       const removed = await db
         .delete(posts)
         .where(inArray(posts.id, chunk.map((p) => p.id)))
@@ -266,7 +254,6 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     }
   }
 
-  // --- Giỏ hàng bỏ quên: xóa dòng hàng, giữ lại vỏ giỏ (1 dòng/user) ---
   const staleCarts = await db
     .select({ id: carts.id })
     .from(carts)
@@ -283,48 +270,103 @@ export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
     }
   }
 
-  // --- Góp ý đã xử lý ---
   const removedFeedback = await db
     .delete(siteFeedback)
     .where(and(eq(siteFeedback.status, 'done'), lt(siteFeedback.updatedAt, cutoff(FEEDBACK_DAYS))))
     .returning({ id: siteFeedback.id });
-  deletedFeedback = removedFeedback.length;
 
   return {
-    notifications: deletedNotifications.length,
+    notifications: staleNotifs.length,
     idempotencyKeys: deletedIdempotency.length,
     auditLogs: deletedAudit.length,
     orders: deletedOrders,
     complaints: deletedComplaints,
     reviews: deletedReviews,
-    paymentProofFiles: deletedProofFiles,
-    complaintEvidenceFiles: deletedComplaintEvidenceFiles,
     posts: deletedPosts,
-    postFiles: deletedPostFiles,
     cartItems: deletedCartItems,
-    feedback: deletedFeedback,
+    feedback: removedFeedback.length,
+    notifUserIds,
+    proofUrls,
+    complaintEvidenceUrls,
+    postUrls,
+  };
+}
+
+/** @deprecated — dùng scheduleDataRetention; giữ để smoke import cũ. */
+export async function runDataRetention(db: DbConn, supabase?: SupabaseClient) {
+  const dbResult = await runDataRetentionDb(db);
+  let paymentProofFiles = 0;
+  let complaintEvidenceFiles = 0;
+  let postFiles = 0;
+  if (supabase) {
+    if (dbResult.proofUrls.length) {
+      paymentProofFiles = await removeStorageObjects(supabase, dbResult.proofUrls);
+    }
+    if (dbResult.complaintEvidenceUrls.length) {
+      complaintEvidenceFiles = await removeStorageObjects(supabase, dbResult.complaintEvidenceUrls);
+    }
+    if (dbResult.postUrls.length) {
+      postFiles = await removeStorageObjects(supabase, dbResult.postUrls);
+    }
+  }
+  const { notifUserIds: _, proofUrls: __, complaintEvidenceUrls: ___, postUrls: ____, ...counts } =
+    dbResult;
+  return {
+    ...counts,
+    paymentProofFiles,
+    complaintEvidenceFiles,
+    postFiles,
   };
 }
 
 export function scheduleDataRetention(db: Database, supabase?: SupabaseClient) {
   const run = async () => {
     try {
-      const result = await db.transaction(async (tx) => {
+      // DB trong txn ngắn + advisory lock; storage HTTP sau commit để không giữ lock.
+      const dbResult = await db.transaction(async (tx) => {
         const locked = await tryRetentionXactLock(tx);
         if (!locked) return null;
-        return runDataRetention(tx, supabase);
+        return runDataRetentionDb(tx);
       });
-      if (result == null) {
+      if (dbResult == null) {
         console.log('[retention] skipped — another instance holds the advisory lock');
         return;
       }
-      console.log('[retention]', JSON.stringify(result));
+
+      let paymentProofFiles = 0;
+      let complaintEvidenceFiles = 0;
+      let postFiles = 0;
+      if (supabase) {
+        if (dbResult.proofUrls.length) {
+          paymentProofFiles = await removeStorageObjects(supabase, dbResult.proofUrls);
+        }
+        if (dbResult.complaintEvidenceUrls.length) {
+          complaintEvidenceFiles = await removeStorageObjects(
+            supabase,
+            dbResult.complaintEvidenceUrls,
+          );
+        }
+        if (dbResult.postUrls.length) {
+          postFiles = await removeStorageObjects(supabase, dbResult.postUrls);
+        }
+      }
+
+      const {
+        notifUserIds: _n,
+        proofUrls: _p,
+        complaintEvidenceUrls: _c,
+        postUrls: _u,
+        ...counts
+      } = dbResult;
+      console.log(
+        '[retention]',
+        JSON.stringify({ ...counts, paymentProofFiles, complaintEvidenceFiles, postFiles }),
+      );
     } catch (err) {
       console.error('[retention] failed', err instanceof Error ? err.message : err);
     }
   };
 
-  // Chạy ngay 1 lần để bù nếu server tắt qua nửa đêm, sau đó mỗi ngày lúc 0h VN.
   void run();
   return scheduleDailyAtMidnight('retention', run);
 }

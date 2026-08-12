@@ -10,6 +10,7 @@ import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSche
 import { getFrontendUrl } from '../../lib/env.js';
 import { createSupabaseAnon } from '../../lib/supabase.js';
 import { ensurePhoneNotUsed, ensureEmailNotUsed, validateBuyerEmail } from '../auth/service.js';
+import { clearUnreadForUser, decrementUnreadForUser } from '../../services/counters.js';
 
 export const buyerRouter = Router();
 
@@ -236,10 +237,12 @@ buyerRouter.get(
 buyerRouter.patch(
   '/notifications/read-all',
   asyncHandler(async (req, res) => {
-    await req.app.locals.db
+    const db = req.app.locals.db;
+    await db
       .update(notifications)
       .set({ readAt: new Date() })
       .where(and(eq(notifications.userId, req.user!.id), isNull(notifications.readAt)));
+    await clearUnreadForUser(db, req.user!.id);
     res.json({ message: 'ok' });
   }),
 );
@@ -247,10 +250,19 @@ buyerRouter.patch(
 buyerRouter.patch(
   '/notifications/:id/read',
   asyncHandler(async (req, res) => {
-    await req.app.locals.db
+    const db = req.app.locals.db;
+    const [updated] = await db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.id, String(req.params.id)), eq(notifications.userId, req.user!.id)));
+      .where(
+        and(
+          eq(notifications.id, String(req.params.id)),
+          eq(notifications.userId, req.user!.id),
+          isNull(notifications.readAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    if (updated) await decrementUnreadForUser(db, req.user!.id);
     res.json({ message: 'ok' });
   }),
 );

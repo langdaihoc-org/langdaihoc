@@ -22,7 +22,7 @@ import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { assertUploadedImageUrl, assertUploadedImageUrls, uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema, removeReplacedPublicImages } from '../../lib/storage.js';
 import { loadFoodItemExtras, mapFoodItemExtras, notifyUser } from '../../services/commerce.js';
-import { refreshSellerCounters } from '../../services/counters.js';
+import { refreshSellerCounters, clearUnreadForUser, decrementUnreadForUser } from '../../services/counters.js';
 import { paramId } from '../../lib/params.js';
 import { isSafeLinkUrl } from '@langdaihoc/shared';
 
@@ -990,10 +990,12 @@ sellerRouter.get(
 sellerRouter.patch(
   '/notifications/read-all',
   asyncHandler(async (req, res) => {
-    await req.app.locals.db
+    const db = req.app.locals.db;
+    await db
       .update(notifications)
       .set({ readAt: new Date() })
       .where(and(eq(notifications.userId, req.user!.id), isNull(notifications.readAt)));
+    await clearUnreadForUser(db, req.user!.id);
     res.json({ message: 'ok' });
   }),
 );
@@ -1001,10 +1003,19 @@ sellerRouter.patch(
 sellerRouter.patch(
   '/notifications/:id/read',
   asyncHandler(async (req, res) => {
-    await req.app.locals.db
+    const db = req.app.locals.db;
+    const [updated] = await db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.id, String(req.params.id)), eq(notifications.userId, req.user!.id)));
+      .where(
+        and(
+          eq(notifications.id, String(req.params.id)),
+          eq(notifications.userId, req.user!.id),
+          isNull(notifications.readAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    if (updated) await decrementUnreadForUser(db, req.user!.id);
     res.json({ message: 'ok' });
   }),
 );

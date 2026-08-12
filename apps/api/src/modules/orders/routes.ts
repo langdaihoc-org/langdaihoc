@@ -16,7 +16,6 @@ import {
   sellers,
   sellerBankAccounts,
   carts,
-  notifications,
   sellerCounters,
   buyerCounters,
 } from '@langdaihoc/database';
@@ -109,16 +108,7 @@ ordersRouter.get(
         return;
       }
 
-      const [[row], [notifRow]] = await Promise.all([
-        db.select().from(sellerCounters).where(eq(sellerCounters.sellerId, seller.id)).limit(1),
-        db
-          .select({
-            unreadNotifications: sql<number>`coalesce(count(*) filter (where ${notifications.readAt} is null), 0)::int`,
-            latestNotificationAt: sql<string | null>`max(${notifications.createdAt})`,
-          })
-          .from(notifications)
-          .where(eq(notifications.userId, req.user!.id)),
-      ]);
+      const [row] = await db.select().from(sellerCounters).where(eq(sellerCounters.sellerId, seller.id)).limit(1);
 
       res.json({
         data: {
@@ -130,8 +120,8 @@ ordersRouter.get(
           latestUpdatedAt: row?.latestChangeAt ?? null,
           latestLateWarningAt: row?.lateWarningCount ? (row?.latestChangeAt ?? null) : null,
           latestComplaintAt: row?.openComplaintCount ? (row?.latestChangeAt ?? null) : null,
-          unreadNotifications: Number(notifRow?.unreadNotifications ?? 0),
-          latestNotificationAt: notifRow?.latestNotificationAt ?? null,
+          unreadNotifications: row?.unreadCount ?? 0,
+          latestNotificationAt: row?.latestNotificationAt ?? null,
           version: row?.version ?? 0,
         },
       });
@@ -139,16 +129,7 @@ ordersRouter.get(
     }
 
     if (role === 'buyer') {
-      const [[orderRow], [notifRow]] = await Promise.all([
-        db.select().from(buyerCounters).where(eq(buyerCounters.userId, req.user!.id)).limit(1),
-        db
-          .select({
-            unreadNotifications: sql<number>`coalesce(count(*) filter (where ${notifications.readAt} is null), 0)::int`,
-            latestNotificationAt: sql<string | null>`max(${notifications.createdAt})`,
-          })
-          .from(notifications)
-          .where(eq(notifications.userId, req.user!.id)),
-      ]);
+      const [orderRow] = await db.select().from(buyerCounters).where(eq(buyerCounters.userId, req.user!.id)).limit(1);
 
       res.json({
         data: {
@@ -157,8 +138,8 @@ ordersRouter.get(
           openCount: orderRow?.openCount ?? 0,
           latestCreatedAt: orderRow?.latestOrderAt ?? null,
           latestUpdatedAt: orderRow?.latestChangeAt ?? null,
-          unreadNotifications: Number(notifRow?.unreadNotifications ?? 0),
-          latestNotificationAt: notifRow?.latestNotificationAt ?? null,
+          unreadNotifications: orderRow?.unreadCount ?? 0,
+          latestNotificationAt: orderRow?.latestNotificationAt ?? null,
           version: orderRow?.version ?? 0,
         },
       });

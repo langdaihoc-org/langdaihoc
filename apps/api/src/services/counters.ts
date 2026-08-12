@@ -163,3 +163,132 @@ export async function bumpSellerRating(
     where id = ${sellerId}
   `);
 }
+
+/**
+ * Tăng unread sau khi insert notification.
+ * Cập nhật buyer_counters theo userId; nếu user là seller thì cập nhật luôn seller_counters.
+ */
+export async function bumpUnreadForUser(conn: DbConn, userId: string, at: Date = new Date()) {
+  const atIso = at.toISOString();
+  await conn.execute(sql`
+    insert into buyer_counters (user_id, unread_count, latest_notification_at, latest_change_at, version, updated_at)
+    values (${userId}, 1, ${atIso}::timestamptz, now(), 1, now())
+    on conflict (user_id) do update set
+      unread_count = buyer_counters.unread_count + 1,
+      latest_notification_at = excluded.latest_notification_at,
+      latest_change_at = now(),
+      version = buyer_counters.version + 1,
+      updated_at = now()
+  `);
+
+  await conn.execute(sql`
+    insert into seller_counters (
+      seller_id, unread_count, latest_notification_at, latest_change_at, version, updated_at
+    )
+    select s.id, 1, ${atIso}::timestamptz, now(), 1, now()
+    from sellers s
+    where s.user_id = ${userId}
+    on conflict (seller_id) do update set
+      unread_count = seller_counters.unread_count + 1,
+      latest_notification_at = excluded.latest_notification_at,
+      latest_change_at = now(),
+      version = seller_counters.version + 1,
+      updated_at = now()
+  `);
+}
+
+/** Đánh dấu đã đọc hết — đưa unread về 0. */
+export async function clearUnreadForUser(conn: DbConn, userId: string) {
+  await conn.execute(sql`
+    update buyer_counters set
+      unread_count = 0,
+      latest_change_at = now(),
+      version = version + 1,
+      updated_at = now()
+    where user_id = ${userId}
+  `);
+  await conn.execute(sql`
+    update seller_counters sc set
+      unread_count = 0,
+      latest_change_at = now(),
+      version = version + 1,
+      updated_at = now()
+    from sellers s
+    where s.id = sc.seller_id and s.user_id = ${userId}
+  `);
+}
+
+/** Đánh dấu một thông báo đã đọc — giảm 1 nếu còn unread. */
+export async function decrementUnreadForUser(conn: DbConn, userId: string) {
+  await conn.execute(sql`
+    update buyer_counters set
+      unread_count = greatest(0, unread_count - 1),
+      latest_change_at = now(),
+      version = version + 1,
+      updated_at = now()
+    where user_id = ${userId} and unread_count > 0
+  `);
+  await conn.execute(sql`
+    update seller_counters sc set
+      unread_count = greatest(0, unread_count - 1),
+      latest_change_at = now(),
+      version = version + 1,
+      updated_at = now()
+    from sellers s
+    where s.id = sc.seller_id and s.user_id = ${userId} and sc.unread_count > 0
+  `);
+}
+
+/**
+ * Tính lại unread từ bảng notifications (sau retention xóa noti cũ, hoặc sửa lệch).
+ */
+export async function refreshUnreadForUsers(conn: DbConn, userIds: string[]) {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (unique.length === 0) return;
+  const idList = sql.join(
+    unique.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  await conn.execute(sql`
+    with ids as (
+      select unnest(array[${idList}]) as user_id
+    ), agg as (
+      select i.user_id,
+        coalesce(count(n.id) filter (where n.read_at is null), 0)::int as unread,
+        max(n.created_at) as latest_at
+      from ids i
+      left join notifications n on n.user_id = i.user_id
+      group by i.user_id
+    )
+    insert into buyer_counters (user_id, unread_count, latest_notification_at, latest_change_at, version, updated_at)
+    select user_id, unread, latest_at, now(), 1, now() from agg
+    on conflict (user_id) do update set
+      unread_count = excluded.unread_count,
+      latest_notification_at = excluded.latest_notification_at,
+      latest_change_at = now(),
+      version = buyer_counters.version + 1,
+      updated_at = now()
+  `);
+
+  await conn.execute(sql`
+    with ids as (
+      select unnest(array[${idList}]) as user_id
+    ), agg as (
+      select s.id as seller_id,
+        coalesce(count(n.id) filter (where n.read_at is null), 0)::int as unread,
+        max(n.created_at) as latest_at
+      from ids i
+      inner join sellers s on s.user_id = i.user_id
+      left join notifications n on n.user_id = i.user_id
+      group by s.id
+    )
+    insert into seller_counters (seller_id, unread_count, latest_notification_at, latest_change_at, version, updated_at)
+    select seller_id, unread, latest_at, now(), 1, now() from agg
+    on conflict (seller_id) do update set
+      unread_count = excluded.unread_count,
+      latest_notification_at = excluded.latest_notification_at,
+      latest_change_at = now(),
+      version = seller_counters.version + 1,
+      updated_at = now()
+  `);
+}

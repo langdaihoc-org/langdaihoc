@@ -12,6 +12,7 @@ export function SellerNotificationBell() {
   const [open, setOpen] = useState(false);
   const prevNotifAt = useRef<string | null>(null);
 
+  // Badge + toast dựa pulse (đã O(1)) — không poll list notifications khi panel đóng.
   const { data: pulseData } = useQuery({
     queryKey: ['seller-orders-pulse'],
     queryFn: () => ordersApi.pulse(),
@@ -26,9 +27,11 @@ export function SellerNotificationBell() {
   const { data } = useQuery({
     queryKey: ['seller-notifications'],
     queryFn: () => sellerApi.notifications(),
+    enabled: open,
     staleTime: 8_000,
-    refetchOnWindowFocus: true,
-    refetchInterval: (pulseData?.data?.unreadNotifications ?? 0) > 0 ? 8_000 : 20_000,
+    refetchOnWindowFocus: open,
+    // Chỉ poll list khi panel đang mở và còn unread
+    refetchInterval: open && (pulseData?.data?.unreadNotifications ?? 0) > 0 ? 15_000 : false,
   });
 
   useEffect(() => {
@@ -37,17 +40,13 @@ export function SellerNotificationBell() {
     if (latest) {
       if (prevNotifAt.current && prevNotifAt.current !== latest && unread > 0) {
         toast('Bạn có thông báo mới', 'success');
-        void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+        if (open) {
+          void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
+        }
       }
       prevNotifAt.current = latest;
     }
-  }, [pulseData?.data?.latestNotificationAt, pulseData?.data?.unreadNotifications, qc, toast]);
-
-  useEffect(() => {
-    if ((pulseData?.data?.unreadNotifications ?? 0) > 0) {
-      void qc.invalidateQueries({ queryKey: ['seller-notifications'] });
-    }
-  }, [pulseData?.data?.unreadNotifications, pulseData?.data?.latestNotificationAt, qc]);
+  }, [pulseData?.data?.latestNotificationAt, pulseData?.data?.unreadNotifications, open, qc, toast]);
 
   const markReadLocal = (ids?: string[]) => {
     qc.setQueryData<{ data: Notification[] }>(['seller-notifications'], (prev) => {
@@ -81,10 +80,8 @@ export function SellerNotificationBell() {
   });
 
   const items = data?.data ?? [];
-  const unread = Math.max(
-    items.filter((n) => !n.readAt).length,
-    pulseData?.data?.unreadNotifications ?? 0,
-  );
+  // Badge ưu tiên pulse — list chỉ load khi mở panel
+  const unread = pulseData?.data?.unreadNotifications ?? items.filter((n) => !n.readAt).length;
 
   const goToNotification = (n: Notification) => {
     if (!n.readAt) readMut.mutate(n.id);

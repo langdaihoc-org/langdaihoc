@@ -26,15 +26,17 @@ git push -u origin main
 ## B. Supabase
 
 1. New project → Settings → API: `URL`, `anon`, `service_role`
-2. Settings → Database → Connection string (URI / pooler)
-3. Local migrate:
+2. Settings → Database → Connection string (**Transaction pooler**, port `6543`)
+3. Production: dùng **Supabase Pro** (hoặc gói tương đương) — Free không đủ connection/compute cho ~10k đơn/ngày.
+4. API pool: `DB_POOL_MAX` (mặc định 25, tối đa 50) trên Railway.
+5. Local migrate:
 
 ```bash
 $env:DATABASE_URL="postgresql://..."
 pnpm db:migrate
 ```
 
-4. Authentication → URL configuration (sau khi có Vercel):
+6. Authentication → URL configuration (sau khi có Vercel):
    - Site URL: `https://<project>.vercel.app`
    - Redirect: `https://<project>.vercel.app/**`
 
@@ -58,6 +60,8 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 DATABASE_URL=
+# Pool postgres-js trên API (mặc định 25). Dùng Transaction pooler URL (6543).
+DB_POOL_MAX=25
 # Cloudflare R2 — ảnh public (menu/feed/banner). Proof CK vẫn trên Supabase.
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=

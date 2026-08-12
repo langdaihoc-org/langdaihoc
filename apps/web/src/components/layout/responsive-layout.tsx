@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BrandLogo } from '@/components/ui/brand';
-import { cartApi, buyerApi, type Notification } from '@/lib/api';
+import { cartApi, buyerApi, ordersApi, type Notification } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { cn } from '@/lib/utils';
 import { StickyCartBar } from '@/components/marketplace/sticky-cart-bar';
@@ -30,12 +30,20 @@ function NotificationBell() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+
+  const { data: pulseData } = useQuery({
+    queryKey: ['buyer-orders-pulse'],
+    queryFn: () => ordersApi.pulse(),
+    enabled: isAuthenticated,
+    staleTime: 8_000,
+  });
+
   const { data } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => buyerApi.notifications(),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && open,
     staleTime: 12_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: open,
   });
 
   const markReadLocal = (ids?: string[]) => {
@@ -72,7 +80,7 @@ function NotificationBell() {
   if (!isAuthenticated) return null;
 
   const items = data?.data ?? [];
-  const unread = items.filter((n) => !n.readAt).length;
+  const unread = pulseData?.data?.unreadNotifications ?? items.filter((n) => !n.readAt).length;
 
   return (
     <div className="relative">

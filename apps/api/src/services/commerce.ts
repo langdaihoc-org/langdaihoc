@@ -26,11 +26,13 @@ import {
   profiles,
   checkoutIdempotencyKeys,
   sellerDailyStats,
+  sellerCounters,
+  buyerCounters,
 } from '@langdaihoc/database';
 import { canActorTransition, canTransitionFood, canTransitionLaundry, canTransitionShipProxy, formatOrderSummary, orderStatusLabel, SHIP_PROXY_FEE_VND } from '@langdaihoc/shared';
 import { AppError } from '../middleware/error-handler.js';
 import { getBillingPeriodStartedAt } from '../lib/billing-period.js';
-import { refreshOrderCounters, recordOrderCompleted } from './counters.js';
+import { refreshOrderCounters, recordOrderCompleted, bumpUnreadForUser } from './counters.js';
 
 export function generateOrderCode(type: 'food' | 'laundry' | 'ship_proxy') {
   const prefix = type === 'food' ? 'FD' : type === 'laundry' ? 'LD' : 'SP';
@@ -75,7 +77,16 @@ export async function notifyUser(
   body: string,
   data?: Record<string, unknown>,
 ) {
-  await db.insert(notifications).values({ userId, type, title, body, data: data ?? null });
+  const now = new Date();
+  await db.insert(notifications).values({
+    userId,
+    type,
+    title,
+    body,
+    data: data ?? null,
+    createdAt: now,
+  });
+  await bumpUnreadForUser(db, userId, now);
 }
 
 export async function getApprovedSellers(
@@ -1228,6 +1239,59 @@ function scopeStatuses(role: string, scope: OrderListScope): string[] | null {
   return null;
 }
 
+/** Cột list card — chọn tường minh thay vì SELECT * (bỏ cancel/stats nội bộ). */
+const ORDER_LIST_COLUMNS = {
+  id: orders.id,
+  orderCode: orders.orderCode,
+  type: orders.type,
+  buyerId: orders.buyerId,
+  sellerId: orders.sellerId,
+  status: orders.status,
+  paymentMethod: orders.paymentMethod,
+  paymentStatus: orders.paymentStatus,
+  subtotal: orders.subtotal,
+  total: orders.total,
+  notes: orders.notes,
+  recipientName: orders.recipientName,
+  recipientPhone: orders.recipientPhone,
+  deliveryAddress: orders.deliveryAddress,
+  pickupAddress: orders.pickupAddress,
+  returnAddress: orders.returnAddress,
+  desiredDeliveryAt: orders.desiredDeliveryAt,
+  lateDeliveryWarnedAt: orders.lateDeliveryWarnedAt,
+  pickupScheduledAt: orders.pickupScheduledAt,
+  version: orders.version,
+  createdAt: orders.createdAt,
+  updatedAt: orders.updatedAt,
+  completedAt: orders.completedAt,
+} as const;
+
+export type OrderListRow = {
+  id: string;
+  orderCode: string;
+  type: string;
+  buyerId: string;
+  sellerId: string;
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  subtotal: string;
+  total: string;
+  notes: string | null;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  deliveryAddress: unknown;
+  pickupAddress: unknown;
+  returnAddress: unknown;
+  desiredDeliveryAt: Date | null;
+  lateDeliveryWarnedAt: Date | null;
+  pickupScheduledAt: Date | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+};
+
 export async function getOrdersForUser(
   db: Database,
   userId: string,
@@ -1235,7 +1299,7 @@ export async function getOrdersForUser(
   page = 1,
   limit = 20,
   scope: OrderListScope = 'all',
-) {
+): Promise<OrderListRow[]> {
   const offset = (page - 1) * limit;
   const statuses = scopeStatuses(role, scope);
 
@@ -1244,7 +1308,7 @@ export async function getOrdersForUser(
       ? and(eq(orders.buyerId, userId), inArray(orders.status, statuses))
       : eq(orders.buyerId, userId);
     return db
-      .select()
+      .select(ORDER_LIST_COLUMNS)
       .from(orders)
       .where(where)
       .orderBy(desc(orders.createdAt))
@@ -1258,7 +1322,7 @@ export async function getOrdersForUser(
       ? and(eq(orders.sellerId, seller.id), inArray(orders.status, statuses))
       : eq(orders.sellerId, seller.id);
     return db
-      .select()
+      .select(ORDER_LIST_COLUMNS)
       .from(orders)
       .where(where)
       .orderBy(desc(orders.createdAt))
@@ -1269,21 +1333,23 @@ export async function getOrdersForUser(
   return [];
 }
 
-/** Đếm theo tab — badge UI không phụ thuộc trang đã tải. */
+/** Đếm theo tab — badge ưu tiên đọc counter; done vẫn COUNT trên đơn còn lại (≤7 ngày). */
 export async function countOrdersByScope(db: Database, userId: string, role: string) {
   if (role === 'buyer') {
-    const [row] = await db
-      .select({
-        active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','delivering','picking_up','picked_up','waiting_price_confirmation','washing','returning')), 0)::int`,
-        done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
-      })
-      .from(orders)
-      .where(eq(orders.buyerId, userId));
+    const [[counter], [doneRow]] = await Promise.all([
+      db.select().from(buyerCounters).where(eq(buyerCounters.userId, userId)).limit(1),
+      db
+        .select({
+          done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
+        })
+        .from(orders)
+        .where(eq(orders.buyerId, userId)),
+    ]);
     return {
-      active: Number(row?.active ?? 0),
+      active: counter?.openCount ?? 0,
       delivering: 0,
-      done: Number(row?.done ?? 0),
-      pending: 0,
+      done: Number(doneRow?.done ?? 0),
+      pending: counter?.pendingCount ?? 0,
       preparing: 0,
       completedRevenue: 0,
       monthlyRevenue: 0,
@@ -1309,16 +1375,11 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
     }
     const periodStart = await getBillingPeriodStartedAt(db);
     const periodStartIso = periodStart.toISOString();
-    // Badge tab đếm trên orders (chỉ còn đơn mở + đơn đóng trong 7 ngày nên rất nhẹ),
-    // còn doanh thu kỳ đọc từ seller_daily_stats vì đơn cũ đã bị retention xóa.
-    const [[row], [periodRow]] = await Promise.all([
+    const [[counter], [doneRow], [periodRow]] = await Promise.all([
+      db.select().from(sellerCounters).where(eq(sellerCounters.sellerId, seller.id)).limit(1),
       db
         .select({
-          active: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('pending','accepted','preparing','picking_up','picked_up','waiting_price_confirmation','washing')), 0)::int`,
-          delivering: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('delivering','returning')), 0)::int`,
           done: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'completed'), 0)::int`,
-          pending: sql<number>`coalesce(count(*) filter (where ${orders.status} = 'pending'), 0)::int`,
-          preparing: sql<number>`coalesce(count(*) filter (where ${orders.status} in ('accepted','preparing','picking_up','picked_up','washing','waiting_price_confirmation')), 0)::int`,
         })
         .from(orders)
         .where(eq(orders.sellerId, seller.id)),
@@ -1335,14 +1396,19 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
           ),
         ),
     ]);
+    const pending = counter?.pendingCount ?? 0;
+    const delivering = counter?.deliveringCount ?? 0;
+    const open = counter?.openCount ?? 0;
+    const active = Math.max(0, open - delivering);
+    const preparing = Math.max(0, active - pending);
     const monthlyRevenue = Number(periodRow?.revenue ?? 0);
     const monthlyOrderCount = Number(periodRow?.orderCount ?? 0);
     return {
-      active: Number(row?.active ?? 0),
-      delivering: Number(row?.delivering ?? 0),
-      done: Number(row?.done ?? 0),
-      pending: Number(row?.pending ?? 0),
-      preparing: Number(row?.preparing ?? 0),
+      active,
+      delivering,
+      done: Number(doneRow?.done ?? 0),
+      pending,
+      preparing,
       completedRevenue: monthlyRevenue,
       monthlyRevenue,
       monthlyOrderCount,
@@ -1365,7 +1431,7 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
 
 export async function enrichOrdersList(
   db: DbConn,
-  orderRows: (typeof orders.$inferSelect)[],
+  orderRows: OrderListRow[] | (typeof orders.$inferSelect)[],
   options?: { includeBuyer?: boolean; includeDetails?: boolean },
 ) {
   if (orderRows.length === 0) return [];
