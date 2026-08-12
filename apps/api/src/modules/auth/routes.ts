@@ -18,7 +18,7 @@ import {
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, invalidateAuthCache } from '../../middleware/auth.js';
+import { requireAuth, invalidateAuthCache, invalidateAuthCacheForUser } from '../../middleware/auth.js';
 import {
   setSessionCookies,
   setRecoveryCookies,
@@ -523,6 +523,7 @@ authRouter.patch(
       .where(eq(profiles.id, req.user!.id))
       .returning();
     if (!updated) throw new AppError(404, 'Không tìm thấy hồ sơ', 'NOT_FOUND');
+    invalidateAuthCacheForUser(req.user!.id);
     const user = await buildAuthUserPayload(
       db,
       updated,

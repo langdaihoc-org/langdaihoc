@@ -16,7 +16,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 export function ProfilePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { user, isAuthenticated, logout, refetch } = useAuth();
+  const { user, isAuthenticated, logout, refetch, setSessionUser } = useAuth();
   const { toast } = useToast();
   const { data: addrData } = useQuery({ queryKey: ['addresses'], queryFn: () => buyerApi.addresses(), enabled: isAuthenticated });
   const [fullName, setFullName] = useState(user?.fullName ?? '');
@@ -70,9 +70,10 @@ export function ProfilePage() {
         email: email.trim().toLowerCase() || undefined,
         ...(emailChanged ? { currentPassword: emailPassword } : {}),
       }),
-    onSuccess: (res) => {
-      // refetch() của auth-context đã kéo lại /me — không cần invalidate thêm
-      refetch();
+    onSuccess: async (res) => {
+      // Cập nhật auth cache ngay — tránh /me trả phone cũ vì AUTH_CACHE_TTL.
+      if (res.user) setSessionUser(res.user);
+      await refetch();
       setEditingProfile(false);
       setEmailPassword('');
       setProfileMsg(res.message ?? 'Đã lưu hồ sơ');

@@ -6,16 +6,46 @@ import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '
 import type { Database } from '@langdaihoc/database';
 import { profileUpdateSchema } from '@langdaihoc/shared';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
-import { requireAuth, requireRole, requireActiveBuyer } from '../../middleware/auth.js';
+import { requireAuth, requireRole, requireActiveBuyer, invalidateAuthCacheForUser } from '../../middleware/auth.js';
 import { uploadImage, parseImageUpload, safeUploadFileName, imageContentTypeSchema } from '../../lib/storage.js';
 import { getFrontendUrl } from '../../lib/env.js';
 import { createSupabaseAnon } from '../../lib/supabase.js';
-import { ensurePhoneNotUsed, ensureEmailNotUsed, validateBuyerEmail } from '../auth/service.js';
+import { ensurePhoneNotUsed, ensureEmailNotUsed, validateBuyerEmail, getSellerByUserId } from '../auth/service.js';
 import { clearUnreadForUser, decrementUnreadForUser } from '../../services/counters.js';
 
 export const buyerRouter = Router();
 
 buyerRouter.use(requireAuth, requireRole('buyer'));
+
+async function buyerAuthUserFromProfile(
+  db: Database,
+  profile: {
+    id: string;
+    email: string;
+    role: string;
+    status: string;
+    fullName: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+  },
+  opts: { emailVerified: boolean; hasPassword: boolean },
+) {
+  const seller =
+    profile.role === 'seller' ? await getSellerByUserId(db, profile.id) : null;
+  return {
+    id: profile.id,
+    email: profile.email,
+    phone: profile.phone ?? null,
+    role: profile.role,
+    status: profile.status,
+    fullName: profile.fullName,
+    avatarUrl: profile.avatarUrl ?? null,
+    emailVerified: opts.emailVerified,
+    hasPassword: opts.hasPassword,
+    sellerStatus: seller?.status ?? null,
+    shopName: seller?.shopName ?? null,
+  };
+}
 
 /** Upload ảnh biên lai/bằng chứng — 20 lần/5 phút/IP (prod) */
 const uploadLimiter = rateLimit({
@@ -192,8 +222,14 @@ buyerRouter.patch(
           await rollbackAuthEmail();
           throw new AppError(500, 'Không cập nhật được hồ sơ', 'PROFILE_UPDATE_FAILED');
         }
+        invalidateAuthCacheForUser(userId);
+        const user = await buyerAuthUserFromProfile(db, updatedEmail, {
+          emailVerified: false,
+          hasPassword: req.user!.hasPassword,
+        });
         res.json({
           data: updatedEmail,
+          user,
           emailChanged: true,
           message: 'Đã đổi email. Vui lòng kiểm tra hộp thư để xác minh email mới.',
         });
@@ -214,8 +250,19 @@ buyerRouter.patch(
       .where(eq(profiles.id, userId))
       .returning();
 
+    if (!updated) {
+      throw new AppError(500, 'Không cập nhật được hồ sơ', 'PROFILE_UPDATE_FAILED');
+    }
+
+    invalidateAuthCacheForUser(userId);
+    const user = await buyerAuthUserFromProfile(db, updated, {
+      emailVerified: req.user!.emailVerified,
+      hasPassword: req.user!.hasPassword,
+    });
+
     res.json({
       data: updated,
+      user,
       emailChanged: false,
       message: 'Đã cập nhật hồ sơ',
     });

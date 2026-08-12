@@ -281,7 +281,7 @@ export const buyerApi = {
     email?: string;
     currentPassword?: string;
   }) =>
-    api<{ data: unknown; emailChanged?: boolean; message?: string }>('/api/buyer/profile', {
+    api<{ data: unknown; user?: AuthUser; emailChanged?: boolean; message?: string }>('/api/buyer/profile', {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
