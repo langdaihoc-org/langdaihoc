@@ -231,10 +231,10 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
   const deleteTarget = items.find((i) => i.id === deleteId);
 
   return (
-    <div className="space-y-3 pb-16 lg:pb-0">
+    <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-bold">Sản phẩm · Ăn uống</h1>
-        <Button size="sm" variant="green" className="hidden lg:inline-flex" disabled={!approved} onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}>
+        <Button size="sm" variant="green" disabled={!approved} onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}>
           {showForm ? 'Đóng' : '+ Thêm món'}
         </Button>
       </div>
@@ -486,14 +486,6 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
 
       {!approved && (
         <p className="text-center text-sm text-[var(--color-muted)]">Cửa hàng chưa được duyệt — chưa thể thêm/sửa sản phẩm</p>
-      )}
-
-      {approved && (
-        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-[var(--color-line)] bg-white p-3 lg:hidden">
-          <Button className="w-full" variant="green" onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}>
-            {showForm ? 'Đóng form' : '+ Thêm món'}
-          </Button>
-        </div>
       )}
 
       <ConfirmDialog
