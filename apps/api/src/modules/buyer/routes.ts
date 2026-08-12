@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { eq, and, isNull, gte, sql } from 'drizzle-orm';
+import { eq, and, isNull, gte, sql, desc } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
 import type { Database } from '@langdaihoc/database';
 import { profileUpdateSchema } from '@langdaihoc/shared';
@@ -229,9 +229,9 @@ buyerRouter.get(
       .select()
       .from(notifications)
       .where(eq(notifications.userId, req.user!.id))
-      .orderBy(notifications.createdAt)
+      .orderBy(desc(notifications.createdAt))
       .limit(50);
-    res.json({ data: data.reverse() });
+    res.json({ data });
   }),
 );
 

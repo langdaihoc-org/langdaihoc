@@ -1562,22 +1562,24 @@ export async function enrichOrdersList(
     }
     const complaint = complaintByOrder.get(order.id);
     if (complaint) enriched.complaint = complaint;
+    // items / laundry / shipProxy luôn trả — màn list quán cần topping, ghi chú, block giặt/ship.
+    // includeDetails chỉ gắn proofs (và caller mới ký signed URL).
+    if (order.type === 'food') {
+      enriched.items = items.map((i) => ({
+        itemName: i.itemName,
+        quantity: i.quantity,
+        lineTotal: i.lineTotal,
+        note: i.note ?? null,
+        options: Array.isArray(i.optionsSnapshot) ? i.optionsSnapshot : [],
+      }));
+    }
+    if (order.type === 'laundry') {
+      enriched.laundry = laundry ?? null;
+    }
+    if (order.type === 'ship_proxy') {
+      enriched.shipProxy = ship ?? null;
+    }
     if (options?.includeDetails) {
-      if (order.type === 'food') {
-        enriched.items = items.map((i) => ({
-          itemName: i.itemName,
-          quantity: i.quantity,
-          lineTotal: i.lineTotal,
-          note: i.note ?? null,
-          options: Array.isArray(i.optionsSnapshot) ? i.optionsSnapshot : [],
-        }));
-      }
-      if (order.type === 'laundry') {
-        enriched.laundry = laundry ?? null;
-      }
-      if (order.type === 'ship_proxy') {
-        enriched.shipProxy = ship ?? null;
-      }
       const proofs = proofByOrder.get(order.id);
       if (proofs?.length) enriched.proofs = proofs;
     }
