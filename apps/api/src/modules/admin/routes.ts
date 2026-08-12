@@ -970,7 +970,7 @@ adminRouter.get(
   asyncHandler(async (req, res) => {
     const db = req.app.locals.db;
     // Tổng đơn / đơn đang chạy / khiếu nại mở lấy từ counter — orders chỉ còn 7 ngày gần nhất.
-    const [[buyers], [sellerCount], [pendingSellers], [aggregate]] = await Promise.all([
+    const [[buyers], [sellerCount], [pendingSellers], [aggregate], [today]] = await Promise.all([
       db.select({ c: sql<number>`count(*)::int` }).from(profiles).where(eq(profiles.role, 'buyer')),
       db.select({ c: sql<number>`count(*)::int` }).from(sellers),
       db.select({ c: sql<number>`count(*)::int` }).from(sellers).where(eq(sellers.status, 'pending')),
@@ -981,12 +981,17 @@ adminRouter.get(
           openComplaints: sql<number>`coalesce(sum(${sellerCounters.openComplaintCount}), 0)::int`,
         })
         .from(sellerCounters),
+      db
+        .select({ c: sql<number>`coalesce(sum(${sellerDailyStats.completedOrders}), 0)::int` })
+        .from(sellerDailyStats)
+        .where(sql`${sellerDailyStats.day} = (now() at time zone 'Asia/Ho_Chi_Minh')::date`),
     ]);
     res.json({
       data: {
         buyers: buyers?.c ?? 0,
         sellers: sellerCount?.c ?? 0,
         orders: Number(aggregate?.lifetimeOrders ?? 0) + Number(aggregate?.openOrders ?? 0),
+        ordersToday: Number(today?.c ?? 0),
         pendingSellers: pendingSellers?.c ?? 0,
         openComplaints: Number(aggregate?.openComplaints ?? 0),
         processingOrders: Number(aggregate?.openOrders ?? 0),

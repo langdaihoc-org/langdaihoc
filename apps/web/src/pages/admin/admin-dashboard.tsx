@@ -40,7 +40,7 @@ export function AdminDashboard() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard value={s?.buyers ?? 0} label="Tổng người dùng" />
         <StatCard value={s?.pendingSellers ?? 0} label="Đối tác chờ duyệt" accent="orange" />
-        <StatCard value={s?.orders ?? 0} label="Đơn hôm nay" />
+        <StatCard value={s?.ordersToday ?? 0} label="Đơn hôm nay" />
         <StatCard value={s?.processingOrders ?? 0} label="Đơn đang xử lý" accent="orange" />
         <StatCard value={s?.openComplaints ?? 0} label="Khiếu nại mở" accent="orange" />
         <StatCard value={s?.sellers ?? 0} label="Tổng đối tác" />

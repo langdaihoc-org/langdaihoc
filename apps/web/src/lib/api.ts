@@ -357,7 +357,17 @@ export const sellerApi = {
 
 export const adminApi = {
   stats: () =>
-    api<{ data: { buyers: number; sellers: number; orders: number; pendingSellers: number; openComplaints: number; processingOrders: number } }>('/api/admin/stats'),
+    api<{
+      data: {
+        buyers: number;
+        sellers: number;
+        orders: number;
+        ordersToday: number;
+        pendingSellers: number;
+        openComplaints: number;
+        processingOrders: number;
+      };
+    }>('/api/admin/stats'),
   sellers: () =>
     api<{
       data: AdminSellerRow[];

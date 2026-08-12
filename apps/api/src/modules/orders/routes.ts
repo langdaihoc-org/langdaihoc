@@ -827,26 +827,30 @@ ordersRouter.post(
         tags: z.array(z.string()).optional(),
       })
       .parse(req.body);
-    const db = req.app.locals.db;
+    const db: Database = req.app.locals.db;
     const orderId = paramId(req);
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order || order.buyerId !== req.user!.id || order.status !== 'completed') {
       throw new AppError(400, 'Không thể đánh giá đơn này', 'INVALID_REVIEW');
     }
     try {
-      const [review] = await db
-        .insert(reviews)
-        .values({
-          orderId: order.id,
-          orderCode: order.orderCode,
-          buyerId: req.user!.id,
-          sellerId: order.sellerId,
-          rating: body.rating,
-          comment: body.comment,
-          tags: body.tags,
-        })
-        .returning();
-      await bumpSellerRating(db, order.sellerId, body.rating, 1);
+      // Chèn review và cộng rating phải cùng thắng hoặc cùng thua, nếu không điểm sẽ lệch.
+      const review = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(reviews)
+          .values({
+            orderId: order.id,
+            orderCode: order.orderCode,
+            buyerId: req.user!.id,
+            sellerId: order.sellerId,
+            rating: body.rating,
+            comment: body.comment,
+            tags: body.tags,
+          })
+          .returning();
+        await bumpSellerRating(tx, order.sellerId, body.rating, 1);
+        return row;
+      });
       res.status(201).json({ data: review });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -868,29 +872,33 @@ ordersRouter.patch(
         tags: z.array(z.string()).optional(),
       })
       .parse(req.body);
-    const db = req.app.locals.db;
+    const db: Database = req.app.locals.db;
     const orderId = paramId(req);
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order || order.buyerId !== req.user!.id || order.status !== 'completed') {
       throw new AppError(400, 'Không thể sửa đánh giá đơn này', 'INVALID_REVIEW');
     }
-    const [previous] = await db
-      .select({ rating: reviews.rating })
-      .from(reviews)
-      .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
-      .limit(1);
-    const [updated] = await db
-      .update(reviews)
-      .set({
-        rating: body.rating,
-        ...(body.comment !== undefined ? { comment: body.comment } : {}),
-        ...(body.tags !== undefined ? { tags: body.tags } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
-      .returning();
-    if (!updated) throw new AppError(404, 'Chưa có đánh giá để sửa', 'NOT_FOUND');
-    await bumpSellerRating(db, order.sellerId, body.rating - (previous?.rating ?? body.rating), 0);
+    const updated = await db.transaction(async (tx) => {
+      const [previous] = await tx
+        .select({ rating: reviews.rating })
+        .from(reviews)
+        .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
+        .for('update')
+        .limit(1);
+      const [row] = await tx
+        .update(reviews)
+        .set({
+          rating: body.rating,
+          ...(body.comment !== undefined ? { comment: body.comment } : {}),
+          ...(body.tags !== undefined ? { tags: body.tags } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(reviews.orderId, order.id), eq(reviews.buyerId, req.user!.id)))
+        .returning();
+      if (!row) throw new AppError(404, 'Chưa có đánh giá để sửa', 'NOT_FOUND');
+      await bumpSellerRating(tx, order.sellerId, body.rating - (previous?.rating ?? body.rating), 0);
+      return row;
+    });
     res.json({ data: updated });
   }),
 );

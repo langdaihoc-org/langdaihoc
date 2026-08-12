@@ -35,6 +35,8 @@ const CLOSED_COMPLAINT_DAYS = 30;
 const ABANDONED_CART_DAYS = 30;
 /** Góp ý đã xử lý — 90 ngày */
 const FEEDBACK_DAYS = 90;
+/** Khoảng chờ trước khi rollup đụng vào một đơn vừa hoàn thành (phút) */
+const ROLLUP_GRACE_MINUTES = 60;
 /** pg_advisory_xact_lock key — an toàn với connection pool (nhả khi commit/rollback). */
 const RETENTION_LOCK_KEY = 7_714_201;
 
@@ -43,6 +45,10 @@ const CHUNK = 200;
 
 function cutoff(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+function cutoffIso(minutes: number) {
+  return new Date(Date.now() - minutes * 60 * 1000).toISOString();
 }
 
 /** @deprecated — giữ để compat smoke/import cũ */
@@ -69,13 +75,19 @@ function collectUrls(...parts: Array<string | string[] | null | undefined>): str
  * Cộng nốt các đơn completed chưa từng được ghi nhận vào seller_daily_stats
  * (đơn phát sinh trước khi có counter, hoặc lỡ sót) rồi đánh dấu để không cộng lần hai.
  * Chạy trước bước xóa đơn, trong cùng transaction.
+ *
+ * Chỉ nhận đơn đã đóng lâu hơn ROLLUP_GRACE: transitionOrder ghi trạng thái và ghi
+ * stats_recorded_at ở hai câu lệnh khác nhau, nên đơn vừa hoàn thành có thể tạm thời
+ * ở trạng thái completed mà chưa kịp gắn cờ — cộng lúc đó sẽ ra doanh thu gấp đôi.
  */
 async function rollupUnaccountedOrders(db: DbConn) {
   await db.execute(sql`
     with picked as (
       select id, seller_id, buyer_id, total, coalesce(completed_at, updated_at) as at
       from orders
-      where status = 'completed' and stats_recorded_at is null
+      where status = 'completed'
+        and stats_recorded_at is null
+        and updated_at < ${cutoffIso(ROLLUP_GRACE_MINUTES)}::timestamptz
       for update
     ), day_agg as (
       select seller_id, (at at time zone 'Asia/Ho_Chi_Minh')::date as day,
