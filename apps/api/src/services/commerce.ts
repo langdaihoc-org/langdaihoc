@@ -687,6 +687,26 @@ export async function checkoutFood(
     const subtotal = cartData.subtotal;
     const orderCode = generateOrderCode('food');
 
+    const desiredDeliveryAt = data.desiredDeliveryAt ? new Date(data.desiredDeliveryAt) : null;
+    if (desiredDeliveryAt && Number.isNaN(desiredDeliveryAt.getTime())) {
+      throw new AppError(400, 'Thời gian giao không hợp lệ', 'INVALID_DELIVERY_TIME');
+    }
+    let desiredDeliveryUntil = data.desiredDeliveryUntil ? new Date(data.desiredDeliveryUntil) : null;
+    if (desiredDeliveryUntil && Number.isNaN(desiredDeliveryUntil.getTime())) {
+      throw new AppError(400, 'Thời gian giao không hợp lệ', 'INVALID_DELIVERY_TIME');
+    }
+    // Client cũ / thiếu until → mặc định cửa sổ 30 phút từ mốc bắt đầu.
+    if (desiredDeliveryAt && !desiredDeliveryUntil) {
+      desiredDeliveryUntil = new Date(desiredDeliveryAt.getTime() + 30 * 60 * 1000);
+    }
+    if (
+      desiredDeliveryAt
+      && desiredDeliveryUntil
+      && desiredDeliveryUntil.getTime() < desiredDeliveryAt.getTime()
+    ) {
+      desiredDeliveryUntil = new Date(desiredDeliveryAt.getTime() + 30 * 60 * 1000);
+    }
+
     const [order] = await conn
       .insert(orders)
       .values({
@@ -703,10 +723,8 @@ export async function checkoutFood(
         recipientName: address.recipientName,
         recipientPhone: data.phone || address.phone,
         deliveryAddress: address,
-        desiredDeliveryAt: data.desiredDeliveryAt ? new Date(data.desiredDeliveryAt) : null,
-        desiredDeliveryUntil: data.desiredDeliveryUntil
-          ? new Date(data.desiredDeliveryUntil)
-          : null,
+        desiredDeliveryAt,
+        desiredDeliveryUntil,
       })
       .returning();
 
