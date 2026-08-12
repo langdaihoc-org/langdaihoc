@@ -1524,7 +1524,11 @@ export async function enrichOrdersList(
   const proofByOrder = new Map<string, { id: string; imageUrl: string; status: string }[]>();
   if (options?.includeBuyer && options?.includeDetails) {
     const idsNeedingProof = orderRows
-      .filter((o) => o.paymentMethod === 'bank_transfer' && o.paymentStatus !== 'unpaid')
+      .filter(
+        (o) =>
+          o.paymentMethod === 'bank_transfer'
+          && ['proof_uploaded', 'verified', 'rejected', 'paid'].includes(o.paymentStatus),
+      )
       .map((o) => o.id);
     if (idsNeedingProof.length > 0) {
       const proofRows = await db

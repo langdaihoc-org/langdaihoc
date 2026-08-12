@@ -441,7 +441,9 @@ export function SellerOrdersPage() {
                       <span className="rounded-full bg-black/[0.04] px-2 py-0.5">{paymentMethodLabel(o.paymentMethod)} · {paymentStatusLabel(o.paymentStatus)}</span>
                     </div>
 
-                    {o.paymentMethod === 'bank_transfer' && o.paymentStatus !== 'unpaid' && (() => {
+                    {o.paymentMethod === 'bank_transfer'
+                      && ['proof_uploaded', 'verified', 'rejected', 'paid'].includes(o.paymentStatus)
+                      && (() => {
                       const proofState = lazyProofs.get(o.id);
                       const loading = proofState === 'loading';
                       const fetched = Array.isArray(proofState) ? proofState : null;
