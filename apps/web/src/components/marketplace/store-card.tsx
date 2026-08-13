@@ -135,9 +135,9 @@ export function MenuItemRow({
 }
 
 export function StoreInfoCard({
-  shopName, rating, count, avgDeliveryMinutes, phone, openHours, businessAddress,
+  shopName, rating, count, phone, openHours, businessAddress,
 }: {
-  shopName: string; rating: string; count: number; avgDeliveryMinutes?: number | null;
+  shopName: string; rating: string; count: number;
   phone?: string | null; openHours?: string | null; businessAddress?: string | null;
 }) {
   return (
@@ -154,18 +154,8 @@ export function StoreInfoCard({
             </span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-[var(--color-surface)] p-2 text-center">
-            <strong className="block text-sm font-bold">98%</strong>
-            <small className="text-[10px] text-[var(--color-muted)]">Đúng giờ</small>
-          </div>
-          <div className="rounded-xl bg-[var(--color-surface)] p-2 text-center">
-            <strong className="block text-sm font-bold">{avgDeliveryMinutes != null ? `~${avgDeliveryMinutes}p` : '—'}</strong>
-            <small className="text-[10px] text-[var(--color-muted)]">Giao TB</small>
-          </div>
-        </div>
         {(phone || openHours || businessAddress) && (
-          <div className="mt-3 space-y-1.5 border-t border-[var(--color-line)] pt-3 text-xs text-[var(--color-muted)]">
+          <div className="space-y-1.5 border-t border-[var(--color-line)] pt-3 text-xs text-[var(--color-muted)]">
             {phone && (
               <p>
                 SĐT:{' '}

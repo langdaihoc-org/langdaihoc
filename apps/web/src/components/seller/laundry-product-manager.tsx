@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { ImageUploader, uploadSellerImage } from '@/components/ui/image-uploader';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { formatPrice } from '@/lib/format';
 
@@ -71,6 +72,11 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
     setShowForm(true);
   };
 
+  const closeForm = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
   const parseAreas = (text: string) =>
     text.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 
@@ -91,8 +97,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['seller-laundry'] });
       toast(editingId ? 'Đã lưu thay đổi dịch vụ' : 'Đã thêm dịch vụ giặt', 'success');
-      setShowForm(false);
-      resetForm();
+      closeForm();
     },
     onError: (e) => {
       const msg = e instanceof ApiError ? e.message : 'Không thể lưu dịch vụ';
@@ -124,7 +129,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
     <div className="space-y-3 pb-16 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-bold">Sản phẩm · Giặt đồ</h1>
-        <Button size="sm" variant="green" className="hidden lg:inline-flex" disabled={!approved} onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}>
+        <Button size="sm" variant="green" className="hidden lg:inline-flex" disabled={!approved} onClick={() => (showForm ? closeForm() : openCreate())}>
           {showForm ? 'Đóng' : '+ Thêm dịch vụ'}
         </Button>
       </div>
@@ -134,54 +139,61 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
         <Input placeholder="Tìm dịch vụ..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
       </div>
 
-      {formError && <p className="text-sm text-red-500">{formError}</p>}
-
-      {showForm && approved && (
-        <Card className="space-y-3">
-          <p className="font-semibold">{editingId ? 'Sửa dịch vụ' : 'Thêm dịch vụ mới'}</p>
-          <Input label="Tên dịch vụ *" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input label="Mô tả" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Đơn vị tính</label>
-              <select
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as 'kg' | 'item' | 'load')}
-                className="w-full rounded-xl border border-[var(--color-line)] px-3 py-2 text-sm"
-              >
-                <option value="kg">Theo kg</option>
-                <option value="item">Theo món</option>
-                <option value="load">Theo tải</option>
-              </select>
+      {approved && (
+        <Modal
+          open={showForm}
+          onClose={closeForm}
+          titleId="laundry-product-form-title"
+          zIndexClass="z-[120]"
+          panelClassName="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl sm:rounded-2xl"
+        >
+          <div className="space-y-3">
+            <p id="laundry-product-form-title" className="font-semibold">{editingId ? 'Sửa dịch vụ' : 'Thêm dịch vụ mới'}</p>
+            {formError && <p className="text-sm text-red-500">{formError}</p>}
+            <Input label="Tên dịch vụ *" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input label="Mô tả" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Đơn vị tính</label>
+                <select
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as 'kg' | 'item' | 'load')}
+                  className="w-full rounded-xl border border-[var(--color-line)] px-3 py-2 text-sm"
+                >
+                  <option value="kg">Theo kg</option>
+                  <option value="item">Theo món</option>
+                  <option value="load">Theo tải</option>
+                </select>
+              </div>
+              <Input label={`Giá/${UNIT_LABELS[unit] ?? unit} (₫) *`} type="number" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} />
             </div>
-            <Input label={`Giá/${UNIT_LABELS[unit] ?? unit} (₫) *`} type="number" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} />
+            <Input label="Thời gian xử lý (giờ)" type="number" value={estimatedTimeHours} onChange={(e) => setEstimatedTimeHours(e.target.value)} />
+            <Input
+              label="Khu vực phục vụ"
+              placeholder="KTX A, KTX B, Làng SV..."
+              value={serviceAreasText}
+              onChange={(e) => setServiceAreasText(e.target.value)}
+            />
+            <p className="-mt-2 text-xs text-[var(--color-muted)]">Phân cách bằng dấu phẩy</p>
+            <ImageUploader
+              label="Ảnh dịch vụ"
+              value={imageUrl}
+              onChange={setImageUrl}
+              onUploadingChange={setImageUploading}
+              onUpload={(file) => uploadSellerImage(sellerApi.uploadImage, file, 'laundry-images')}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => saveMut.mutate()}
+                loading={saveMut.isPending || imageUploading}
+                disabled={name.trim().length < 2 || !basePrice || Number(basePrice) <= 0 || imageUploading}
+              >
+                {editingId ? 'Lưu thay đổi' : 'Thêm dịch vụ'}
+              </Button>
+              <Button variant="outline" onClick={closeForm}>Huỷ</Button>
+            </div>
           </div>
-          <Input label="Thời gian xử lý (giờ)" type="number" value={estimatedTimeHours} onChange={(e) => setEstimatedTimeHours(e.target.value)} />
-          <Input
-            label="Khu vực phục vụ"
-            placeholder="KTX A, KTX B, Làng SV..."
-            value={serviceAreasText}
-            onChange={(e) => setServiceAreasText(e.target.value)}
-          />
-          <p className="-mt-2 text-xs text-[var(--color-muted)]">Phân cách bằng dấu phẩy</p>
-          <ImageUploader
-            label="Ảnh dịch vụ"
-            value={imageUrl}
-            onChange={setImageUrl}
-            onUploadingChange={setImageUploading}
-            onUpload={(file) => uploadSellerImage(sellerApi.uploadImage, file, 'laundry-images')}
-          />
-          <div className="flex gap-2">
-            <Button
-              onClick={() => saveMut.mutate()}
-              loading={saveMut.isPending || imageUploading}
-              disabled={name.trim().length < 2 || !basePrice || Number(basePrice) <= 0 || imageUploading}
-            >
-              {editingId ? 'Lưu thay đổi' : 'Thêm dịch vụ'}
-            </Button>
-            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>Huỷ</Button>
-          </div>
-        </Card>
+        </Modal>
       )}
 
       {isLoading ? (
@@ -241,7 +253,7 @@ export function LaundryProductManager({ approved }: { approved: boolean }) {
         <Button
           variant="green"
           className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 shadow-lg lg:hidden"
-          onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}
+          onClick={() => (showForm ? closeForm() : openCreate())}
         >
           {showForm ? 'Đóng' : '+ Thêm dịch vụ'}
         </Button>

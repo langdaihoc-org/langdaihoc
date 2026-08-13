@@ -3,6 +3,13 @@ import { CalendarClock, X } from 'lucide-react';
 import { WheelColumn } from './wheel-column';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import {
+  type OperatingWindow,
+  formatOperatingWindows,
+  isWindowInsideOperatingHours,
+  normalizeOperatingWindows,
+  toMinutes,
+} from '@/lib/operating-hours';
 import { cn } from '@/lib/utils';
 
 /** Cửa sổ ngày + giờ (YYYY-MM-DD) — dùng khi cần chọn nhiều ngày sau. */
@@ -28,11 +35,6 @@ function timeSlots() {
 }
 
 const ALL_SLOTS = timeSlots();
-
-function toMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -76,22 +78,60 @@ function roundUpMinutes(totalMin: number) {
   return Math.ceil(totalMin / STEP_MIN) * STEP_MIN;
 }
 
-/** Mặc định: sau minDateTime ít nhất minGapMinutes, cửa sổ dài minGapMinutes. */
-export function defaultDatedWindow(minDateTime: Date, minGapMinutes = 30): DatedWindow {
-  const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
-  const min = new Date(minDateTime.getTime());
-  let total = roundUpMinutes(min.getHours() * 60 + min.getMinutes());
-  if (total >= 24 * 60) {
-    min.setDate(min.getDate() + 1);
-    total = 0;
+function dayMinMinutes(minDateTime: Date, dateKey: string) {
+  if (toDateKey(minDateTime) === dateKey) {
+    return roundUpMinutes(minDateTime.getHours() * 60 + minDateTime.getMinutes());
   }
-  const fromIdx = Math.min(ALL_SLOTS.length - 1 - gapSlots, Math.max(0, Math.floor(total / STEP_MIN)));
-  const toIdx = Math.min(ALL_SLOTS.length - 1, fromIdx + gapSlots);
-  return {
-    date: toDateKey(min),
-    from: ALL_SLOTS[fromIdx]!.value,
-    to: ALL_SLOTS[toIdx]!.value,
-  };
+  return 0;
+}
+
+/** Mặc định: sau minDateTime ít nhất minGapMinutes, cửa sổ dài minGapMinutes. */
+export function defaultDatedWindow(
+  minDateTime: Date,
+  minGapMinutes = 30,
+  allowedWindows?: OperatingWindow[] | null,
+): DatedWindow {
+  const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
+  const ranges = normalizeOperatingWindows(allowedWindows);
+
+  if (!ranges.length) {
+    const min = new Date(minDateTime.getTime());
+    let total = roundUpMinutes(min.getHours() * 60 + min.getMinutes());
+    if (total >= 24 * 60) {
+      min.setDate(min.getDate() + 1);
+      total = 0;
+    }
+    const fromIdx = Math.min(ALL_SLOTS.length - 1 - gapSlots, Math.max(0, Math.floor(total / STEP_MIN)));
+    const toIdx = Math.min(ALL_SLOTS.length - 1, fromIdx + gapSlots);
+    return {
+      date: toDateKey(min),
+      from: ALL_SLOTS[fromIdx]!.value,
+      to: ALL_SLOTS[toIdx]!.value,
+    };
+  }
+
+  const start = startOfDay(minDateTime);
+  for (let i = 0; i < 14; i++) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const date = toDateKey(day);
+    const dayMin = dayMinMinutes(minDateTime, date);
+    if (dayMin >= 24 * 60) continue;
+
+    for (let fromIdx = 0; fromIdx < ALL_SLOTS.length - gapSlots; fromIdx++) {
+      const from = ALL_SLOTS[fromIdx]!.value;
+      const fromM = toMinutes(from);
+      if (fromM < dayMin) continue;
+      const toIdx = Math.min(ALL_SLOTS.length - 1, fromIdx + gapSlots);
+      const to = ALL_SLOTS[toIdx]!.value;
+      if (isWindowInsideOperatingHours(from, to, ranges, minGapMinutes)) {
+        return { date, from, to };
+      }
+    }
+  }
+
+  // Fallback: unrestricted default if no operating slot found in 14 days
+  return defaultDatedWindow(minDateTime, minGapMinutes, null);
 }
 
 function buildDayItems(minDate: Date, daysAhead: number, todayKey: string) {
@@ -115,6 +155,7 @@ export function DatedTimePicker({
   minGapMinutes = 30,
   title = 'Chọn ngày & giờ',
   hint,
+  allowedWindows,
 }: {
   value: DatedWindow;
   onChange: (w: DatedWindow) => void;
@@ -126,12 +167,15 @@ export function DatedTimePicker({
   minGapMinutes?: number;
   title?: string;
   hint?: string;
+  /** Khung giờ quán — null/empty = không giới hạn. */
+  allowedWindows?: OperatingWindow[] | null;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DatedWindow>(value);
   const titleId = useId();
   const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
   const todayKey = toDateKey(new Date());
+  const ranges = useMemo(() => normalizeOperatingWindows(allowedWindows), [allowedWindows]);
 
   const dayItems = useMemo(
     () => buildDayItems(minDateTime, daysAhead, todayKey),
@@ -153,20 +197,59 @@ export function DatedTimePicker({
     const maxFrom = 24 * 60 - minGapMinutes;
     return ALL_SLOTS.filter((s) => {
       const m = toMinutes(s.value);
-      return m >= minOnSelectedDay && m <= maxFrom;
+      if (m < minOnSelectedDay || m > maxFrom) return false;
+      if (!ranges.length) return true;
+      const toMin = m + minGapMinutes;
+      return ALL_SLOTS.some(
+        (t) =>
+          toMinutes(t.value) >= toMin &&
+          isWindowInsideOperatingHours(s.value, t.value, ranges, minGapMinutes),
+      );
     });
-  }, [minOnSelectedDay, minGapMinutes]);
+  }, [minOnSelectedDay, minGapMinutes, ranges]);
 
   const toItems = useMemo(() => {
     const min = toMinutes(draft.from) + minGapMinutes;
-    return ALL_SLOTS.filter((s) => toMinutes(s.value) >= min);
-  }, [draft.from, minGapMinutes]);
+    return ALL_SLOTS.filter((s) => {
+      if (toMinutes(s.value) < min) return false;
+      if (!ranges.length) return true;
+      return isWindowInsideOperatingHours(draft.from, s.value, ranges, minGapMinutes);
+    });
+  }, [draft.from, minGapMinutes, ranges]);
 
   const invalid =
     fromItems.length === 0 ||
     toMinutes(draft.to) - toMinutes(draft.from) < minGapMinutes ||
     toMinutes(draft.from) < minOnSelectedDay ||
-    !dayItems.some((d) => d.value === draft.date);
+    !dayItems.some((d) => d.value === draft.date) ||
+    (ranges.length > 0 && !isWindowInsideOperatingHours(draft.from, draft.to, ranges, minGapMinutes));
+
+  function findValidOnDay(date: string, preferredFrom?: string, preferredTo?: string): DatedWindow | null {
+    const dayMin = dayMinMinutes(minDateTime, date);
+    if (dayMin >= 24 * 60) return null;
+
+    if (
+      preferredFrom &&
+      preferredTo &&
+      toMinutes(preferredFrom) >= dayMin &&
+      toMinutes(preferredTo) - toMinutes(preferredFrom) >= minGapMinutes &&
+      isWindowInsideOperatingHours(preferredFrom, preferredTo, ranges, minGapMinutes)
+    ) {
+      return { date, from: preferredFrom, to: preferredTo };
+    }
+
+    for (let fromIdx = 0; fromIdx < ALL_SLOTS.length - gapSlots; fromIdx++) {
+      const from = ALL_SLOTS[fromIdx]!.value;
+      if (toMinutes(from) < dayMin) continue;
+      for (let toIdx = fromIdx + gapSlots; toIdx < ALL_SLOTS.length; toIdx++) {
+        const to = ALL_SLOTS[toIdx]!.value;
+        if (isWindowInsideOperatingHours(from, to, ranges, minGapMinutes)) {
+          return { date, from, to };
+        }
+      }
+    }
+    return null;
+  }
 
   function clampDraft(next: DatedWindow): DatedWindow {
     let date = next.date;
@@ -187,6 +270,21 @@ export function DatedTimePicker({
       const idx = ALL_SLOTS.findIndex((s) => s.value === from);
       to = ALL_SLOTS[Math.min(ALL_SLOTS.length - 1, idx + gapSlots)]!.value;
     }
+
+    if (!ranges.length) return { date, from, to };
+
+    if (isWindowInsideOperatingHours(from, to, ranges, minGapMinutes) && toMinutes(from) >= dayMin) {
+      return { date, from, to };
+    }
+
+    const onDay = findValidOnDay(date, from, to);
+    if (onDay) return onDay;
+
+    for (const day of dayItems) {
+      const found = findValidOnDay(day.value);
+      if (found) return found;
+    }
+
     return { date, from, to };
   }
 
@@ -206,9 +304,13 @@ export function DatedTimePicker({
   function confirmDraft() {
     const next = clampDraft(draft);
     if (toMinutes(next.to) - toMinutes(next.from) < minGapMinutes) return;
+    if (ranges.length && !isWindowInsideOperatingHours(next.from, next.to, ranges, minGapMinutes)) return;
     onChange(next);
     setOpen(false);
   }
+
+  const baseHint = hint ?? `Có thể chọn trong ${daysAhead} ngày tới. Khoảng tối thiểu ${minGapMinutes} phút.`;
+  const hoursHint = ranges.length ? ` Chỉ trong giờ quán: ${formatOperatingWindows(ranges)}` : '';
 
   return (
     <>
@@ -276,7 +378,8 @@ export function DatedTimePicker({
           Nhận lại: <span className="font-semibold">{formatDatedWindow(draft)}</span>
         </div>
         <p className="mt-2 text-xs text-[var(--color-muted)]">
-          {hint ?? `Có thể chọn trong ${daysAhead} ngày tới. Khoảng tối thiểu ${minGapMinutes} phút.`}
+          {baseHint}
+          {hoursHint}
         </p>
 
         <div className="mt-4 flex gap-2">

@@ -4,6 +4,13 @@ import { WheelColumn } from './wheel-column';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
+import {
+  type OperatingWindow,
+  filterTimesInOperatingWindows,
+  isWindowInsideOperatingHours,
+  normalizeOperatingWindows,
+  toMinutes,
+} from '@/lib/operating-hours';
 
 export interface DeliveryWindow {
   day: 'today' | 'tomorrow';
@@ -27,11 +34,6 @@ function timeSlots() {
 
 const ALL_SLOTS = timeSlots();
 
-function toMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
 export function formatWindow(w: DeliveryWindow): string {
   const day = w.day === 'today' ? 'Hôm nay' : 'Ngày mai';
   return `${day}, ${w.from} – ${w.to}`;
@@ -51,9 +53,45 @@ const DAY_ITEMS = [
   { value: 'tomorrow', label: 'Ngày mai' },
 ];
 
-export function defaultDeliveryWindow(minGapMinutes = 10): DeliveryWindow {
+function firstValidWindow(
+  minGapMinutes: number,
+  allowedWindows?: OperatingWindow[] | null,
+  preferFromMinutes?: number,
+): DeliveryWindow | null {
+  const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
+  const ranges = normalizeOperatingWindows(allowedWindows);
+  const startMin = preferFromMinutes ?? 0;
+  for (const slot of ALL_SLOTS) {
+    const fromM = toMinutes(slot.value);
+    if (fromM < startMin) continue;
+    const fromIdx = ALL_SLOTS.findIndex((s) => s.value === slot.value);
+    const toIdx = fromIdx + gapSlots;
+    if (toIdx >= ALL_SLOTS.length) continue;
+    const to = ALL_SLOTS[toIdx]!.value;
+    if (isWindowInsideOperatingHours(slot.value, to, ranges, minGapMinutes)) {
+      return { day: 'today', from: slot.value, to };
+    }
+  }
+  for (const slot of ALL_SLOTS) {
+    const fromIdx = ALL_SLOTS.findIndex((s) => s.value === slot.value);
+    const toIdx = fromIdx + gapSlots;
+    if (toIdx >= ALL_SLOTS.length) continue;
+    const to = ALL_SLOTS[toIdx]!.value;
+    if (isWindowInsideOperatingHours(slot.value, to, ranges, minGapMinutes)) {
+      return { day: 'tomorrow', from: slot.value, to };
+    }
+  }
+  return null;
+}
+
+export function defaultDeliveryWindow(
+  minGapMinutes = 10,
+  allowedWindows?: OperatingWindow[] | null,
+): DeliveryWindow {
   const now = new Date();
   const rounded = Math.ceil((now.getHours() * 60 + now.getMinutes() + 20) / STEP_MIN) * STEP_MIN;
+  const found = firstValidWindow(minGapMinutes, allowedWindows, rounded);
+  if (found) return found;
   const fromIdx = Math.min(ALL_SLOTS.length - 2, Math.max(0, Math.floor(rounded / STEP_MIN)));
   const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
   const toIdx = Math.min(ALL_SLOTS.length - 1, fromIdx + gapSlots);
@@ -69,14 +107,17 @@ export function DeliveryTimePicker({
   onChange,
   className,
   minGapMinutes = 10,
+  allowedWindows,
   title = 'Chọn thời gian giao',
   hint,
 }: {
   value: DeliveryWindow;
   onChange: (w: DeliveryWindow) => void;
   className?: string;
-  /** Khoảng Từ → Đến tối thiểu (phút). Đồ ăn 10, ship hộ 30. */
+  /** Khoảng Từ → Đến tối thiểu (phút). */
   minGapMinutes?: number;
+  /** Chỉ cho chọn giờ trong các khung hoạt động của quán (nếu có). */
+  allowedWindows?: OperatingWindow[] | null;
   title?: string;
   hint?: string;
 }) {
@@ -84,20 +125,46 @@ export function DeliveryTimePicker({
   const [draft, setDraft] = useState<DeliveryWindow>(value);
   const titleId = useId();
   const gapSlots = Math.max(1, Math.ceil(minGapMinutes / STEP_MIN));
+  const ranges = useMemo(() => normalizeOperatingWindows(allowedWindows), [allowedWindows]);
+
+  const fromItems = useMemo(() => {
+    const allowed = filterTimesInOperatingWindows(
+      ALL_SLOTS.map((s) => s.value),
+      ranges,
+    );
+    const maxFrom = 24 * 60 - minGapMinutes;
+    return ALL_SLOTS.filter(
+      (s) => allowed.includes(s.value) && toMinutes(s.value) <= maxFrom,
+    );
+  }, [ranges, minGapMinutes]);
 
   const toItems = useMemo(() => {
     const min = toMinutes(draft.from) + minGapMinutes;
-    return ALL_SLOTS.filter((s) => toMinutes(s.value) >= min);
-  }, [draft.from, minGapMinutes]);
+    return ALL_SLOTS.filter((s) => {
+      if (toMinutes(s.value) < min) return false;
+      return isWindowInsideOperatingHours(draft.from, s.value, ranges, minGapMinutes);
+    });
+  }, [draft.from, minGapMinutes, ranges]);
 
-  const invalid = toMinutes(draft.to) - toMinutes(draft.from) < minGapMinutes;
+  const invalid =
+    fromItems.length === 0 ||
+    toItems.length === 0 ||
+    !isWindowInsideOperatingHours(draft.from, draft.to, ranges, minGapMinutes);
 
   function handleFromChange(from: string) {
     setDraft((d) => {
       const next = { ...d, from };
-      if (toMinutes(next.to) - toMinutes(from) < minGapMinutes) {
+      if (!isWindowInsideOperatingHours(from, next.to, ranges, minGapMinutes)) {
         const idx = ALL_SLOTS.findIndex((s) => s.value === from);
-        next.to = ALL_SLOTS[Math.min(ALL_SLOTS.length - 1, idx + gapSlots)]!.value;
+        let to = ALL_SLOTS[Math.min(ALL_SLOTS.length - 1, idx + gapSlots)]!.value;
+        for (let i = idx + gapSlots; i < ALL_SLOTS.length; i++) {
+          const candidate = ALL_SLOTS[i]!.value;
+          if (isWindowInsideOperatingHours(from, candidate, ranges, minGapMinutes)) {
+            to = candidate;
+            break;
+          }
+        }
+        next.to = to;
       }
       return next;
     });
@@ -108,6 +175,11 @@ export function DeliveryTimePicker({
     onChange(draft);
     setOpen(false);
   }
+
+  const hoursHint =
+    ranges.length > 0
+      ? `Chỉ chọn trong giờ quán mở: ${ranges.map((w) => `${w.from}–${w.to}`).join(' · ')}.`
+      : null;
 
   return (
     <>
@@ -154,10 +226,15 @@ export function DeliveryTimePicker({
             value={draft.day}
             onChange={(v) => setDraft((d) => ({ ...d, day: v as DeliveryWindow['day'] }))}
           />
-          <WheelColumn ariaLabel="Giờ bắt đầu" items={ALL_SLOTS} value={draft.from} onChange={handleFromChange} />
+          <WheelColumn
+            ariaLabel="Giờ bắt đầu"
+            items={fromItems.length ? fromItems : ALL_SLOTS}
+            value={draft.from}
+            onChange={handleFromChange}
+          />
           <WheelColumn
             ariaLabel="Giờ kết thúc"
-            items={toItems}
+            items={toItems.length ? toItems : ALL_SLOTS}
             value={draft.to}
             onChange={(v) => setDraft((d) => ({ ...d, to: v }))}
           />
@@ -174,7 +251,13 @@ export function DeliveryTimePicker({
         </div>
         <p className="mt-2 text-xs text-[var(--color-muted)]">
           {hint ?? `Khoảng cách tối thiểu ${minGapMinutes} phút.`}
+          {hoursHint ? ` ${hoursHint}` : ''}
         </p>
+        {fromItems.length === 0 && (
+          <p className="mt-2 text-xs text-red-600">
+            Quán chưa có khung giờ phù hợp với khoảng tối thiểu {minGapMinutes} phút.
+          </p>
+        )}
 
         <div className="mt-4 flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)}>

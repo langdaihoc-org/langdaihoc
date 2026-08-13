@@ -259,7 +259,6 @@ export function StorePage() {
               shopName={store.shopName}
               rating={rating?.text ?? '—'}
               count={store.rating.count}
-              avgDeliveryMinutes={avgMins}
               phone={store.phone}
               openHours={store.openHours}
               businessAddress={store.businessAddress}

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Outlet } from 'react-router-dom';
-import { LayoutDashboard, Package, UtensilsCrossed, Store, Newspaper, CreditCard, Star, AlertTriangle, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Package, UtensilsCrossed, WashingMachine, Store, Newspaper, CreditCard, Star, AlertTriangle, ClipboardList } from 'lucide-react';
 import { ordersApi } from '@/lib/api';
 import { DashboardShell, type DashboardLink } from '@/components/layout/dashboard-shell';
 import { SellerNotificationBell } from '@/components/seller/seller-notification-bell';
@@ -29,6 +29,7 @@ function buildSellerNav(
 ) {
   const isShip = serviceTypes === 'ship_proxy';
   const productPath = '/seller/products';
+  const ProductIcon = serviceTypes === 'laundry' ? WashingMachine : UtensilsCrossed;
   const productLink: DashboardLink = { to: productPath, label: 'Sản phẩm', Icon: Package };
   const openOrderCount = opts?.openOrderCount ?? 0;
   const openComplaintCount = opts?.openComplaintCount ?? 0;
@@ -81,7 +82,7 @@ function buildSellerNav(
       ]
     : [
         { to: '/seller', label: 'Tổng quan', Icon: LayoutDashboard },
-        { to: productPath, label: 'Sản phẩm', Icon: UtensilsCrossed },
+        { to: productPath, label: 'Sản phẩm', Icon: ProductIcon },
         {
           to: '/seller/orders',
           label: 'Đơn hàng',

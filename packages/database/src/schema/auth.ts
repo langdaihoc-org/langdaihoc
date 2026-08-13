@@ -78,8 +78,18 @@ export const sellers = pgTable(
     avatarUrl: text('avatar_url'),
     /** SĐT liên hệ quán (hiện cho người mua) */
     phone: varchar('phone', { length: 20 }),
-    /** Giờ hoạt động — seller tự điền (vd: T2–CN 8:00–21:00) */
+    /** Giờ hoạt động — seller tự điền (vd: T2–CN 8:00–21:00) — hiển thị */
     openHours: text('open_hours'),
+    /**
+     * Khung giờ nhận đơn / lấy–giao (JSON).
+     * VD: [{ "from": "09:00", "to": "12:00" }, { "from": "17:00", "to": "22:00" }]
+     * Người mua chỉ chọn giờ trong các khung này (giặt).
+     */
+    operatingWindows: jsonb('operating_windows').$type<{ from: string; to: string }[]>(),
+    /** Giặt: giao lại phải sau giờ lấy ít nhất N phút */
+    laundryMinReturnGapMinutes: integer('laundry_min_return_gap_minutes').notNull().default(60),
+    /** Ăn uống: khoảng Từ→Đến tối thiểu khi chọn giờ giao (phút) */
+    minDeliveryWindowMinutes: integer('min_delivery_window_minutes').notNull().default(30),
     /** Khu vực giao / phục vụ — seller tự điền (vd: KTX A, Bcons) */
     serviceAreas: text('service_areas').array(),
     /** Thời gian giao TB từ nhận đơn đến giao thành công (phút) — seller set */

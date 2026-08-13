@@ -91,6 +91,7 @@ export function PromoPopup({ banners }: { banners?: Banner[] | null }) {
       onClose={close}
       titleId={titleId}
       zIndexClass="z-[90]"
+      overlayClassName="items-center justify-center p-4"
       panelClassName="w-full max-w-sm overflow-hidden rounded-[28px] bg-white shadow-[var(--shadow-hover)]"
     >
       {banner && (

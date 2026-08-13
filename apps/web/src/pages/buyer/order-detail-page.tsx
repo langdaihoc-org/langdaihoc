@@ -548,7 +548,15 @@ export function OrderDetailPage() {
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Địa chỉ nhận lại</span><span className="text-right">{shipProxy.returnAddressText}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">SĐT của bạn</span><span>{shipProxy.contactPhone}</span></div>
           <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Giá tiền hàng</span><span className="font-semibold">{formatPrice(shipProxy.packageValue ?? 0)}</span></div>
-          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Phí nhận hộ</span><span className="font-semibold text-brand-orange">{formatPrice(order.total)}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Phí nhận hộ</span><span className="font-semibold">{formatPrice(
+            (() => {
+              const pkg = Number(shipProxy.packageValue ?? 0);
+              const total = Number(order.total);
+              return total >= pkg && pkg > 0 ? total - pkg : total;
+            })(),
+          )}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-[var(--color-muted)]">Tổng thanh toán</span><span className="font-semibold text-brand-orange">{formatPrice(order.total)}</span></div>
+          <p className="text-xs text-[var(--color-muted)]">Ghi chú: số tiền thanh toán = giá tiền hàng + phí nhận hộ.</p>
         </Card>
       )}
       {!!laundry && order.type === 'laundry' && (

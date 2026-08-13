@@ -86,6 +86,10 @@ export function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: strin
   if (!returnAfterPickup) missing.push('ngày/giờ nhận lại (sau giờ lấy ≥ 30 phút)');
 
   const canSubmit = missing.length === 0 && Number.isFinite(fee) && fee > 0;
+  const payTotal =
+    Number.isFinite(packageValueNum) && packageValueNum > 0 && Number.isFinite(fee) && fee > 0
+      ? packageValueNum + fee
+      : fee;
 
   const createMut = useMutation({
     mutationFn: () => {
@@ -228,7 +232,7 @@ export function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: strin
             onChange={(e) => setReceivePhone(e.target.value)}
           />
           <p className="mt-1 text-xs text-[var(--color-muted)]">
-            Cần nhập đầy đủ số điện thoại để người nhận hộ liên lạc / nhận đơn.
+            Nhập đầy đủ số điện thoại nhận đơn hàng từ shiper
           </p>
         </div>
         <div>
@@ -295,10 +299,21 @@ export function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: strin
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-amber-950">
           Chỉ chuyển khoản. Sau khi người nhận hộ xác nhận đơn, bạn chuyển khoản ngay — họ mới đi lấy hàng.
         </p>
-        <div className="flex justify-between font-semibold">
-          <span>Tổng phí</span>
-          <span className="text-brand-orange">{formatPrice(fee)}</span>
+        <div className="flex justify-between text-[var(--color-muted)]">
+          <span>Giá tiền hàng</span>
+          <span>{packageValueNum > 0 ? formatPrice(packageValueNum) : '—'}</span>
         </div>
+        <div className="flex justify-between text-[var(--color-muted)]">
+          <span>Phí nhận hộ</span>
+          <span>{formatPrice(fee)}</span>
+        </div>
+        <div className="flex justify-between font-semibold">
+          <span>Tổng thanh toán</span>
+          <span className="text-brand-orange">{formatPrice(payTotal)}</span>
+        </div>
+        <p className="text-xs text-[var(--color-muted)]">
+          Ghi chú: số tiền thanh toán = giá tiền hàng + phí nhận hộ.
+        </p>
       </Card>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -314,7 +329,7 @@ export function ShipProxyForm({ preferredSellerId }: { preferredSellerId?: strin
           createMut.mutate();
         }}
       >
-        Gửi yêu cầu · {formatPrice(fee)}
+        Gửi yêu cầu · {formatPrice(payTotal)}
       </Button>
     </div>
   );

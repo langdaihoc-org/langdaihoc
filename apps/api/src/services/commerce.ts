@@ -114,6 +114,9 @@ export async function getApprovedSellers(
       avatarUrl: sellers.avatarUrl,
       phone: sellers.phone,
       openHours: sellers.openHours,
+      operatingWindows: sellers.operatingWindows,
+      laundryMinReturnGapMinutes: sellers.laundryMinReturnGapMinutes,
+      minDeliveryWindowMinutes: sellers.minDeliveryWindowMinutes,
       serviceAreas: sellers.serviceAreas,
       avgDeliveryMinutes: sellers.avgDeliveryMinutes,
       shipProxyFee: sellers.shipProxyFee,
@@ -134,6 +137,9 @@ export async function getApprovedSellerById(db: Database, sellerId: string) {
       avatarUrl: sellers.avatarUrl,
       phone: sellers.phone,
       openHours: sellers.openHours,
+      operatingWindows: sellers.operatingWindows,
+      laundryMinReturnGapMinutes: sellers.laundryMinReturnGapMinutes,
+      minDeliveryWindowMinutes: sellers.minDeliveryWindowMinutes,
       serviceAreas: sellers.serviceAreas,
       avgDeliveryMinutes: sellers.avgDeliveryMinutes,
       shipProxyFee: sellers.shipProxyFee,
@@ -439,6 +445,8 @@ export async function getLaundryCatalog(db: Database, sellerId?: string, opts?: 
       shopPhone: sellers.phone,
       shopAddress: sellers.businessAddress,
       shopOpenHours: sellers.openHours,
+      shopOperatingWindows: sellers.operatingWindows,
+      shopLaundryMinReturnGapMinutes: sellers.laundryMinReturnGapMinutes,
       name: laundryServices.name,
       description: laundryServices.description,
       unit: laundryServices.unit,
@@ -485,6 +493,8 @@ export async function getCartWithItems(db: DbConn, userId: string) {
       sellerStatus: sellers.status,
       sellerAcceptingOrders: sellers.acceptingOrders,
       shopName: sellers.shopName,
+      sellerMinDeliveryWindowMinutes: sellers.minDeliveryWindowMinutes,
+      sellerOperatingWindows: sellers.operatingWindows,
     })
     .from(cartItems)
     .innerJoin(foodItems, eq(cartItems.foodItemId, foodItems.id))
@@ -537,6 +547,8 @@ export async function getCartWithItems(db: DbConn, userId: string) {
     subtotal,
     sellerId: cart.sellerId,
     shopName: priced[0]?.shopName ?? null,
+    minDeliveryWindowMinutes: priced[0]?.sellerMinDeliveryWindowMinutes ?? 30,
+    operatingWindows: priced[0]?.sellerOperatingWindows ?? null,
   };
 }
 
@@ -695,16 +707,21 @@ export async function checkoutFood(
     if (desiredDeliveryUntil && Number.isNaN(desiredDeliveryUntil.getTime())) {
       throw new AppError(400, 'Thời gian giao không hợp lệ', 'INVALID_DELIVERY_TIME');
     }
-    // Client cũ / thiếu until → mặc định cửa sổ 30 phút từ mốc bắt đầu.
+    const foodMinWindowMin = cartData.minDeliveryWindowMinutes ?? 30;
+    // Client cũ / thiếu until → mặc định cửa sổ theo quy định quán.
     if (desiredDeliveryAt && !desiredDeliveryUntil) {
-      desiredDeliveryUntil = new Date(desiredDeliveryAt.getTime() + 30 * 60 * 1000);
+      desiredDeliveryUntil = new Date(desiredDeliveryAt.getTime() + foodMinWindowMin * 60 * 1000);
     }
     if (
       desiredDeliveryAt
       && desiredDeliveryUntil
-      && desiredDeliveryUntil.getTime() < desiredDeliveryAt.getTime()
+      && desiredDeliveryUntil.getTime() < desiredDeliveryAt.getTime() + foodMinWindowMin * 60 * 1000
     ) {
-      desiredDeliveryUntil = new Date(desiredDeliveryAt.getTime() + 30 * 60 * 1000);
+      throw new AppError(
+        400,
+        `Khoảng giờ giao phải ít nhất ${foodMinWindowMin} phút`,
+        'INVALID_DELIVERY_WINDOW',
+      );
     }
 
     const [order] = await conn
@@ -841,6 +858,7 @@ export async function createLaundryOrder(
         sellerStatus: sellers.status,
         sellerAcceptingOrders: sellers.acceptingOrders,
         sellerUserId: sellers.userId,
+        laundryMinReturnGapMinutes: sellers.laundryMinReturnGapMinutes,
       })
       .from(laundryServices)
       .innerJoin(sellers, eq(laundryServices.sellerId, sellers.id))
@@ -874,11 +892,11 @@ export async function createLaundryOrder(
     if (returnAt && Number.isNaN(returnAt.getTime())) {
       throw new AppError(400, 'Thời gian giao lại không hợp lệ', 'INVALID_TIME');
     }
-    const LAUNDRY_GAP_MIN = 60;
-    if (returnAt && returnAt.getTime() < pickupAt.getTime() + LAUNDRY_GAP_MIN * 60 * 1000) {
+    const laundryGapMin = service.laundryMinReturnGapMinutes ?? 60;
+    if (returnAt && returnAt.getTime() < pickupAt.getTime() + laundryGapMin * 60 * 1000) {
       throw new AppError(
         400,
-        'Giờ giao lại phải sau giờ lấy ít nhất 1 tiếng',
+        `Giờ giao lại phải sau giờ lấy ít nhất ${laundryGapMin} phút`,
         'INVALID_TIME_RANGE',
       );
     }
@@ -1015,10 +1033,11 @@ export async function createShipProxyOrder(
       throw new AppError(400, 'Giá tiền hàng nhận hộ không hợp lệ', 'INVALID_PACKAGE_VALUE');
     }
 
-    const price = Math.max(0, Number(seller.shipProxyFee ?? SHIP_PROXY_FEE_VND));
-    if (!Number.isFinite(price) || price <= 0) {
+    const fee = Math.max(0, Number(seller.shipProxyFee ?? SHIP_PROXY_FEE_VND));
+    if (!Number.isFinite(fee) || fee <= 0) {
       throw new AppError(409, 'Người nhận hộ chưa cấu hình phí hợp lệ', 'FEE_NOT_SET');
     }
+    const total = packageValue + fee;
 
     const orderCode = generateOrderCode('ship_proxy');
     const [order] = await tx
@@ -1031,8 +1050,8 @@ export async function createShipProxyOrder(
         status: 'pending',
         paymentMethod: 'bank_transfer',
         paymentStatus: 'pending',
-        subtotal: String(price),
-        total: String(price),
+        subtotal: String(total),
+        total: String(total),
         notes: data.notes,
         recipientPhone: data.contactPhone,
         pickupScheduledAt: pickupAt,

@@ -301,6 +301,9 @@ export const sellerApi = {
     avatarUrl?: string;
     phone?: string | null;
     openHours?: string | null;
+    operatingWindows?: { from: string; to: string }[] | null;
+    laundryMinReturnGapMinutes?: number | null;
+    minDeliveryWindowMinutes?: number | null;
     serviceAreas?: string[];
     avgDeliveryMinutes?: number | null;
     acceptingOrders?: boolean;
@@ -558,6 +561,8 @@ export interface LaundryService {
   shopPhone?: string | null;
   shopAddress?: string | null;
   shopOpenHours?: string | null;
+  shopOperatingWindows?: { from: string; to: string }[] | null;
+  shopLaundryMinReturnGapMinutes?: number | null;
 }
 
 export interface CartData {
@@ -572,6 +577,8 @@ export interface CartData {
     optionsJson?: { id: string; name: string; priceDelta: number }[] | null;
   }[];
   subtotal: number; shopName: string | null; sellerId: string | null;
+  minDeliveryWindowMinutes?: number | null;
+  operatingWindows?: { from: string; to: string }[] | null;
 }
 
 export interface Order {
@@ -707,6 +714,9 @@ export interface SellerShop {
   serviceTypes: 'food' | 'laundry' | 'ship_proxy'; avatarUrl?: string | null; rejectionReason?: string | null;
   phone?: string | null;
   openHours?: string | null;
+  operatingWindows?: { from: string; to: string }[] | null;
+  laundryMinReturnGapMinutes?: number | null;
+  minDeliveryWindowMinutes?: number | null;
   serviceAreas?: string[] | null; avgDeliveryMinutes?: number | null;
   acceptingOrders?: boolean;
   shipProxyFee?: string | number | null;

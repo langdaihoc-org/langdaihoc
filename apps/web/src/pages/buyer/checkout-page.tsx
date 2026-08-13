@@ -7,7 +7,7 @@ import { Card, Alert } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatPrice } from '@/lib/format';
-import { DeliveryTimePicker, windowToDate, type DeliveryWindow } from '@/components/marketplace/delivery-time-picker';
+import { DeliveryTimePicker, windowToDate, defaultDeliveryWindow, type DeliveryWindow } from '@/components/marketplace/delivery-time-picker';
 import { AddressPicker, resolveAddressId, isAddressSelectionReady, type AddressSelection } from '@/components/marketplace/address-picker';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
@@ -27,14 +27,22 @@ export function CheckoutPage() {
   }, [user?.phone]);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer'>('cash');
   const [notes, setNotes] = useState('');
-  const [deliveryWindow, setDeliveryWindow] = useState<DeliveryWindow>({ day: 'today', from: '12:00', to: '12:30' });
+  const [deliveryWindow, setDeliveryWindow] = useState<DeliveryWindow>(() => defaultDeliveryWindow(30));
   const [error, setError] = useState('');
   const [addressSel, setAddressSel] = useState<AddressSelection | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const deliveryInitRef = useRef(false);
   const { data: cartData, isLoading: loadingCart, isError: errCart, refetch: refetchCart } = useQuery({ queryKey: ['cart'], queryFn: () => cartApi.get() });
   const { data: addrData } = useQuery({ queryKey: ['addresses'], queryFn: () => buyerApi.addresses() });
   const addresses = addrData?.data ?? [];
   const total = cartData?.data?.subtotal ?? 0;
+  const minGap = cartData?.data?.minDeliveryWindowMinutes ?? 30;
+
+  useEffect(() => {
+    if (!cartData?.data?.items?.length || deliveryInitRef.current) return;
+    deliveryInitRef.current = true;
+    setDeliveryWindow(defaultDeliveryWindow(minGap));
+  }, [cartData, minGap]);
 
   const checkout = useMutation({
     mutationFn: (addressId: string) => ordersApi.checkoutFood({
@@ -149,7 +157,12 @@ export function CheckoutPage() {
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold">Thời gian giao</h2>
-        <DeliveryTimePicker value={deliveryWindow} onChange={setDeliveryWindow} />
+        <DeliveryTimePicker
+          value={deliveryWindow}
+          onChange={setDeliveryWindow}
+          minGapMinutes={minGap}
+          hint={`Khoảng giờ giao tối thiểu ${minGap} phút (do quán quy định).`}
+        />
       </Card>
 
       <Card>

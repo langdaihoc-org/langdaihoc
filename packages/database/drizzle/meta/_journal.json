@@ -239,6 +239,13 @@
                         "when":  1786200000000,
                         "tag":  "0034_laundry_auto_confirm_quote",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  34,
+                        "version":  "7",
+                        "when":  1786300000000,
+                        "tag":  "0035_shop_schedule_gaps",
+                        "breakpoints":  true
                     }
                 ]
 }

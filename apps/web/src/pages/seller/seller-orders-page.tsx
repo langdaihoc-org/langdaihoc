@@ -402,8 +402,19 @@ export function SellerOrdersPage() {
                         </p>
                         <p>
                           <span className="text-[var(--color-muted)]">Phí nhận hộ:</span>{' '}
+                          <span className="font-semibold">{formatPrice(
+                            (() => {
+                              const pkg = Number(o.shipProxy.packageValue ?? 0);
+                              const total = Number(o.total);
+                              return total >= pkg && pkg > 0 ? total - pkg : total;
+                            })(),
+                          )}</span>
+                        </p>
+                        <p>
+                          <span className="text-[var(--color-muted)]">Tổng thanh toán:</span>{' '}
                           <span className="font-semibold text-brand-orange">{formatPrice(o.total)}</span>
                         </p>
+                        <p className="text-[11px] text-[var(--color-muted)]">Ghi chú: tổng = giá hàng + phí nhận hộ.</p>
                       </div>
                     )}
 

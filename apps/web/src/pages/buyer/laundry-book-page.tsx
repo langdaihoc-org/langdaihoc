@@ -22,7 +22,8 @@ import { useToast } from '@/components/ui/toast';
 import { invalidateBuyerLive } from '@/hooks/use-buyer-live';
 
 const LAUNDRY_RETURN_DAYS = 14;
-const LAUNDRY_GAP_MIN = 60;
+/** Khoảng Từ→Đến tối thiểu cho khung lấy đồ / giao lại */
+const LAUNDRY_PICKUP_WINDOW_MIN = 30;
 
 export function LaundryBookPage() {
   const { serviceId } = useParams();
@@ -35,11 +36,13 @@ export function LaundryBookPage() {
   useEffect(() => {
     if (user?.phone) setPhone((p) => p || user.phone!);
   }, [user?.phone]);
-  const [pickupWindow, setPickupWindow] = useState<DeliveryWindow>(() => defaultDeliveryWindow(LAUNDRY_GAP_MIN));
+  const [pickupWindow, setPickupWindow] = useState<DeliveryWindow>(() =>
+    defaultDeliveryWindow(LAUNDRY_PICKUP_WINDOW_MIN),
+  );
   const [returnWindow, setReturnWindow] = useState<DatedWindow>(() => {
-    const pickup = defaultDeliveryWindow(LAUNDRY_GAP_MIN);
-    const min = new Date(windowToDate(pickup, 'from').getTime() + LAUNDRY_GAP_MIN * 60 * 1000);
-    return defaultDatedWindow(min, LAUNDRY_GAP_MIN);
+    const pickup = defaultDeliveryWindow(LAUNDRY_PICKUP_WINDOW_MIN);
+    const min = new Date(windowToDate(pickup, 'from').getTime() + 60 * 60 * 1000);
+    return defaultDatedWindow(min, LAUNDRY_PICKUP_WINDOW_MIN);
   });
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer'>('cash');
@@ -49,9 +52,12 @@ export function LaundryBookPage() {
   const [returnSel, setReturnSel] = useState<AddressSelection | null>(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const initializedForService = useRef<string | null>(null);
 
   const { data: svcData, isLoading: loadingSvc } = useQuery({ queryKey: ['laundry'], queryFn: () => catalogApi.laundry() });
   const service = svcData?.data.find((s) => s.id === serviceId);
+  const returnGapMin = service?.shopLaundryMinReturnGapMinutes ?? 60;
+  const allowedWindows = service?.shopOperatingWindows ?? null;
   const { data: addrData } = useQuery({
     queryKey: ['addresses'],
     queryFn: () => buyerApi.addresses(),
@@ -59,14 +65,29 @@ export function LaundryBookPage() {
   });
   const addresses = addrData?.data ?? [];
 
+  useEffect(() => {
+    if (!service) return;
+    if (initializedForService.current === service.id) return;
+    initializedForService.current = service.id;
+    const windows = service.shopOperatingWindows ?? null;
+    const gap = service.shopLaundryMinReturnGapMinutes ?? 60;
+    const pickup = defaultDeliveryWindow(LAUNDRY_PICKUP_WINDOW_MIN, windows);
+    setPickupWindow(pickup);
+    const min = new Date(windowToDate(pickup, 'from').getTime() + gap * 60 * 1000);
+    setReturnWindow(defaultDatedWindow(min, LAUNDRY_PICKUP_WINDOW_MIN, windows));
+  }, [service]);
+
   const pickupStart = windowToDate(pickupWindow, 'from').getTime();
-  const minReturnAt = useMemo(() => new Date(pickupStart + LAUNDRY_GAP_MIN * 60 * 1000), [pickupStart]);
+  const minReturnAt = useMemo(
+    () => new Date(pickupStart + returnGapMin * 60 * 1000),
+    [pickupStart, returnGapMin],
+  );
   const returnStart = datedWindowToDate(returnWindow, 'from').getTime();
   const returnAfterPickup = returnStart >= minReturnAt.getTime();
 
   useEffect(() => {
     if (returnStart < minReturnAt.getTime()) {
-      setReturnWindow(defaultDatedWindow(minReturnAt, LAUNDRY_GAP_MIN));
+      setReturnWindow(defaultDatedWindow(minReturnAt, LAUNDRY_PICKUP_WINDOW_MIN, allowedWindows));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [minReturnAt]);
@@ -104,7 +125,7 @@ export function LaundryBookPage() {
       return;
     }
     if (!returnAfterPickup) {
-      setError('Giờ giao lại phải sau giờ lấy ít nhất 1 tiếng');
+      setError(`Giờ giao lại phải sau giờ lấy ít nhất ${returnGapMin} phút`);
       return;
     }
     setError('');
@@ -115,7 +136,11 @@ export function LaundryBookPage() {
         ? pickupAddressId
         : await resolveAddressId(returnSel!);
       const contactPhone =
-        pickupSel.mode === 'manual' ? pickupSel.draft.phone : phone;
+        pickupSel.mode === 'manual'
+          ? pickupSel.draft.phone.trim()
+          : (addresses.find((a) => a.id === pickupSel.addressId)?.phone
+            ?? user?.phone
+            ?? '');
       await book.mutateAsync({ pickupAddressId, returnAddressId, contactPhone });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không thể đặt giặt');
@@ -157,8 +182,7 @@ export function LaundryBookPage() {
   const canSubmit =
     isAddressSelectionReady(pickupSel) &&
     (sameReturnAddress || isAddressSelectionReady(returnSel)) &&
-    returnAfterPickup &&
-    (pickupSel?.mode === 'manual' ? true : phone.length >= 9);
+    returnAfterPickup;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -195,17 +219,15 @@ export function LaundryBookPage() {
       </div>
 
       <Card className="space-y-3">
-        {pickupSel?.mode !== 'manual' && (
-          <Input label="Số điện thoại liên hệ" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        )}
         <div>
           <p className="mb-1.5 text-sm font-medium">Thời gian lấy đồ *</p>
           <DeliveryTimePicker
             value={pickupWindow}
             onChange={setPickupWindow}
-            minGapMinutes={LAUNDRY_GAP_MIN}
+            minGapMinutes={LAUNDRY_PICKUP_WINDOW_MIN}
+            allowedWindows={allowedWindows}
             title="Chọn giờ lấy đồ"
-            hint="Khoảng lấy đồ tối thiểu 1 tiếng."
+            hint="Khoảng lấy đồ tối thiểu 30 phút. Chỉ trong giờ quán mở."
           />
         </div>
         <div>
@@ -215,12 +237,15 @@ export function LaundryBookPage() {
             onChange={setReturnWindow}
             minDateTime={minReturnAt}
             daysAhead={LAUNDRY_RETURN_DAYS}
-            minGapMinutes={LAUNDRY_GAP_MIN}
+            minGapMinutes={LAUNDRY_PICKUP_WINDOW_MIN}
+            allowedWindows={allowedWindows}
             title="Chọn ngày giao lại"
-            hint="Giao lại sau giờ lấy ít nhất 1 tiếng. Có thể chọn trong 14 ngày tới."
+            hint={`Giao lại sau giờ lấy ít nhất ${returnGapMin} phút (do quán quy định). Chỉ trong giờ quán mở.`}
           />
           {!returnAfterPickup && (
-            <p className="mt-1 text-xs text-red-600">Giờ giao lại phải sau giờ lấy ít nhất 1 tiếng.</p>
+            <p className="mt-1 text-xs text-red-600">
+              Giờ giao lại phải sau giờ lấy ít nhất {returnGapMin} phút.
+            </p>
           )}
         </div>
         <Input label="Ghi chú cho cửa hàng" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ví dụ: có áo len, giặt riêng..." />
@@ -234,7 +259,7 @@ export function LaundryBookPage() {
           <span>
             <span className="block text-sm font-medium">Tự xác nhận báo giá</span>
             <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
-              Tích thì khi quán báo giá, đơn vào “Đang giặt” luôn — bạn không cần bấm xác nhận giá nữa.
+              Tích chọn để bỏ qua bước xác nhận giá khi quán báo giá
             </span>
           </span>
         </label>

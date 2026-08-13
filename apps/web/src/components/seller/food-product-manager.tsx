@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/brand';
 import { MultiImageUploader, uploadSellerImage } from '@/components/ui/image-uploader';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { formatPrice } from '@/lib/format';
 
@@ -165,6 +166,11 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
     setShowForm(true);
   };
 
+  const closeForm = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
   const updateGroup = (gi: number, patch: Partial<GroupRow>) => {
     setGroups((p) => p.map((g, i) => (i === gi ? { ...g, ...patch } : g)));
   };
@@ -201,8 +207,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['seller-food'] });
       toast(editingId ? 'Đã lưu thay đổi món' : 'Đã thêm món mới', 'success');
-      setShowForm(false);
-      resetForm();
+      closeForm();
     },
     onError: (e) => {
       const msg = e instanceof ApiError ? e.message : 'Không thể lưu món';
@@ -234,7 +239,7 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
     <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-bold">Sản phẩm · Ăn uống</h1>
-        <Button size="sm" variant="green" disabled={!approved} onClick={() => (showForm && !editingId ? setShowForm(false) : openCreate())}>
+        <Button size="sm" variant="green" disabled={!approved} onClick={() => (showForm ? closeForm() : openCreate())}>
           {showForm ? 'Đóng' : '+ Thêm món'}
         </Button>
       </div>
@@ -249,11 +254,17 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
         />
       </div>
 
-      {formError && <p className="text-sm text-red-500">{formError}</p>}
-
-      {showForm && approved && (
-        <Card className="space-y-3">
-          <p className="font-semibold">{editingId ? 'Sửa món' : 'Thêm món mới'}</p>
+      {approved && (
+        <Modal
+          open={showForm}
+          onClose={closeForm}
+          titleId="food-product-form-title"
+          zIndexClass="z-[120]"
+          panelClassName="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl sm:rounded-2xl"
+        >
+          <div className="space-y-3">
+          <p id="food-product-form-title" className="font-semibold">{editingId ? 'Sửa món' : 'Thêm món mới'}</p>
+          {formError && <p className="text-sm text-red-500">{formError}</p>}
           <Input label="Tên món *" value={name} onChange={(e) => setName(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Giá (₫) *" type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
@@ -429,9 +440,10 @@ export function FoodProductManager({ approved }: { approved: boolean }) {
             >
               {editingId ? 'Lưu thay đổi' : 'Thêm món'}
             </Button>
-            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>Huỷ</Button>
+            <Button variant="outline" onClick={closeForm}>Huỷ</Button>
           </div>
-        </Card>
+          </div>
+        </Modal>
       )}
 
       {isLoading ? (

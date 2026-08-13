@@ -132,6 +132,18 @@ sellerRouter.patch(
         avatarUrl: z.string().optional(),
         phone: z.string().trim().min(9).max(20).nullable().optional(),
         openHours: z.string().trim().max(200).nullable().optional(),
+        operatingWindows: z
+          .array(
+            z.object({
+              from: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+              to: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+            }),
+          )
+          .max(8)
+          .nullable()
+          .optional(),
+        laundryMinReturnGapMinutes: z.number().int().min(30).max(24 * 60).nullable().optional(),
+        minDeliveryWindowMinutes: z.number().int().min(10).max(240).nullable().optional(),
         serviceAreas: z.array(z.string().min(1)).optional(),
         avgDeliveryMinutes: z.number().int().positive().max(24 * 60).nullable().optional(),
         acceptingOrders: z.boolean().optional(),
@@ -143,6 +155,26 @@ sellerRouter.patch(
     if (body.shipProxyFee !== undefined && seller.serviceTypes !== 'ship_proxy') {
       throw new AppError(400, 'Chỉ tài khoản nhận ship hộ mới đặt phí nhận hộ', 'INVALID_FIELD');
     }
+    if (body.laundryMinReturnGapMinutes !== undefined && seller.serviceTypes !== 'laundry') {
+      throw new AppError(400, 'Chỉ cửa hàng giặt mới đặt khoảng giao lại tối thiểu', 'INVALID_FIELD');
+    }
+    if (body.minDeliveryWindowMinutes !== undefined && seller.serviceTypes !== 'food') {
+      throw new AppError(400, 'Chỉ quán ăn mới đặt khoảng giờ giao tối thiểu', 'INVALID_FIELD');
+    }
+
+    let operatingWindows = body.operatingWindows;
+    if (operatingWindows != null) {
+      operatingWindows = operatingWindows.filter((w) => {
+        const [fh, fm] = w.from.split(':').map(Number);
+        const [th, tm] = w.to.split(':').map(Number);
+        return fh * 60 + fm < th * 60 + tm;
+      });
+    }
+    const openHoursFromWindows =
+      operatingWindows && operatingWindows.length
+        ? operatingWindows.map((w) => `${w.from}–${w.to}`).join(' · ')
+        : undefined;
+
     const [updated] = await req.app.locals.db
       .update(sellers)
       .set({
@@ -152,6 +184,22 @@ sellerRouter.patch(
         ...(avatarUrl !== undefined && { avatarUrl }),
         ...(body.phone !== undefined && { phone: body.phone }),
         ...(body.openHours !== undefined && { openHours: body.openHours }),
+        ...(operatingWindows !== undefined && {
+          operatingWindows: operatingWindows?.length ? operatingWindows : null,
+          ...(openHoursFromWindows != null
+            ? { openHours: openHoursFromWindows }
+            : body.openHours === undefined
+              ? {}
+              : {}),
+        }),
+        ...(body.laundryMinReturnGapMinutes !== undefined &&
+          body.laundryMinReturnGapMinutes != null && {
+            laundryMinReturnGapMinutes: body.laundryMinReturnGapMinutes,
+          }),
+        ...(body.minDeliveryWindowMinutes !== undefined &&
+          body.minDeliveryWindowMinutes != null && {
+            minDeliveryWindowMinutes: body.minDeliveryWindowMinutes,
+          }),
         ...(body.serviceAreas !== undefined && { serviceAreas: body.serviceAreas }),
         ...(body.avgDeliveryMinutes !== undefined && {
           avgDeliveryMinutes: body.avgDeliveryMinutes,
