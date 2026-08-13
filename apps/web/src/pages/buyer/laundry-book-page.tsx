@@ -43,6 +43,7 @@ export function LaundryBookPage() {
   });
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer'>('cash');
+  const [autoConfirmQuote, setAutoConfirmQuote] = useState(false);
   const [sameReturnAddress, setSameReturnAddress] = useState(true);
   const [pickupSel, setPickupSel] = useState<AddressSelection | null>(null);
   const [returnSel, setReturnSel] = useState<AddressSelection | null>(null);
@@ -82,6 +83,7 @@ export function LaundryBookPage() {
         phone: ids.contactPhone,
         notes: notes || undefined,
         paymentMethod,
+        autoConfirmQuote,
       }, idempotencyKey),
     onSuccess: (res) => {
       invalidateBuyerLive(qc);
@@ -222,6 +224,20 @@ export function LaundryBookPage() {
           )}
         </div>
         <Input label="Ghi chú cho cửa hàng" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ví dụ: có áo len, giặt riêng..." />
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--color-line)] bg-black/[0.02] px-3 py-3">
+          <input
+            type="checkbox"
+            className="mt-1 size-4 accent-[var(--color-brand-green,#16a34a)]"
+            checked={autoConfirmQuote}
+            onChange={(e) => setAutoConfirmQuote(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium">Tự xác nhận báo giá</span>
+            <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+              Tích thì khi quán báo giá, đơn vào “Đang giặt” luôn — bạn không cần bấm xác nhận giá nữa.
+            </span>
+          </span>
+        </label>
       </Card>
 
       <Card className="space-y-4">

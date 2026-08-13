@@ -29,7 +29,6 @@ export function SellerProfilePage() {
   const [openHours, setOpenHours] = useState('');
   const [avgDeliveryMinutes, setAvgDeliveryMinutes] = useState('');
   const [shipProxyFee, setShipProxyFee] = useState('');
-  const [autoConfirmLaundryQuote, setAutoConfirmLaundryQuote] = useState(false);
 
   const save = useMutation({
     mutationFn: () => sellerApi.updateShop({
@@ -44,9 +43,6 @@ export function SellerProfilePage() {
         .map((s) => s.trim())
         .filter(Boolean),
       avgDeliveryMinutes: avgDeliveryMinutes.trim() ? Number(avgDeliveryMinutes) : null,
-      ...(shop?.serviceTypes === 'laundry'
-        ? { autoConfirmLaundryQuote }
-        : {}),
       ...(shop?.serviceTypes === 'ship_proxy' && shipProxyFee.trim()
         ? { shipProxyFee: Number(shipProxyFee) }
         : {}),
@@ -57,16 +53,6 @@ export function SellerProfilePage() {
       setEditing(false);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không lưu được', 'error'),
-  });
-
-  const toggleAutoConfirm = useMutation({
-    mutationFn: (next: boolean) => sellerApi.updateShop({ autoConfirmLaundryQuote: next }),
-    onSuccess: (_res, next) => {
-      setAutoConfirmLaundryQuote(next);
-      qc.invalidateQueries({ queryKey: ['seller-shop'] });
-      toast(next ? 'Đã bật tự xác nhận báo giá' : 'Đã tắt tự xác nhận báo giá', 'success');
-    },
-    onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được', 'error'),
   });
 
   useEffect(() => {
@@ -80,7 +66,6 @@ export function SellerProfilePage() {
       setOpenHours(shop.openHours ?? '');
       setAvgDeliveryMinutes(shop.avgDeliveryMinutes != null ? String(shop.avgDeliveryMinutes) : '');
       setShipProxyFee(shop.shipProxyFee != null ? String(shop.shipProxyFee) : '15000');
-      setAutoConfirmLaundryQuote(!!shop.autoConfirmLaundryQuote);
     }
   }, [shop]);
 
@@ -152,29 +137,11 @@ export function SellerProfilePage() {
                   setOpenHours(shop.openHours ?? '');
                   setAvgDeliveryMinutes(shop.avgDeliveryMinutes != null ? String(shop.avgDeliveryMinutes) : '');
                   setShipProxyFee(shop.shipProxyFee != null ? String(shop.shipProxyFee) : '15000');
-                  setAutoConfirmLaundryQuote(!!shop.autoConfirmLaundryQuote);
                 }
                 setEditing(false);
               }}>Hủy</Button>
             )}
           </div>
-          {shop?.serviceTypes === 'laundry' && (
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--color-line)] bg-black/[0.02] px-3 py-3">
-              <input
-                type="checkbox"
-                className="mt-1 size-4 accent-[var(--color-brand-green,#16a34a)]"
-                checked={autoConfirmLaundryQuote}
-                disabled={toggleAutoConfirm.isPending}
-                onChange={(e) => toggleAutoConfirm.mutate(e.target.checked)}
-              />
-              <span>
-                <span className="block text-sm font-medium">Tự xác nhận báo giá</span>
-                <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
-                  Bật thì khi bạn báo giá, đơn vào “Đang giặt” luôn — khách không cần bấm xác nhận giá.
-                </span>
-              </span>
-            </label>
-          )}
           <ImageUploader
             label="Ảnh cửa hàng"
             value={avatarUrl}

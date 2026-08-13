@@ -375,11 +375,8 @@ export function SellerOrdersPage() {
                     {o.type === 'laundry' && o.laundry && (
                       <div className="space-y-1 rounded-xl bg-black/[0.02] p-3 text-sm">
                         <p className="font-medium">{o.laundry.serviceName}</p>
-                        {o.laundry.estimatedQty && (
-                          <p className="text-xs text-[var(--color-muted)]">
-                            Ước tính: {o.laundry.estimatedQty}
-                            {o.laundry.estimatedUnit === 'kg' ? 'kg' : o.laundry.estimatedUnit === 'item' ? ' món' : o.laundry.estimatedUnit === 'load' ? ' tải' : ''}
-                          </p>
+                        {o.laundry.autoConfirmQuote && (
+                          <p className="text-xs text-brand-green">Khách đã chọn tự xác nhận báo giá</p>
                         )}
                         {o.laundry.finalPrice && (
                           <p className="text-xs">Giá chốt: <span className="font-semibold text-brand-orange">{formatPrice(o.laundry.finalPrice)}</span></p>

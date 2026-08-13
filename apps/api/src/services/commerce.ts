@@ -812,6 +812,7 @@ export async function createLaundryOrder(
     phone: string;
     notes?: string;
     paymentMethod: 'cash' | 'bank_transfer';
+    autoConfirmQuote?: boolean;
   },
   idempotencyKey: string,
 ) {
@@ -913,6 +914,7 @@ export async function createLaundryOrder(
       serviceName: service.name,
       estimatedQty: String(qty),
       estimatedUnit: service.unit,
+      autoConfirmQuote: !!data.autoConfirmQuote,
     });
 
     await tx.insert(orderStatusHistory).values({
@@ -1154,15 +1156,15 @@ async function runOrderTransition(
       throw new AppError(409, 'Chưa có báo giá hợp lệ', 'QUOTE_REQUIRED');
     }
     if (actorRole === 'seller') {
-      const [shop] = await db
-        .select({ autoConfirmLaundryQuote: sellers.autoConfirmLaundryQuote })
-        .from(sellers)
-        .where(eq(sellers.id, order.sellerId))
+      const [detailFlag] = await db
+        .select({ autoConfirmQuote: laundryOrderDetails.autoConfirmQuote })
+        .from(laundryOrderDetails)
+        .where(eq(laundryOrderDetails.orderId, orderId))
         .limit(1);
-      if (!shop?.autoConfirmLaundryQuote) {
+      if (!detailFlag?.autoConfirmQuote) {
         throw new AppError(
           403,
-          'Chỉ khách xác nhận báo giá — bật “Tự xác nhận báo giá” trong hồ sơ quán nếu muốn bỏ bước này',
+          'Chỉ khách xác nhận báo giá — trừ khi khách đã chọn tự xác nhận khi đặt đơn',
           'BUYER_CONFIRM_REQUIRED',
         );
       }

@@ -304,7 +304,6 @@ export const sellerApi = {
     serviceAreas?: string[];
     avgDeliveryMinutes?: number | null;
     acceptingOrders?: boolean;
-    autoConfirmLaundryQuote?: boolean;
     shipProxyFee?: number | null;
   }) =>
     api<{ data: SellerShop }>('/api/seller/shop', { method: 'PATCH', body: JSON.stringify(body) }),
@@ -615,6 +614,7 @@ export interface LaundryOrderDetail {
   surcharge?: string | null;
   finalPrice?: string | null;
   sellerNote?: string | null;
+  autoConfirmQuote?: boolean;
   buyerPriceConfirmedAt?: string | null;
   priceRejectedAt?: string | null;
 }
@@ -709,7 +709,6 @@ export interface SellerShop {
   openHours?: string | null;
   serviceAreas?: string[] | null; avgDeliveryMinutes?: number | null;
   acceptingOrders?: boolean;
-  autoConfirmLaundryQuote?: boolean;
   shipProxyFee?: string | number | null;
 }
 

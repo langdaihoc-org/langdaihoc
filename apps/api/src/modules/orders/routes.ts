@@ -428,6 +428,7 @@ ordersRouter.post(
         phone: z.string().min(9),
         notes: z.string().optional(),
         paymentMethod: z.enum(['cash', 'bank_transfer']),
+        autoConfirmQuote: z.boolean().optional(),
         idempotencyKey: z.string().uuid().optional(),
       })
       .parse(req.body);
@@ -533,12 +534,12 @@ ordersRouter.post(
     }
 
     /** Ghi giá và chuyển trạng thái cùng một transaction — transition lỗi thì giá cũng rollback. */
-    const [shop] = await db
-      .select({ autoConfirmLaundryQuote: sellers.autoConfirmLaundryQuote })
-      .from(sellers)
-      .where(eq(sellers.id, existing.sellerId))
+    const [detailRow] = await db
+      .select({ autoConfirmQuote: laundryOrderDetails.autoConfirmQuote })
+      .from(laundryOrderDetails)
+      .where(eq(laundryOrderDetails.orderId, id))
       .limit(1);
-    const autoConfirm = !!shop?.autoConfirmLaundryQuote;
+    const autoConfirm = !!detailRow?.autoConfirmQuote;
 
     const order = await db.transaction(async (tx) => {
       await tx

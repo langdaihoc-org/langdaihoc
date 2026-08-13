@@ -282,6 +282,8 @@ export const laundryOrderDetails = pgTable('laundry_order_details', {
   surcharge: numeric('surcharge', { precision: 12, scale: 0 }).default('0'),
   finalPrice: numeric('final_price', { precision: 12, scale: 0 }),
   sellerNote: text('seller_note'),
+  /** Khách chọn lúc đặt: báo giá xong tự vào đang giặt, không cần xác nhận thêm */
+  autoConfirmQuote: boolean('auto_confirm_quote').notNull().default(false),
   buyerPriceConfirmedAt: timestamp('buyer_price_confirmed_at', { withTimezone: true }),
   priceRejectedAt: timestamp('price_rejected_at', { withTimezone: true }),
 });
