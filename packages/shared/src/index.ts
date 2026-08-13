@@ -6,3 +6,4 @@ export * from './labels.js';
 export * from './order-summary.js';
 export * from './phone.js';
 export * from './safe-url.js';
+export * from './operating-hours.js';

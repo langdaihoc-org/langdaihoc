@@ -29,7 +29,20 @@ import {
   sellerCounters,
   buyerCounters,
 } from '@langdaihoc/database';
-import { canActorTransition, canTransitionFood, canTransitionLaundry, canTransitionShipProxy, formatOrderSummary, orderStatusLabel, SHIP_PROXY_FEE_VND } from '@langdaihoc/shared';
+import {
+  canActorTransition,
+  canTransitionFood,
+  canTransitionLaundry,
+  canTransitionShipProxy,
+  formatHHMMInTimeZone,
+  formatOperatingWindows,
+  formatOrderSummary,
+  isTimeInOperatingWindows,
+  isWindowInsideOperatingHours,
+  normalizeOperatingWindows,
+  orderStatusLabel,
+  SHIP_PROXY_FEE_VND,
+} from '@langdaihoc/shared';
 import { AppError } from '../middleware/error-handler.js';
 import { getBillingPeriodStartedAt } from '../lib/billing-period.js';
 import { refreshOrderCounters, recordOrderCompleted, bumpUnreadForUser } from './counters.js';
@@ -723,6 +736,18 @@ export async function checkoutFood(
         'INVALID_DELIVERY_WINDOW',
       );
     }
+    const foodWindows = normalizeOperatingWindows(cartData.operatingWindows);
+    if (foodWindows.length && desiredDeliveryAt && desiredDeliveryUntil) {
+      const fromHH = formatHHMMInTimeZone(desiredDeliveryAt);
+      const toHH = formatHHMMInTimeZone(desiredDeliveryUntil);
+      if (!isWindowInsideOperatingHours(fromHH, toHH, foodWindows, foodMinWindowMin)) {
+        throw new AppError(
+          400,
+          `Khung giao phải nằm trong giờ hoạt động của quán (${formatOperatingWindows(foodWindows)})`,
+          'OUTSIDE_OPERATING_HOURS',
+        );
+      }
+    }
 
     const [order] = await conn
       .insert(orders)
@@ -859,6 +884,7 @@ export async function createLaundryOrder(
         sellerAcceptingOrders: sellers.acceptingOrders,
         sellerUserId: sellers.userId,
         laundryMinReturnGapMinutes: sellers.laundryMinReturnGapMinutes,
+        operatingWindows: sellers.operatingWindows,
       })
       .from(laundryServices)
       .innerJoin(sellers, eq(laundryServices.sellerId, sellers.id))
@@ -899,6 +925,28 @@ export async function createLaundryOrder(
         `Giờ giao lại phải sau giờ lấy ít nhất ${laundryGapMin} phút`,
         'INVALID_TIME_RANGE',
       );
+    }
+    const laundryWindows = normalizeOperatingWindows(service.operatingWindows);
+    if (laundryWindows.length) {
+      const ranges = formatOperatingWindows(laundryWindows);
+      const pickupHH = formatHHMMInTimeZone(pickupAt);
+      if (!isTimeInOperatingWindows(pickupHH, laundryWindows)) {
+        throw new AppError(
+          400,
+          `Giờ lấy đồ phải trong khung hoạt động (${ranges})`,
+          'OUTSIDE_OPERATING_HOURS',
+        );
+      }
+      if (returnAt) {
+        const returnHH = formatHHMMInTimeZone(returnAt);
+        if (!isTimeInOperatingWindows(returnHH, laundryWindows)) {
+          throw new AppError(
+            400,
+            `Giờ giao lại phải trong khung hoạt động (${ranges})`,
+            'OUTSIDE_OPERATING_HOURS',
+          );
+        }
+      }
     }
 
     const qty = data.estimatedQty != null && data.estimatedQty > 0 ? data.estimatedQty : 1;
