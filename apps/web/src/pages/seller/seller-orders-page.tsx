@@ -168,6 +168,12 @@ export function SellerOrdersPage() {
       setQuoteFinalPrice('');
       setQuoteQty('');
       setQuoteNote('');
+      toast(
+        updated?.status === 'washing'
+          ? 'Đã báo giá và tự chuyển sang đang giặt'
+          : 'Đã gửi báo giá — chờ khách xác nhận',
+        'success',
+      );
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được báo giá', 'error'),
   });

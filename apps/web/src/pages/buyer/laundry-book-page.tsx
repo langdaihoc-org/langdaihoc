@@ -31,7 +31,6 @@ export function LaundryBookPage() {
   const { toast } = useToast();
   const { user, isAuthenticated, isActiveBuyer } = useAuth();
   const idempotencyKey = useRef(crypto.randomUUID()).current;
-  const [qty, setQty] = useState(3);
   const [phone, setPhone] = useState(user?.phone ?? '');
   useEffect(() => {
     if (user?.phone) setPhone((p) => p || user.phone!);
@@ -59,7 +58,6 @@ export function LaundryBookPage() {
   });
   const addresses = addrData?.data ?? [];
 
-  const estimated = service ? service.basePrice * qty : 0;
   const pickupStart = windowToDate(pickupWindow, 'from').getTime();
   const minReturnAt = useMemo(() => new Date(pickupStart + LAUNDRY_GAP_MIN * 60 * 1000), [pickupStart]);
   const returnStart = datedWindowToDate(returnWindow, 'from').getTime();
@@ -76,7 +74,7 @@ export function LaundryBookPage() {
     mutationFn: (ids: { pickupAddressId: string; returnAddressId: string; contactPhone: string }) =>
       ordersApi.createLaundry({
         serviceId: serviceId!,
-        estimatedQty: qty,
+        estimatedQty: 1,
         pickupScheduledAt: windowToDate(pickupWindow, 'from').toISOString(),
         returnScheduledAt: datedWindowToDate(returnWindow, 'from').toISOString(),
         pickupAddressId: ids.pickupAddressId,
@@ -157,7 +155,6 @@ export function LaundryBookPage() {
   const canSubmit =
     isAddressSelectionReady(pickupSel) &&
     (sameReturnAddress || isAddressSelectionReady(returnSel)) &&
-    qty > 0 &&
     returnAfterPickup &&
     (pickupSel?.mode === 'manual' ? true : phone.length >= 9);
 
@@ -192,18 +189,10 @@ export function LaundryBookPage() {
 
       <div className="flex gap-2.5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         <Info className="mt-0.5 size-4 shrink-0" />
-        <p>Giá dưới đây chỉ là ước tính. Khối lượng thực tế sẽ được cân khi lấy đồ; bạn xác nhận báo giá trước khi giặt.</p>
+        <p>Giá theo bảng giá quán. Tiệm cân/đếm khi lấy đồ rồi báo giá chính thức cho bạn.</p>
       </div>
 
       <Card className="space-y-3">
-        <Input
-          label={`Khối lượng ước lượng (${unit})`}
-          type="number"
-          min={0.5}
-          step={service.unit === 'kg' ? 0.5 : 1}
-          value={qty}
-          onChange={(e) => setQty(Math.max(0.5, Number(e.target.value)))}
-        />
         {pickupSel?.mode !== 'manual' && (
           <Input label="Số điện thoại liên hệ" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
         )}
@@ -263,7 +252,7 @@ export function LaundryBookPage() {
         <div className="grid gap-2 sm:grid-cols-2">
           {([
             { id: 'cash' as const, icon: Banknote, title: 'Thanh toán cho shipper', desc: 'Trả khi nhận đồ' },
-            { id: 'bank_transfer' as const, icon: Landmark, title: 'Chuyển khoản', desc: 'Sau khi xác nhận giá' },
+            { id: 'bank_transfer' as const, icon: Landmark, title: 'Chuyển khoản', desc: 'Theo hướng dẫn quán' },
           ]).map(({ id, icon: Icon, title, desc }) => (
             <button
               key={id}
@@ -286,12 +275,7 @@ export function LaundryBookPage() {
 
       <Card className="space-y-1 text-sm">
         <div className="flex justify-between"><span className="text-[var(--color-muted)]">Đơn giá</span><span>{formatPrice(service.basePrice)}/{unit}</span></div>
-        <div className="flex justify-between"><span className="text-[var(--color-muted)]">Ước lượng</span><span>{qty} {unit}</span></div>
-        <div className="my-2 h-px bg-[var(--color-line)]" />
-        <div className="flex justify-between font-semibold">
-          <span>Tạm tính (ước lượng)</span>
-          <span className="text-lg font-bold text-brand-green">{formatPrice(estimated)}</span>
-        </div>
+        <p className="pt-1 text-xs text-[var(--color-muted)]">Tổng tiền chốt khi tiệm cân/đếm và báo giá.</p>
       </Card>
 
       <Card><LaundryProcessTimeline /></Card>
@@ -305,7 +289,7 @@ export function LaundryBookPage() {
         onClick={() => void handleSubmit()}
       >
         <CheckCircle2 className="size-4" />
-        {submitting || book.isPending ? 'Đang gửi yêu cầu...' : `Xác nhận đặt giặt · ${formatPrice(estimated)}`}
+        {submitting || book.isPending ? 'Đang gửi yêu cầu...' : 'Xác nhận đặt giặt'}
       </Button>
     </div>
   );

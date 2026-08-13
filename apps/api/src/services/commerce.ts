@@ -804,7 +804,7 @@ export async function createLaundryOrder(
   buyerId: string,
   data: {
     serviceId: string;
-    estimatedQty: number;
+    estimatedQty?: number;
     pickupScheduledAt: string;
     returnScheduledAt?: string;
     pickupAddressId: string;
@@ -882,7 +882,8 @@ export async function createLaundryOrder(
       );
     }
 
-    const estimated = Number(service.basePrice) * data.estimatedQty;
+    const qty = data.estimatedQty != null && data.estimatedQty > 0 ? data.estimatedQty : 1;
+    const estimated = Number(service.basePrice) * qty;
     const orderCode = generateOrderCode('laundry');
 
     const [order] = await tx
@@ -910,7 +911,7 @@ export async function createLaundryOrder(
       orderId: order.id,
       serviceId: service.id,
       serviceName: service.name,
-      estimatedQty: String(data.estimatedQty),
+      estimatedQty: String(qty),
       estimatedUnit: service.unit,
     });
 
@@ -923,7 +924,7 @@ export async function createLaundryOrder(
 
     const orderSummary = formatOrderSummary('laundry', [], {
       serviceName: service.name,
-      estimatedQty: String(data.estimatedQty),
+      estimatedQty: String(qty),
       estimatedUnit: service.unit,
     });
 
@@ -1151,6 +1152,20 @@ async function runOrderTransition(
       .limit(1);
     if (!detail?.finalPrice || Number(detail.finalPrice) <= 0) {
       throw new AppError(409, 'Chưa có báo giá hợp lệ', 'QUOTE_REQUIRED');
+    }
+    if (actorRole === 'seller') {
+      const [shop] = await db
+        .select({ autoConfirmLaundryQuote: sellers.autoConfirmLaundryQuote })
+        .from(sellers)
+        .where(eq(sellers.id, order.sellerId))
+        .limit(1);
+      if (!shop?.autoConfirmLaundryQuote) {
+        throw new AppError(
+          403,
+          'Chỉ khách xác nhận báo giá — bật “Tự xác nhận báo giá” trong hồ sơ quán nếu muốn bỏ bước này',
+          'BUYER_CONFIRM_REQUIRED',
+        );
+      }
     }
   }
 

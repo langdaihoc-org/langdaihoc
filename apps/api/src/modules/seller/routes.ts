@@ -135,6 +135,7 @@ sellerRouter.patch(
         serviceAreas: z.array(z.string().min(1)).optional(),
         avgDeliveryMinutes: z.number().int().positive().max(24 * 60).nullable().optional(),
         acceptingOrders: z.boolean().optional(),
+        autoConfirmLaundryQuote: z.boolean().optional(),
         shipProxyFee: z.number().int().positive().max(10_000_000).nullable().optional(),
       })
       .parse(req.body);
@@ -142,6 +143,9 @@ sellerRouter.patch(
       body.avatarUrl !== undefined ? assertUploadedImageUrl(body.avatarUrl, 'Ảnh cửa hàng') : undefined;
     if (body.shipProxyFee !== undefined && seller.serviceTypes !== 'ship_proxy') {
       throw new AppError(400, 'Chỉ tài khoản nhận ship hộ mới đặt phí nhận hộ', 'INVALID_FIELD');
+    }
+    if (body.autoConfirmLaundryQuote !== undefined && seller.serviceTypes !== 'laundry') {
+      throw new AppError(400, 'Chỉ cửa hàng giặt mới bật tự xác nhận báo giá', 'INVALID_FIELD');
     }
     const [updated] = await req.app.locals.db
       .update(sellers)
@@ -157,6 +161,9 @@ sellerRouter.patch(
           avgDeliveryMinutes: body.avgDeliveryMinutes,
         }),
         ...(body.acceptingOrders !== undefined && { acceptingOrders: body.acceptingOrders }),
+        ...(body.autoConfirmLaundryQuote !== undefined && {
+          autoConfirmLaundryQuote: body.autoConfirmLaundryQuote,
+        }),
         ...(body.shipProxyFee !== undefined &&
           body.shipProxyFee != null && { shipProxyFee: String(body.shipProxyFee) }),
         updatedAt: new Date(),

@@ -225,6 +225,13 @@
                         "when":  1786000000000,
                         "tag":  "0032_desired_delivery_until",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  32,
+                        "version":  "7",
+                        "when":  1786100000000,
+                        "tag":  "0033_auto_confirm_laundry_quote",
+                        "breakpoints":  true
                     }
                 ]
 }

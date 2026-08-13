@@ -87,6 +87,11 @@ export const sellers = pgTable(
     /** Phí nhận hộ (VND) — chỉ dùng khi serviceTypes = ship_proxy */
     shipProxyFee: numeric('ship_proxy_fee', { precision: 12, scale: 0 }).notNull().default('15000'),
     acceptingOrders: boolean('accepting_orders').notNull().default(true),
+    /**
+     * Giặt: khi seller báo giá thì bỏ bước khách xác nhận — đơn vào “Đang giặt” luôn.
+     * Chỉ áp dụng serviceTypes = laundry.
+     */
+    autoConfirmLaundryQuote: boolean('auto_confirm_laundry_quote').notNull().default(false),
     /** Rating tổng hợp — giữ độc lập với bảng reviews để không phải AVG khi đọc catalog. */
     ratingSum: integer('rating_sum').notNull().default(0),
     ratingCount: integer('rating_count').notNull().default(0),

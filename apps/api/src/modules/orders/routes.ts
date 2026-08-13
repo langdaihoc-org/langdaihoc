@@ -420,7 +420,7 @@ ordersRouter.post(
     const body = z
       .object({
         serviceId: z.string().uuid(),
-        estimatedQty: z.number().positive(),
+        estimatedQty: z.number().positive().optional().default(1),
         pickupScheduledAt: z.string(),
         returnScheduledAt: z.string().optional(),
         pickupAddressId: z.string().uuid(),
@@ -533,6 +533,13 @@ ordersRouter.post(
     }
 
     /** Ghi giá và chuyển trạng thái cùng một transaction — transition lỗi thì giá cũng rollback. */
+    const [shop] = await db
+      .select({ autoConfirmLaundryQuote: sellers.autoConfirmLaundryQuote })
+      .from(sellers)
+      .where(eq(sellers.id, existing.sellerId))
+      .limit(1);
+    const autoConfirm = !!shop?.autoConfirmLaundryQuote;
+
     const order = await db.transaction(async (tx) => {
       await tx
         .update(laundryOrderDetails)
@@ -542,6 +549,7 @@ ordersRouter.post(
           surcharge: String(body.surcharge ?? 0),
           finalPrice: String(finalPrice),
           sellerNote: body.sellerNote,
+          ...(autoConfirm ? { buyerPriceConfirmedAt: new Date() } : {}),
         })
         .where(eq(laundryOrderDetails.orderId, id));
 
@@ -550,7 +558,17 @@ ordersRouter.post(
         .set({ subtotal: String(finalPrice), total: String(finalPrice), updatedAt: new Date() })
         .where(eq(orders.id, id));
 
-      return transitionOrder(tx, id, 'waiting_price_confirmation', req.user!.id, req.user!.role);
+      let result = await transitionOrder(
+        tx,
+        id,
+        'waiting_price_confirmation',
+        req.user!.id,
+        req.user!.role,
+      );
+      if (autoConfirm) {
+        result = await transitionOrder(tx, id, 'washing', req.user!.id, req.user!.role);
+      }
+      return result;
     });
     res.json({ data: order });
   }),
