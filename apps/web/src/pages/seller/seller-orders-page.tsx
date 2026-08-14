@@ -389,6 +389,22 @@ export function SellerOrdersPage() {
                       </div>
                     )}
 
+                    {o.type === 'laundry' && o.status === 'waiting_price_confirmation' && (
+                      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                        Đang chờ khách xác nhận báo giá.
+                      </p>
+                    )}
+                    {o.type === 'laundry' &&
+                      (Boolean(o.laundry?.buyerPriceConfirmedAt) ||
+                        (Boolean(o.laundry?.finalPrice) &&
+                          (o.status === 'washing' || o.status === 'returning' || o.status === 'completed'))) && (
+                      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950">
+                        Khách đã xác nhận giá
+                        {o.laundry?.finalPrice ? ` · ${formatPrice(o.laundry.finalPrice)}` : ''}.
+                        {o.status === 'washing' ? ' Có thể tiếp tục giặt / trả đồ.' : ''}
+                      </p>
+                    )}
+
                     {o.type === 'ship_proxy' && o.shipProxy && (
                       <div className="space-y-1 rounded-xl bg-black/[0.02] p-3 text-sm">
                         <p><span className="text-[var(--color-muted)]">Số shipper:</span> {o.shipProxy.trackingCode}</p>
