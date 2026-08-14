@@ -107,7 +107,12 @@ export function SellerOrdersPage() {
   const [quoteFinalPrice, setQuoteFinalPrice] = useState('');
   const [quoteQty, setQuoteQty] = useState('');
   const [quoteNote, setQuoteNote] = useState('');
-  const [confirmAction, setConfirmAction] = useState<null | { type: 'reject' | 'reject_ck'; id: string; code: string }>(null);
+  const [confirmAction, setConfirmAction] = useState<null | {
+    type: 'reject' | 'reject_ck' | 'cancel_quote';
+    id: string;
+    code: string;
+    orderType?: string;
+  }>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   // Lazy proof fetch: map orderId -> proofs (null = chưa fetch, [] = đang fetch)
   const [lazyProofs, setLazyProofs] = useState<Map<string, PaymentProof[] | 'loading'>>(new Map());
@@ -181,7 +186,7 @@ export function SellerOrdersPage() {
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) => ordersApi.verifyPayment(id, approved),
     onSuccess: (_res, vars) => {
       applyLocalOrderUpdate(vars.id, {
-        paymentStatus: vars.approved ? 'verified' : 'unpaid',
+        paymentStatus: vars.approved ? 'verified' : 'rejected',
       });
       refreshSellerOrderMeta(qc);
       setConfirmAction(null);
@@ -525,10 +530,50 @@ export function SellerOrdersPage() {
                             size="sm"
                             variant="danger"
                             className="w-full sm:w-auto"
-                            onClick={() => setConfirmAction({ type: 'reject', id: o.id, code: o.orderCode })}
+                            onClick={() =>
+                              setConfirmAction({
+                                type: 'reject',
+                                id: o.id,
+                                code: o.orderCode,
+                                orderType: o.type,
+                              })
+                            }
                           >
                             Từ chối
                           </Button>
+                        )}
+                        {o.status === 'waiting_price_confirmation' && o.type === 'laundry' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="w-full sm:w-auto"
+                              onClick={() =>
+                                statusMut.mutate({
+                                  id: o.id,
+                                  status: 'needs_support',
+                                  note: 'Seller báo cần hỗ trợ — khách chưa phản hồi báo giá',
+                                })
+                              }
+                            >
+                              Báo cần hỗ trợ
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              className="w-full sm:w-auto"
+                              onClick={() =>
+                                setConfirmAction({
+                                  type: 'cancel_quote',
+                                  id: o.id,
+                                  code: o.orderCode,
+                                  orderType: o.type,
+                                })
+                              }
+                            >
+                              Hủy (không phản hồi)
+                            </Button>
+                          </>
                         )}
                         {o.status === 'picked_up' && o.type === 'laundry' && (
                           <Button size="sm" variant="green" className="w-full sm:w-auto" onClick={() => setQuoteOrder(o.id)}>
@@ -651,13 +696,27 @@ export function SellerOrdersPage() {
 
       <ConfirmDialog
         open={Boolean(confirmAction)}
-        title={confirmAction?.type === 'reject_ck' ? 'Từ chối chuyển khoản?' : 'Từ chối đơn hàng?'}
+        title={
+          confirmAction?.type === 'reject_ck'
+            ? 'Từ chối chuyển khoản?'
+            : confirmAction?.type === 'cancel_quote'
+              ? 'Hủy đơn chờ xác nhận giá?'
+              : 'Từ chối đơn hàng?'
+        }
         description={
           confirmAction?.type === 'reject_ck'
             ? `Đơn ${confirmAction.code}: khách sẽ được thông báo biên lai không hợp lệ.`
-            : `Đơn ${confirmAction?.code ?? ''} sẽ bị từ chối. Không hoàn tác được.`
+            : confirmAction?.type === 'cancel_quote'
+              ? `Đơn ${confirmAction?.code ?? ''}: khách chưa xác nhận báo giá. Đơn sẽ bị hủy.`
+              : `Đơn ${confirmAction?.code ?? ''} sẽ bị từ chối. Không hoàn tác được.`
         }
-        confirmLabel={confirmAction?.type === 'reject_ck' ? 'Từ chối CK' : 'Từ chối đơn'}
+        confirmLabel={
+          confirmAction?.type === 'reject_ck'
+            ? 'Từ chối CK'
+            : confirmAction?.type === 'cancel_quote'
+              ? 'Hủy đơn'
+              : 'Từ chối đơn'
+        }
         cancelLabel="Giữ lại"
         variant="danger"
         loading={statusMut.isPending || verifyMut.isPending}
@@ -665,7 +724,18 @@ export function SellerOrdersPage() {
         onConfirm={() => {
           if (!confirmAction) return;
           if (confirmAction.type === 'reject') {
-            statusMut.mutate({ id: confirmAction.id, status: 'rejected', note: 'Quán từ chối' });
+            const status = confirmAction.orderType === 'laundry' ? 'cancelled' : 'rejected';
+            statusMut.mutate({
+              id: confirmAction.id,
+              status,
+              note: confirmAction.orderType === 'laundry' ? 'Quán từ chối đơn giặt' : 'Quán từ chối',
+            });
+          } else if (confirmAction.type === 'cancel_quote') {
+            statusMut.mutate({
+              id: confirmAction.id,
+              status: 'cancelled',
+              note: 'Hủy — khách không phản hồi báo giá',
+            });
           } else {
             verifyMut.mutate({ id: confirmAction.id, approved: false });
           }

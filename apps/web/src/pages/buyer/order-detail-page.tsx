@@ -478,27 +478,44 @@ export function OrderDetailPage() {
               </div>
             );
           })()}
-          {proofs.length === 0 && order.status !== 'cancelled' && order.status !== 'rejected' && (
-            <>
-              <ImageUploader
-                label="Ảnh biên lai chuyển khoản"
-                value={proofUrl}
-                onChange={setProofUrl}
-                onUpload={(file) => uploadBuyerImage(buyerApi.uploadImage, file, id!)}
-              />
-              <Button size="sm" onClick={() => proofMut.mutate()} loading={proofMut.isPending} disabled={!proofUrl}>
-                Gửi biên lai
-              </Button>
-            </>
-          )}
-          {proofs.map((p) => (
-            <div key={p.id} className="space-y-1">
-              <img src={p.imageUrl} alt="Biên lai" className="max-h-32 rounded-lg border border-[var(--color-line)] object-cover" />
-              <p className="text-xs text-[var(--color-muted)]">
-                Trạng thái: {paymentStatusLabel(p.status)}{p.rejectionReason ? ` — ${p.rejectionReason}` : ''}
-              </p>
-            </div>
-          ))}
+          {(() => {
+            const canUploadProof =
+              order.status !== 'cancelled' &&
+              order.status !== 'rejected' &&
+              (order.paymentStatus === 'pending' ||
+                order.paymentStatus === 'rejected' ||
+                (order.paymentStatus === 'unpaid' && proofs.length === 0));
+            return (
+              <>
+                {order.paymentStatus === 'rejected' && (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                    Biên lai trước đó bị từ chối. Kiểm tra số tiền {formatPrice(order.total)} rồi gửi biên lai mới.
+                  </p>
+                )}
+                {canUploadProof && (
+                  <>
+                    <ImageUploader
+                      label={order.paymentStatus === 'rejected' ? 'Gửi lại ảnh biên lai chuyển khoản' : 'Ảnh biên lai chuyển khoản'}
+                      value={proofUrl}
+                      onChange={setProofUrl}
+                      onUpload={(file) => uploadBuyerImage(buyerApi.uploadImage, file, id!)}
+                    />
+                    <Button size="sm" onClick={() => proofMut.mutate()} loading={proofMut.isPending} disabled={!proofUrl}>
+                      {order.paymentStatus === 'rejected' ? 'Gửi lại biên lai' : 'Gửi biên lai'}
+                    </Button>
+                  </>
+                )}
+                {proofs.map((p) => (
+                  <div key={p.id} className="space-y-1">
+                    <img src={p.imageUrl} alt="Biên lai" className="max-h-32 rounded-lg border border-[var(--color-line)] object-cover" />
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Trạng thái: {paymentStatusLabel(p.status)}{p.rejectionReason ? ` — ${p.rejectionReason}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
             </>
           )}
         </Card>

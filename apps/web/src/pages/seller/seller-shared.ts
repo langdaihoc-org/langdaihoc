@@ -105,9 +105,11 @@ export function paymentMethodLabel(method: string) {
 export function paymentStatusLabel(status: string) {
   const map: Record<string, string> = {
     unpaid: 'Chưa thanh toán',
+    pending: 'Chờ thanh toán',
     proof_uploaded: 'Chờ duyệt CK',
     verified: 'Đã xác nhận CK',
     paid: 'Đã thanh toán',
+    rejected: 'Biên lai bị từ chối',
   };
   return map[status] ?? status;
 }

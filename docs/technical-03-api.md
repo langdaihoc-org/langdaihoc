@@ -137,13 +137,13 @@ Cookie names / options: `lib/supabase.ts`, `lib/session.ts` (`ldh_*`).
 | POST | `/laundry` | buyerGuard + idem | Tạo đơn giặt |
 | POST | `/ship-proxy` | buyerGuard + idem | Tạo ship |
 | PATCH | `/:id/status` | auth + actor | Đổi trạng thái |
-| POST | `/:id/laundry-quote` | seller | Báo giá |
+| POST | `/:id/laundry-quote` | seller | Báo giá; chặn nếu đã verified/paid; đổi total + có proof → reset CK + báo khách gửi lại |
 | POST | `/:id/confirm-price` | buyer | Đồng ý giá |
 | POST | `/:id/reject-price` | buyer | Từ chối giá → cancel |
 | POST | `/:id/late-delivery-warning` | buyer | Cảnh báo trễ (food) |
-| POST | `/:id/payment-proof` | buyer | Gửi URL biên lai |
-| POST | `/:id/verify-payment` | seller | Duyệt/từ chối CK |
-| POST | `/:id/mark-paid` | seller | Đánh dấu thu tiền mặt (delivering/returning); bắt buộc trước khi hoàn thành |
+| POST | `/:id/payment-proof` | buyer | Gửi URL biên lai (kể cả sau khi bị từ chối) |
+| POST | `/:id/verify-payment` | seller, admin | Duyệt / từ chối biên lai CK |
+| POST | `/:id/mark-paid` | seller, admin | Đánh dấu thu tiền mặt; seller: delivering/returning; admin: mọi status; bắt buộc trước hoàn thành |
 | POST | `/:id/review` | buyer | Đánh giá |
 | PATCH | `/:id/review` | buyer | Sửa review |
 | POST | `/:id/complaint` | buyer | Mở khiếu nại |

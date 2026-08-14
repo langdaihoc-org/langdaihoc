@@ -46,7 +46,8 @@ preparing → cancelled (seller/admin)
 ### Khác
 
 - `POST .../late-delivery-warning`: food, chưa closed, trong cửa sổ 10 phút trước giờ giao, chỉ 1 lần/đơn.
-- `POST .../mark-paid`: seller đánh dấu đã thu tiền (cash) khi đang giao / trả đồ — **bắt buộc trước khi `completed`**.
+- `POST .../mark-paid`: seller hoặc **admin** đánh dấu đã thu tiền (cash). Seller chỉ khi đang giao/trả đồ; admin mọi trạng thái (gỡ đơn treo). **Bắt buộc trước khi `completed`**.
+- `POST .../verify-payment`: seller hoặc **admin** duyệt/từ chối biên lai CK.
 
 ---
 
@@ -71,7 +72,7 @@ pending → accepted → picking_up → picked_up
 | picking_up → picked_up | seller, admin |
 | picked_up → waiting_price_confirmation | seller, admin (thường qua **laundry-quote**) |
 | waiting → washing | buyer, seller*, admin (*seller khi autoConfirm) |
-| waiting → cancelled | buyer, admin |
+| waiting → cancelled | buyer, **seller**, admin |
 | waiting → needs_support | buyer, seller, admin |
 | washing → returning | seller, admin |
 | returning → completed | buyer, seller, admin |

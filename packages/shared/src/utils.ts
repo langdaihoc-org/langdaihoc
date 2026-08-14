@@ -88,7 +88,7 @@ const LAUNDRY_ACTORS: Record<string, OrderActor[]> = {
   'picked_up>waiting_price_confirmation': ['seller', 'admin'],
   // seller: chỉ khi khách đã chọn autoConfirmQuote lúc đặt (laundry-quote tự chuyển tiếp)
   'waiting_price_confirmation>washing': ['buyer', 'seller', 'admin'],
-  'waiting_price_confirmation>cancelled': ['buyer', 'admin'],
+  'waiting_price_confirmation>cancelled': ['buyer', 'seller', 'admin'],
   'waiting_price_confirmation>needs_support': ['buyer', 'seller', 'admin'],
   'washing>returning': ['seller', 'admin'],
   'returning>completed': ['buyer', 'seller', 'admin'],

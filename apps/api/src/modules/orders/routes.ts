@@ -533,6 +533,24 @@ ordersRouter.post(
       throw new AppError(400, 'Tổng báo giá không hợp lệ', 'INVALID_QUOTE');
     }
 
+    if (
+      existing.paymentMethod === 'bank_transfer' &&
+      (existing.paymentStatus === 'verified' || existing.paymentStatus === 'paid')
+    ) {
+      throw new AppError(
+        409,
+        'Đã xác nhận thanh toán — không thể đổi báo giá. Liên hệ admin nếu cần hỗ trợ.',
+        'PAYMENT_LOCKED',
+      );
+    }
+
+    const prevTotal = Math.round(Number(existing.total));
+    const totalChanged = Number.isFinite(prevTotal) && prevTotal > 0 && prevTotal !== finalPrice;
+    const mustResetProof =
+      existing.paymentMethod === 'bank_transfer' &&
+      totalChanged &&
+      (existing.paymentStatus === 'proof_uploaded' || existing.paymentStatus === 'rejected');
+
     /** Ghi giá và chuyển trạng thái cùng một transaction — transition lỗi thì giá cũng rollback. */
     const [detailRow] = await db
       .select({ autoConfirmQuote: laundryOrderDetails.autoConfirmQuote })
@@ -554,10 +572,50 @@ ordersRouter.post(
         })
         .where(eq(laundryOrderDetails.orderId, id));
 
-      await tx
+      const [priced] = await tx
         .update(orders)
-        .set({ subtotal: String(finalPrice), total: String(finalPrice), updatedAt: new Date() })
-        .where(eq(orders.id, id));
+        .set({
+          subtotal: String(finalPrice),
+          total: String(finalPrice),
+          updatedAt: new Date(),
+          ...(mustResetProof
+            ? { paymentStatus: 'pending' as const, version: existing.version + 1 }
+            : {}),
+        })
+        .where(
+          mustResetProof
+            ? and(eq(orders.id, id), eq(orders.version, existing.version))
+            : eq(orders.id, id),
+        )
+        .returning({ id: orders.id });
+      if (mustResetProof && !priced) {
+        throw new AppError(409, 'Đơn đã được cập nhật bởi người khác', 'VERSION_CONFLICT');
+      }
+
+      if (mustResetProof) {
+        await tx
+          .update(paymentProofs)
+          .set({
+            status: 'rejected',
+            rejectionReason: `Báo giá mới ${finalPrice.toLocaleString('vi-VN')}đ — vui lòng chuyển khoản đúng số tiền mới và gửi lại biên lai`,
+            reviewedAt: new Date(),
+            reviewedBy: req.user!.id,
+          })
+          .where(
+            and(
+              eq(paymentProofs.orderId, id),
+              sql`${paymentProofs.status} not in ('verified')`,
+            ),
+          );
+        await notifyUser(
+          tx,
+          existing.buyerId,
+          'payment_rejected',
+          'Báo giá mới — cần chuyển khoản lại',
+          `Đơn ${existing.orderCode}: giá chốt ${finalPrice.toLocaleString('vi-VN')}đ (khác số tiền trước). Vui lòng CK đúng số mới và gửi lại biên lai.`,
+          { orderId: id, orderCode: existing.orderCode },
+        );
+      }
 
       let result = await transitionOrder(
         tx,
@@ -763,7 +821,7 @@ ordersRouter.post(
 ordersRouter.post(
   '/:id/verify-payment',
   requireAuth,
-  requireRole('seller'),
+  requireRole('seller', 'admin'),
   asyncHandler(async (req, res) => {
     const { approved, rejectionReason } = z
       .object({ approved: z.boolean(), rejectionReason: z.string().optional() })
@@ -778,6 +836,7 @@ ordersRouter.post(
     const proofs = await db.select({ id: paymentProofs.id }).from(paymentProofs).where(eq(paymentProofs.orderId, id));
     if (!proofs.length) throw new AppError(409, 'Chưa có minh chứng thanh toán', 'NO_PAYMENT_PROOF');
 
+    const actorLabel = req.user!.role === 'admin' ? 'Admin' : 'Quán';
     const updated = await db.transaction(async (tx) => {
       const [ord] = await tx
         .update(orders)
@@ -811,8 +870,8 @@ ordersRouter.post(
         approved ? 'payment_verified' : 'payment_rejected',
         approved ? 'Đã xác nhận thanh toán' : 'Biên lai bị từ chối',
         approved
-          ? `Quán đã xác nhận chuyển khoản cho đơn ${order.orderCode}.`
-          : `Quán từ chối biên lai đơn ${order.orderCode}${rejectionReason ? `: ${rejectionReason}` : ''}. Vui lòng gửi lại.`,
+          ? `${actorLabel} đã xác nhận chuyển khoản cho đơn ${order.orderCode}.`
+          : `${actorLabel} từ chối biên lai đơn ${order.orderCode}${rejectionReason ? `: ${rejectionReason}` : ''}. Vui lòng gửi lại.`,
         { orderId: id, orderCode: order.orderCode },
       );
       return ord;
@@ -825,7 +884,7 @@ ordersRouter.post(
 ordersRouter.post(
   '/:id/mark-paid',
   requireAuth,
-  requireRole('seller'),
+  requireRole('seller', 'admin'),
   asyncHandler(async (req, res) => {
     const db = req.app.locals.db;
     const id = paramId(req);
@@ -834,8 +893,16 @@ ordersRouter.post(
     if (order.paymentMethod !== 'cash') {
       throw new AppError(400, 'Đơn này không thanh toán tiền mặt', 'INVALID_PAYMENT_METHOD');
     }
-    if (order.status !== 'delivering' && order.status !== 'returning') {
+    const isAdmin = req.user!.role === 'admin';
+    if (
+      !isAdmin &&
+      order.status !== 'delivering' &&
+      order.status !== 'returning'
+    ) {
       throw new AppError(400, 'Chỉ thu tiền mặt khi đang giao', 'INVALID_STATUS');
+    }
+    if (order.paymentStatus === 'paid' || order.paymentStatus === 'verified') {
+      throw new AppError(409, 'Đơn đã được xác nhận thanh toán', 'ALREADY_PAID');
     }
     const [updated] = await db
       .update(orders)

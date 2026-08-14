@@ -34,6 +34,14 @@ describe('canTransitionLaundry', () => {
     expect(canTransitionLaundry('waiting_price_confirmation', 'washing')).toBe(true);
   });
 
+  it('allows waiting_price_confirmation → cancelled', () => {
+    expect(canTransitionLaundry('waiting_price_confirmation', 'cancelled')).toBe(true);
+  });
+
+  it('allows waiting_price_confirmation → needs_support', () => {
+    expect(canTransitionLaundry('waiting_price_confirmation', 'needs_support')).toBe(true);
+  });
+
   it('blocks pending → washing', () => {
     expect(canTransitionLaundry('pending', 'washing')).toBe(false);
   });
