@@ -48,5 +48,6 @@ CI GitHub Actions (`.github/workflows/ci.yml`) chạy `typecheck` → `test:unit
 
 ## Tài liệu
 
+- [**Tài liệu kỹ thuật (bộ đầy đủ cho team)**](./docs/technical-overview.md) — mục lục + 6 phần chi tiết (web, API, đơn, DB, ops)
 - [Deploy test nội bộ](./docs/deploy-internal.md)
 - [Design decisions](./docs/design-decisions.md)
