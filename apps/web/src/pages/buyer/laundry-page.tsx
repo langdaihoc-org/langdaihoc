@@ -55,7 +55,7 @@ export function LaundryPage() {
 
       <div className="flex gap-2.5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         <Info className="mt-0.5 size-4 shrink-0" />
-        <p>Giá tạm tính theo cân nặng ước lượng. Cửa hàng cân lại khi nhận đồ và báo giá trước khi giặt.</p>
+        <p>Giá trên danh mục chỉ mang tính tham khảo. Cửa hàng báo giá chính thức sau khi nhận đồ.</p>
       </div>
 
       {isLoading ? (

@@ -29,6 +29,6 @@ describe('formatOrderSummary', () => {
         estimatedQty: '2.5',
         estimatedUnit: 'kg',
       }),
-    ).toBe('Giặt express · 2.5kg');
+    ).toBe('Giặt express');
   });
 });

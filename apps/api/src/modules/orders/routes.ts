@@ -826,6 +826,9 @@ ordersRouter.post(
     const { approved, rejectionReason } = z
       .object({ approved: z.boolean(), rejectionReason: z.string().optional() })
       .parse(req.body);
+    if (!approved && !rejectionReason?.trim()) {
+      throw new AppError(400, 'Vui lòng nhập lý do từ chối biên lai', 'REJECTION_REASON_REQUIRED');
+    }
     const db: Database = req.app.locals.db;
     const id = paramId(req);
     const { order } = await loadOrderForActor(db, id, req.user!);

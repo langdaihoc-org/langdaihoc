@@ -341,18 +341,6 @@ export function SellerComplaintsPage() {
             {o.type === 'laundry' && orderDetail?.laundry && (
               <div className="space-y-1 rounded-xl bg-black/[0.02] p-3 text-sm">
                 <p className="font-medium">{orderDetail.laundry.serviceName}</p>
-                {orderDetail.laundry.estimatedQty != null && (
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Ước tính: {orderDetail.laundry.estimatedQty}
-                    {orderDetail.laundry.estimatedUnit === 'kg'
-                      ? 'kg'
-                      : orderDetail.laundry.estimatedUnit === 'item'
-                        ? ' món'
-                        : orderDetail.laundry.estimatedUnit === 'load'
-                          ? ' tải'
-                          : ''}
-                  </p>
-                )}
                 {orderDetail.laundry.finalPrice != null && (
                   <p className="text-xs">
                     Giá chốt: <span className="font-semibold text-brand-orange">{formatPrice(orderDetail.laundry.finalPrice)}</span>

@@ -215,7 +215,7 @@ export function LaundryBookPage() {
 
       <div className="flex gap-2.5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         <Info className="mt-0.5 size-4 shrink-0" />
-        <p>Giá theo bảng giá quán. Tiệm cân/đếm khi lấy đồ rồi báo giá chính thức cho bạn.</p>
+        <p>Giá trên danh mục chỉ mang tính tham khảo. Tiệm báo giá chính thức sau khi nhận đồ.</p>
       </div>
 
       <Card className="space-y-3">
@@ -315,8 +315,8 @@ export function LaundryBookPage() {
       </Card>
 
       <Card className="space-y-1 text-sm">
-        <div className="flex justify-between"><span className="text-[var(--color-muted)]">Đơn giá</span><span>{formatPrice(service.basePrice)}/{unit}</span></div>
-        <p className="pt-1 text-xs text-[var(--color-muted)]">Tổng tiền chốt khi tiệm cân/đếm và báo giá.</p>
+        <div className="flex justify-between"><span className="text-[var(--color-muted)]">Đơn giá tham khảo</span><span>{formatPrice(service.basePrice)}/{unit}</span></div>
+        <p className="pt-1 text-xs text-[var(--color-muted)]">Tổng tiền chốt khi tiệm báo giá chính thức.</p>
       </Card>
 
       <Card><LaundryProcessTimeline /></Card>

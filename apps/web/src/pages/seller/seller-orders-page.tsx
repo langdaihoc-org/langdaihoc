@@ -3,7 +3,7 @@ import { ordersApi, ApiError, type Order, type PaymentProof } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, laundryUnitLabel, formatDateTimeVi, formatDeliveryWish } from '@/lib/format';
+import { orderStatusLabel, formatPrice, orderTypeLabel, orderDisplayTitle, formatDateTimeVi, formatDeliveryWish } from '@/lib/format';
 import { StatusBadge } from '@/components/ui/brand';
 import { formatAddressLine } from '@/components/marketplace/address-picker';
 import { useState, useMemo, useEffect } from 'react';
@@ -105,7 +105,6 @@ export function SellerOrdersPage() {
 
   const [quoteOrder, setQuoteOrder] = useState<string | null>(null);
   const [quoteFinalPrice, setQuoteFinalPrice] = useState('');
-  const [quoteQty, setQuoteQty] = useState('');
   const [quoteNote, setQuoteNote] = useState('');
   const [confirmAction, setConfirmAction] = useState<null | {
     type: 'reject' | 'reject_ck' | 'cancel_quote';
@@ -113,6 +112,7 @@ export function SellerOrdersPage() {
     code: string;
     orderType?: string;
   }>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   // Lazy proof fetch: map orderId -> proofs (null = chưa fetch, [] = đang fetch)
   const [lazyProofs, setLazyProofs] = useState<Map<string, PaymentProof[] | 'loading'>>(new Map());
@@ -146,6 +146,7 @@ export function SellerOrdersPage() {
       });
       refreshSellerOrderMeta(qc);
       setConfirmAction(null);
+      setRejectReason('');
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được trạng thái', 'error'),
   });
@@ -155,10 +156,8 @@ export function SellerOrdersPage() {
       if (!Number.isFinite(finalPrice) || finalPrice <= 0) {
         throw new ApiError('Nhập tổng báo giá hợp lệ', 400, 'INVALID_QUOTE');
       }
-      const actualQty = quoteQty.trim() ? Number(quoteQty) : undefined;
       return ordersApi.submitQuote(id, {
         finalPrice,
-        ...(actualQty != null && Number.isFinite(actualQty) && actualQty > 0 ? { actualQty } : {}),
         ...(quoteNote.trim() && { sellerNote: quoteNote.trim() }),
       });
     },
@@ -171,7 +170,6 @@ export function SellerOrdersPage() {
       refreshSellerOrderMeta(qc);
       setQuoteOrder(null);
       setQuoteFinalPrice('');
-      setQuoteQty('');
       setQuoteNote('');
       toast(
         updated?.status === 'washing'
@@ -183,13 +181,15 @@ export function SellerOrdersPage() {
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không gửi được báo giá', 'error'),
   });
   const verifyMut = useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) => ordersApi.verifyPayment(id, approved),
+    mutationFn: ({ id, approved, rejectionReason }: { id: string; approved: boolean; rejectionReason?: string }) =>
+      ordersApi.verifyPayment(id, approved, rejectionReason),
     onSuccess: (_res, vars) => {
       applyLocalOrderUpdate(vars.id, {
         paymentStatus: vars.approved ? 'verified' : 'rejected',
       });
       refreshSellerOrderMeta(qc);
       setConfirmAction(null);
+      setRejectReason('');
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : 'Không cập nhật được thanh toán', 'error'),
   });
@@ -530,50 +530,36 @@ export function SellerOrdersPage() {
                             size="sm"
                             variant="danger"
                             className="w-full sm:w-auto"
-                            onClick={() =>
+                            onClick={() => {
+                              setRejectReason('');
                               setConfirmAction({
                                 type: 'reject',
                                 id: o.id,
                                 code: o.orderCode,
                                 orderType: o.type,
-                              })
-                            }
+                              });
+                            }}
                           >
                             Từ chối
                           </Button>
                         )}
                         {o.status === 'waiting_price_confirmation' && o.type === 'laundry' && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="w-full sm:w-auto"
-                              onClick={() =>
-                                statusMut.mutate({
-                                  id: o.id,
-                                  status: 'needs_support',
-                                  note: 'Seller báo cần hỗ trợ — khách chưa phản hồi báo giá',
-                                })
-                              }
-                            >
-                              Báo cần hỗ trợ
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              className="w-full sm:w-auto"
-                              onClick={() =>
-                                setConfirmAction({
-                                  type: 'cancel_quote',
-                                  id: o.id,
-                                  code: o.orderCode,
-                                  orderType: o.type,
-                                })
-                              }
-                            >
-                              Hủy (không phản hồi)
-                            </Button>
-                          </>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            className="w-full sm:w-auto"
+                            onClick={() => {
+                              setRejectReason('');
+                              setConfirmAction({
+                                type: 'cancel_quote',
+                                id: o.id,
+                                code: o.orderCode,
+                                orderType: o.type,
+                              });
+                            }}
+                          >
+                            Hủy (khách không phản hồi)
+                          </Button>
                         )}
                         {o.status === 'picked_up' && o.type === 'laundry' && (
                           <Button size="sm" variant="green" className="w-full sm:w-auto" onClick={() => setQuoteOrder(o.id)}>
@@ -587,7 +573,10 @@ export function SellerOrdersPage() {
                               size="sm"
                               variant="danger"
                               className="w-full sm:w-auto"
-                              onClick={() => setConfirmAction({ type: 'reject_ck', id: o.id, code: o.orderCode })}
+                              onClick={() => {
+                                setRejectReason('');
+                                setConfirmAction({ type: 'reject_ck', id: o.id, code: o.orderCode });
+                              }}
                             >
                               Từ chối CK
                             </Button>
@@ -651,15 +640,7 @@ export function SellerOrdersPage() {
                           value={quoteFinalPrice}
                           onChange={(e) => setQuoteFinalPrice(e.target.value.replace(/[^\d]/g, ''))}
                         />
-                        <Input
-                          type="number"
-                          label={`Số lượng thực tế (${laundryUnitLabel(o.laundry?.estimatedUnit)}) — tuỳ chọn`}
-                          value={quoteQty}
-                          onChange={(e) => setQuoteQty(e.target.value)}
-                          placeholder="Để trống nếu không cần"
-                        />
                         <Input label="Ghi chú cho khách" value={quoteNote} onChange={(e) => setQuoteNote(e.target.value)} />
-                        <p className="text-xs text-[var(--color-muted)]">Nhập tổng tiền báo giá — không tự nhân đơn giá.</p>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -720,24 +701,38 @@ export function SellerOrdersPage() {
         cancelLabel="Giữ lại"
         variant="danger"
         loading={statusMut.isPending || verifyMut.isPending}
-        onCancel={() => setConfirmAction(null)}
+        reasonRequired
+        reasonLabel="Lý do"
+        reasonPlaceholder={
+          confirmAction?.type === 'reject_ck'
+            ? 'Ví dụ: sai số tiền, ảnh không rõ…'
+            : 'Ví dụ: ngoài giờ, hết chỗ, khách không phản hồi…'
+        }
+        reasonValue={rejectReason}
+        onReasonChange={setRejectReason}
+        onCancel={() => {
+          setConfirmAction(null);
+          setRejectReason('');
+        }}
         onConfirm={() => {
           if (!confirmAction) return;
+          const reason = rejectReason.trim();
+          if (!reason) return;
           if (confirmAction.type === 'reject') {
             const status = confirmAction.orderType === 'laundry' ? 'cancelled' : 'rejected';
             statusMut.mutate({
               id: confirmAction.id,
               status,
-              note: confirmAction.orderType === 'laundry' ? 'Quán từ chối đơn giặt' : 'Quán từ chối',
+              note: reason,
             });
           } else if (confirmAction.type === 'cancel_quote') {
             statusMut.mutate({
               id: confirmAction.id,
               status: 'cancelled',
-              note: 'Hủy — khách không phản hồi báo giá',
+              note: reason,
             });
           } else {
-            verifyMut.mutate({ id: confirmAction.id, approved: false });
+            verifyMut.mutate({ id: confirmAction.id, approved: false, rejectionReason: reason });
           }
         }}
       />

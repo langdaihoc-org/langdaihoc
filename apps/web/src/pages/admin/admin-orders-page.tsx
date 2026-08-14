@@ -71,8 +71,8 @@ export function AdminOrdersPage() {
         </Button>
       </div>
       <p className="text-xs text-[var(--color-muted)]">
-        Admin có thể duyệt CK / thu tiền mặt và gỡ đơn kẹt (cần hỗ trợ → tiếp tục giặt / hủy).
-      </p>
+      Admin có thể duyệt CK / thu tiền mặt và hoàn thành đơn đang giao khi đã thanh toán.
+    </p>
       <DataTable
         headers={['Đơn hàng', 'TT / Thanh toán', 'Thao tác']}
         rows={orders.map((o) => [

@@ -13,16 +13,7 @@ export function formatOrderSummary(
     return 'Nhận đồ ship hộ';
   }
   if (type === 'laundry' && laundry?.serviceName) {
-    const unit =
-      laundry.estimatedUnit === 'kg'
-        ? 'kg'
-        : laundry.estimatedUnit === 'item'
-          ? ' món'
-          : laundry.estimatedUnit === 'load'
-            ? ' tải'
-            : '';
-    const qty = laundry.estimatedQty ? ` · ${laundry.estimatedQty}${unit}` : '';
-    return `${laundry.serviceName}${qty}`;
+    return laundry.serviceName;
   }
   if (items.length === 0) return '';
   if (items.length === 1) {
