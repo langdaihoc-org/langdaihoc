@@ -46,7 +46,7 @@ preparing → cancelled (seller/admin)
 ### Khác
 
 - `POST .../late-delivery-warning`: food, chưa closed, trong cửa sổ 10 phút trước giờ giao, chỉ 1 lần/đơn.
-- `POST .../mark-paid`: seller đánh dấu đã thu tiền (cash) khi đang giao.
+- `POST .../mark-paid`: seller đánh dấu đã thu tiền (cash) khi đang giao / trả đồ — **bắt buộc trước khi `completed`**.
 
 ---
 
@@ -174,7 +174,7 @@ Giống food ở đoạn đầu; thêm:
 | `OUTSIDE_OPERATING_HOURS` | Ngoài giờ quán |
 | `INVALID_TIME_RANGE` | Gap laundry/ship |
 | `INVALID_TRANSITION` / `FORBIDDEN_TRANSITION` | Sai bước / sai người |
-| `PAYMENT_REQUIRED` | Ship chưa verify CK |
+| `PAYMENT_REQUIRED` | Ship chưa verify CK; hoặc hoàn thành khi chưa `paid`/`verified` (cash lẫn CK) |
 | `NO_PAYMENT_PROOF` | Chưa có biên lai |
 | `WAIT_SELLER_ACCEPT` | Gửi proof quá sớm |
 | `SELLER_UNAVAILABLE` | Shop chưa approve / đóng nhận đơn |

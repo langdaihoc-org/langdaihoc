@@ -143,7 +143,7 @@ Cookie names / options: `lib/supabase.ts`, `lib/session.ts` (`ldh_*`).
 | POST | `/:id/late-delivery-warning` | buyer | Cảnh báo trễ (food) |
 | POST | `/:id/payment-proof` | buyer | Gửi URL biên lai |
 | POST | `/:id/verify-payment` | seller | Duyệt/từ chối CK |
-| POST | `/:id/mark-paid` | seller | Đánh dấu thu tiền mặt khi delivering |
+| POST | `/:id/mark-paid` | seller | Đánh dấu thu tiền mặt (delivering/returning); bắt buộc trước khi hoàn thành |
 | POST | `/:id/review` | buyer | Đánh giá |
 | PATCH | `/:id/review` | buyer | Sửa review |
 | POST | `/:id/complaint` | buyer | Mở khiếu nại |

@@ -557,26 +557,42 @@ export function SellerOrdersPage() {
                           {o.paymentMethod === 'cash' ? ' — thu khi giao' : ` — ${paymentStatusLabel(o.paymentStatus)}`}
                           {o.notes ? ` · Note: ${o.notes}` : ''}
                         </p>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Button
-                            size="sm"
-                            variant="green"
-                            className="w-full sm:w-auto"
-                            onClick={() => statusMut.mutate({ id: o.id, status: 'completed' })}
-                          >
-                            Hoàn thành giao
-                          </Button>
-                          {o.paymentMethod === 'cash' && o.paymentStatus === 'unpaid' && (
-                            <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => paidMut.mutate(o.id)}>
-                              Đã thu tiền mặt
-                            </Button>
-                          )}
-                          {o.paymentStatus === 'proof_uploaded' && (
-                            <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => verifyMut.mutate({ id: o.id, approved: true })}>
-                              Duyệt CK
-                            </Button>
-                          )}
-                        </div>
+                        {(() => {
+                          const paymentOk =
+                            o.paymentStatus === 'verified' || o.paymentStatus === 'paid';
+                          return (
+                            <>
+                              {!paymentOk && (
+                                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                                  {o.paymentMethod === 'cash'
+                                    ? 'Cần thu tiền mặt trước rồi mới hoàn thành giao.'
+                                    : 'Cần duyệt chuyển khoản trước rồi mới hoàn thành giao.'}
+                                </p>
+                              )}
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                {o.paymentMethod === 'cash' && o.paymentStatus === 'unpaid' && (
+                                  <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => paidMut.mutate(o.id)}>
+                                    Đã thu tiền mặt
+                                  </Button>
+                                )}
+                                {o.paymentStatus === 'proof_uploaded' && (
+                                  <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => verifyMut.mutate({ id: o.id, approved: true })}>
+                                    Duyệt CK
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="green"
+                                  className="w-full sm:w-auto"
+                                  disabled={!paymentOk}
+                                  onClick={() => statusMut.mutate({ id: o.id, status: 'completed' })}
+                                >
+                                  Hoàn thành giao
+                                </Button>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
 

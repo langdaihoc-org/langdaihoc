@@ -1254,15 +1254,15 @@ async function runOrderTransition(
     }
   }
 
-  // Chuyển khoản: không cho hoàn thành khi chưa xác nhận thanh toán
-  if (toStatus === 'completed' && order.paymentMethod === 'bank_transfer') {
+  // Mọi phương thức: không hoàn thành khi chưa xác nhận đã thu / đã duyệt CK
+  if (toStatus === 'completed') {
     const paid = order.paymentStatus === 'verified' || order.paymentStatus === 'paid';
     if (!paid) {
-      throw new AppError(
-        409,
-        'Chưa xác nhận thanh toán chuyển khoản — không thể hoàn thành đơn',
-        'PAYMENT_REQUIRED',
-      );
+      const hint =
+        order.paymentMethod === 'cash'
+          ? 'Chưa thu tiền mặt — bấm «Đã thu tiền mặt» trước khi hoàn thành'
+          : 'Chưa xác nhận thanh toán chuyển khoản — không thể hoàn thành đơn';
+      throw new AppError(409, hint, 'PAYMENT_REQUIRED');
     }
   }
 
