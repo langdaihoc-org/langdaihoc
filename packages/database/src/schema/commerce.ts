@@ -12,7 +12,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { profiles, sellers } from './auth.js';
 
 export const categoryTypeEnum = pgEnum('category_type', ['food', 'laundry']);
@@ -115,7 +115,9 @@ export const foodItems = pgTable(
   (t) => [
     index('food_items_seller_idx').on(t.sellerId),
     index('food_items_category_idx').on(t.categoryId),
-    index('food_items_seller_available_sort_idx').on(t.sellerId, t.sortOrder),
+    index('food_items_seller_available_sort_idx')
+      .on(t.sellerId, t.sortOrder)
+      .where(sql`is_available = true`),
   ],
 );
 
@@ -167,7 +169,12 @@ export const laundryServices = pgTable(
     isAvailable: boolean('is_available').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('laundry_services_seller_idx').on(t.sellerId), index('laundry_services_seller_available_idx').on(t.sellerId)],
+  (t) => [
+    index('laundry_services_seller_idx').on(t.sellerId),
+    index('laundry_services_seller_available_idx')
+      .on(t.sellerId)
+      .where(sql`is_available = true`),
+  ],
 );
 
 export const carts = pgTable(
@@ -181,7 +188,11 @@ export const carts = pgTable(
     sellerId: uuid('seller_id').references(() => sellers.id),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('carts_user_idx').on(t.userId), index('carts_seller_idx').on(t.sellerId)],
+  (t) => [
+    index('carts_user_idx').on(t.userId),
+    index('carts_seller_idx').on(t.sellerId),
+    index('carts_updated_idx').on(t.updatedAt),
+  ],
 );
 
 export const cartItems = pgTable(
@@ -245,6 +256,18 @@ export const orders = pgTable(
     index('orders_seller_idx').on(t.sellerId, t.status),
     index('orders_seller_created_idx').on(t.sellerId, t.createdAt),
     index('orders_status_created_idx').on(t.status, t.createdAt),
+    /**
+     * Hai partial index dưới đây là thứ giữ cho `refreshSellerCounters` /
+     * `refreshBuyerCounters` chỉ chạm vài chục dòng đang mở thay vì quét cả bảng
+     * orders. Mất chúng là mọi lượt pulse chuyển sang seq scan.
+     * Tạo tại 0028_stats_counters.sql.
+     */
+    index('orders_seller_open_idx')
+      .on(t.sellerId)
+      .where(sql`status not in ('completed', 'cancelled', 'rejected', 'needs_support')`),
+    index('orders_buyer_open_idx')
+      .on(t.buyerId)
+      .where(sql`status not in ('completed', 'cancelled', 'rejected', 'needs_support')`),
   ],
 );
 
@@ -346,7 +369,7 @@ export const paymentProofs = pgTable(
   },
   (t) => [
     index('payment_proofs_order_idx').on(t.orderId),
-    index('payment_proofs_order_uploaded_idx').on(t.orderId, t.uploadedAt),
+    index('payment_proofs_order_uploaded_idx').on(t.orderId, t.uploadedAt.desc()),
   ],
 );
 
@@ -373,7 +396,7 @@ export const reviews = pgTable(
   },
   (t) => [
     index('reviews_seller_idx').on(t.sellerId),
-    index('reviews_seller_created_idx').on(t.sellerId, t.createdAt),
+    index('reviews_seller_created_idx').on(t.sellerId, t.createdAt.desc()),
     index('reviews_buyer_idx').on(t.buyerId),
   ],
 );
@@ -406,8 +429,11 @@ export const complaints = pgTable(
     index('complaints_status_idx').on(t.status),
     index('complaints_order_idx').on(t.orderId),
     uniqueIndex('complaints_order_unique').on(t.orderId),
-    index('complaints_created_idx').on(t.createdAt),
+    index('complaints_created_idx').on(t.createdAt.desc()),
     index('complaints_buyer_idx').on(t.buyerId),
+    index('complaints_seller_open_idx')
+      .on(t.sellerId)
+      .where(sql`status not in ('resolved', 'rejected')`),
   ],
 );
 
@@ -446,6 +472,7 @@ export const notifications = pgTable(
     index('notifications_user_idx').on(t.userId, t.readAt),
     index('notifications_user_created_idx').on(t.userId, t.createdAt),
     index('notifications_created_idx').on(t.createdAt),
+    index('notifications_user_unread_idx').on(t.userId).where(sql`read_at is null`),
   ],
 );
 
@@ -466,7 +493,7 @@ export const banners = pgTable(
     endsAt: timestamp('ends_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('banners_active_sort_idx').on(t.sortOrder)],
+  (t) => [index('banners_active_sort_idx').on(t.sortOrder).where(sql`is_active = true`)],
 );
 
 export const postStatusEnum = pgEnum('post_status', [
@@ -500,7 +527,7 @@ export const posts = pgTable(
     index('posts_status_published_idx').on(t.status, t.publishedAt),
     index('posts_seller_idx').on(t.sellerId),
     index('posts_food_item_idx').on(t.foodItemId),
-    index('posts_feed_idx').on(t.status, t.isPinned, t.publishedAt),
+    index('posts_feed_idx').on(t.status, t.isPinned.desc(), t.publishedAt.desc()),
   ],
 );
 

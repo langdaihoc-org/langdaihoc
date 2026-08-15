@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { categories, siteFeedback, profiles } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
 import { setPublicCatalogCache } from '../../lib/http-cache.js';
+import { cachePublicGet } from '../../lib/response-cache.js';
 import { optionalAuth } from '../../middleware/auth.js';
 import { notifyUser } from '../../services/commerce.js';
 import {
@@ -21,6 +22,16 @@ import {
 } from '../../services/commerce.js';
 
 export const catalogRouter = Router();
+
+/**
+ * Mọi GET dưới /api/catalog đều công khai và không đọc `req.user` — kết quả chỉ
+ * phụ thuộc URL, nên cache chung được. TTL 15s là mốc ngắn nhất trong các
+ * `setPublicCatalogCache` bên dưới (tìm kiếm), nên cache phía server không bao
+ * giờ cũ hơn thứ trình duyệt vốn đã được phép giữ.
+ *
+ * Middleware tự bỏ qua POST, nên /feedback không bị ảnh hưởng.
+ */
+catalogRouter.use(cachePublicGet(15_000));
 
 const feedbackLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

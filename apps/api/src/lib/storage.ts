@@ -387,29 +387,105 @@ export async function assertPrivateProofObjectExists(
   }
 }
 
-/** Cấp lại signed URL (24h) — dùng khi trả chi tiết đơn/khiếu nại. */
-export async function resignPrivateUrl(
-  supabase: SupabaseClient,
-  url: string,
-): Promise<string> {
-  const ref = parseSupabaseStorageUrl(url);
-  if (!ref || ref.bucket !== 'payment-proofs') return url;
-  const { data, error } = await supabase.storage
-    .from(ref.bucket)
-    .createSignedUrl(ref.path, PROOF_SIGN_SECONDS);
-  if (error || !data?.signedUrl) {
-    console.error(`resign ${ref.bucket}/${ref.path}:`, error?.message);
-    return url;
+/**
+ * Cache URL đã ký, khoá theo `bucket/path`.
+ *
+ * URL sống 24h nhưng chỉ dùng lại trong 12h để luôn còn dư hạn khi tới tay client.
+ * An toàn về quyền: việc quyết định ai được xem đơn đã xảy ra TRƯỚC khi ký; ở đây
+ * chỉ tái sử dụng chữ ký cho cùng một object, không nới quyền cho ai cả.
+ */
+const SIGNED_URL_REUSE_MS = 12 * 60 * 60 * 1000;
+const SIGNED_URL_CACHE_MAX = 5_000;
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+
+function readSignedCache(bucket: string, path: string): string | null {
+  const hit = signedUrlCache.get(`${bucket}/${path}`);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    signedUrlCache.delete(`${bucket}/${path}`);
+    return null;
   }
-  return data.signedUrl;
+  return hit.url;
 }
 
+function writeSignedCache(bucket: string, path: string, url: string) {
+  if (signedUrlCache.size >= SIGNED_URL_CACHE_MAX) {
+    const now = Date.now();
+    for (const [k, v] of signedUrlCache) {
+      if (v.expiresAt <= now) signedUrlCache.delete(k);
+    }
+    while (signedUrlCache.size >= SIGNED_URL_CACHE_MAX) {
+      const oldest = signedUrlCache.keys().next();
+      if (oldest.done) break;
+      signedUrlCache.delete(oldest.value);
+    }
+  }
+  signedUrlCache.set(`${bucket}/${path}`, { url, expiresAt: Date.now() + SIGNED_URL_REUSE_MS });
+}
+
+/**
+ * Cấp lại signed URL (24h) cho cả danh sách.
+ *
+ * Trước đây mỗi ảnh là một lần gọi HTTP sang Supabase Storage. Seller mở danh
+ * sách 20 đơn có chuyển khoản là API phải thực hiện 20 request nối tiếp trong lúc
+ * người dùng đang chờ — mà đây lại là màn hình bị poll thường xuyên nhất.
+ *
+ * Nay: đọc cache trước, phần còn thiếu gom thành MỘT lần `createSignedUrls` cho
+ * mỗi bucket. Thứ tự phần tử trả về khớp đúng thứ tự đầu vào.
+ */
 export async function resignPrivateUrls(
   supabase: SupabaseClient,
   urls: string[] | null | undefined,
 ): Promise<string[]> {
   if (!urls?.length) return [];
-  return Promise.all(urls.map((u) => resignPrivateUrl(supabase, u)));
+
+  const out = [...urls];
+  /** path cần ký → các vị trí trong mảng kết quả dùng chung path đó. */
+  const needed = new Map<string, number[]>();
+
+  urls.forEach((url, i) => {
+    const ref = parseSupabaseStorageUrl(url);
+    if (!ref || ref.bucket !== 'payment-proofs') return;
+    const cached = readSignedCache(ref.bucket, ref.path);
+    if (cached) {
+      out[i] = cached;
+      return;
+    }
+    const slots = needed.get(ref.path) ?? [];
+    slots.push(i);
+    needed.set(ref.path, slots);
+  });
+
+  if (needed.size === 0) return out;
+
+  const paths = [...needed.keys()];
+  const { data, error } = await supabase.storage
+    .from('payment-proofs')
+    .createSignedUrls(paths, PROOF_SIGN_SECONDS);
+
+  if (error || !data) {
+    // Ký hỏng thì giữ nguyên URL gốc — giống hành vi cũ, không làm vỡ response.
+    console.error('resign payment-proofs batch:', error?.message);
+    return out;
+  }
+
+  for (const row of data) {
+    if (!row.path || !row.signedUrl) continue;
+    const slots = needed.get(row.path);
+    if (!slots) continue;
+    writeSignedCache('payment-proofs', row.path, row.signedUrl);
+    for (const i of slots) out[i] = row.signedUrl;
+  }
+  return out;
+}
+
+/** Một URL — vẫn đi qua đường theo lô để dùng chung cache. */
+export async function resignPrivateUrl(
+  supabase: SupabaseClient,
+  url: string,
+): Promise<string> {
+  const [signed] = await resignPrivateUrls(supabase, [url]);
+  return signed ?? url;
 }
 
 /** Xóa object storage theo URL đã lưu (Supabase + R2, best-effort). */

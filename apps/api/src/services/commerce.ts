@@ -821,7 +821,7 @@ export async function checkoutFood(
     if (existingKey) {
       const [existingOrder] = await tx.select().from(orders).where(eq(orders.id, existingKey.orderId)).limit(1);
       if (existingOrder) {
-        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true });
+        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true, sequential: true });
         return enriched ?? existingOrder;
       }
     }
@@ -867,7 +867,7 @@ export async function createLaundryOrder(
     if (existingKey) {
       const [existingOrder] = await tx.select().from(orders).where(eq(orders.id, existingKey.orderId)).limit(1);
       if (existingOrder) {
-        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true });
+        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true, sequential: true });
         return enriched ?? existingOrder;
       }
     }
@@ -1043,7 +1043,7 @@ export async function createShipProxyOrder(
     if (existingKey) {
       const [existingOrder] = await tx.select().from(orders).where(eq(orders.id, existingKey.orderId)).limit(1);
       if (existingOrder) {
-        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true });
+        const [enriched] = await enrichOrdersList(tx, [existingOrder], { includeDetails: true, sequential: true });
         return enriched ?? existingOrder;
       }
     }
@@ -1567,7 +1567,7 @@ export async function countOrdersByScope(db: Database, userId: string, role: str
 export async function enrichOrdersList(
   db: DbConn,
   orderRows: OrderListRow[] | (typeof orders.$inferSelect)[],
-  options?: { includeBuyer?: boolean; includeDetails?: boolean },
+  options?: { includeBuyer?: boolean; includeDetails?: boolean; sequential?: boolean },
 ) {
   if (orderRows.length === 0) return [];
 
@@ -1575,15 +1575,91 @@ export async function enrichOrdersList(
   const laundryOrderIds = orderRows.filter((o) => o.type === 'laundry').map((o) => o.id);
   const shipOrderIds = orderRows.filter((o) => o.type === 'ship_proxy').map((o) => o.id);
 
-  const itemsRows = foodOrderIds.length
-    ? await db.select().from(orderItems).where(inArray(orderItems.orderId, foodOrderIds))
-    : [];
-  const laundryRows = laundryOrderIds.length
-    ? await db.select().from(laundryOrderDetails).where(inArray(laundryOrderDetails.orderId, laundryOrderIds))
-    : [];
-  const shipRows = shipOrderIds.length
-    ? await db.select().from(shipProxyOrderDetails).where(inArray(shipProxyOrderDetails.orderId, shipOrderIds))
-    : [];
+  const orderIds = orderRows.map((o) => o.id);
+  const buyerIds = options?.includeBuyer ? [...new Set(orderRows.map((o) => o.buyerId))] : [];
+  // Biên lai chỉ lấy khi seller xem list — tránh làm nặng list phía người mua.
+  const idsNeedingProof =
+    options?.includeBuyer && options?.includeDetails
+      ? orderRows
+          .filter(
+            (o) =>
+              o.paymentMethod === 'bank_transfer'
+              && ['proof_uploaded', 'verified', 'rejected', 'paid'].includes(o.paymentStatus),
+          )
+          .map((o) => o.id)
+      : [];
+
+  /**
+   * Sáu truy vấn dưới đây độc lập nhau hoàn toàn nên chạy song song được.
+   * Trước đây chúng nối đuôi bằng `await` liên tiếp — sáu lượt đi-về DB cộng dồn
+   * cho mỗi lần mở danh sách đơn, mà đây lại là màn hình seller poll thường xuyên nhất.
+   *
+   * Ngoại lệ `sequential`: transaction giữ riêng một kết nối, nên bắn nhiều truy vấn
+   * cùng lúc vào đó là phụ thuộc vào cơ chế pipeline của postgres.js. Đường gọi duy
+   * nhất trong transaction là nhánh replay idempotency của checkout — luôn đúng một
+   * đơn, nên song song ở đó chẳng nhanh hơn được gì. Không đánh đổi rủi ro trên
+   * luồng tiền để lấy con số 0.
+   */
+  const run = async (tasks: (() => Promise<unknown>)[]): Promise<unknown[]> => {
+    if (!options?.sequential) return Promise.all(tasks.map((t) => t()));
+    const out: unknown[] = [];
+    for (const task of tasks) out.push(await task());
+    return out;
+  };
+
+  const [itemsRows, laundryRows, shipRows, buyerRows, proofRows, complaintRows] = (await run([
+    () =>
+      foodOrderIds.length
+        ? db.select().from(orderItems).where(inArray(orderItems.orderId, foodOrderIds))
+        : Promise.resolve([]),
+    () =>
+      laundryOrderIds.length
+        ? db.select().from(laundryOrderDetails).where(inArray(laundryOrderDetails.orderId, laundryOrderIds))
+        : Promise.resolve([]),
+    () =>
+      shipOrderIds.length
+        ? db.select().from(shipProxyOrderDetails).where(inArray(shipProxyOrderDetails.orderId, shipOrderIds))
+        : Promise.resolve([]),
+    () =>
+      buyerIds.length
+        ? db
+            .select({ id: profiles.id, fullName: profiles.fullName })
+            .from(profiles)
+            .where(inArray(profiles.id, buyerIds))
+        : Promise.resolve([]),
+    () =>
+      idsNeedingProof.length
+        ? db
+            .select({
+              id: paymentProofs.id,
+              orderId: paymentProofs.orderId,
+              imageUrl: paymentProofs.imageUrl,
+              status: paymentProofs.status,
+            })
+            .from(paymentProofs)
+            .where(inArray(paymentProofs.orderId, idsNeedingProof))
+        : Promise.resolve([]),
+    () =>
+      orderIds.length
+        ? db
+            .select({
+              id: complaints.id,
+              orderId: complaints.orderId,
+              reason: complaints.reason,
+              status: complaints.status,
+              createdAt: complaints.createdAt,
+            })
+            .from(complaints)
+            .where(inArray(complaints.orderId, orderIds))
+        : Promise.resolve([]),
+  ])) as [
+    (typeof orderItems.$inferSelect)[],
+    (typeof laundryOrderDetails.$inferSelect)[],
+    (typeof shipProxyOrderDetails.$inferSelect)[],
+    { id: string; fullName: string }[],
+    { id: string; orderId: string; imageUrl: string; status: string }[],
+    { id: string; orderId: string | null; reason: string; status: string; createdAt: Date }[],
+  ];
 
   const itemsByOrder = new Map<string, typeof itemsRows>();
   for (const item of itemsRows) {
@@ -1594,71 +1670,27 @@ export async function enrichOrdersList(
   const laundryByOrder = new Map(laundryRows.map((l) => [l.orderId, l]));
   const shipByOrder = new Map(shipRows.map((s) => [s.orderId, s]));
 
-  let buyerMap = new Map<string, string>();
-  if (options?.includeBuyer) {
-    const buyerIds = [...new Set(orderRows.map((o) => o.buyerId))];
-    const buyers = await db
-      .select({ id: profiles.id, fullName: profiles.fullName })
-      .from(profiles)
-      .where(inArray(profiles.id, buyerIds));
-    buyerMap = new Map(buyers.map((b) => [b.id, b.fullName]));
-  }
+  const buyerMap = new Map(buyerRows.map((b) => [b.id, b.fullName]));
 
-  // Chỉ lấy biên lai khi seller xem list (includeBuyer) — tránh nặng buyer list
   const proofByOrder = new Map<string, { id: string; imageUrl: string; status: string }[]>();
-  if (options?.includeBuyer && options?.includeDetails) {
-    const idsNeedingProof = orderRows
-      .filter(
-        (o) =>
-          o.paymentMethod === 'bank_transfer'
-          && ['proof_uploaded', 'verified', 'rejected', 'paid'].includes(o.paymentStatus),
-      )
-      .map((o) => o.id);
-    if (idsNeedingProof.length > 0) {
-      const proofRows = await db
-        .select({
-          id: paymentProofs.id,
-          orderId: paymentProofs.orderId,
-          imageUrl: paymentProofs.imageUrl,
-          status: paymentProofs.status,
-        })
-        .from(paymentProofs)
-        .where(inArray(paymentProofs.orderId, idsNeedingProof));
-      for (const p of proofRows) {
-        const list = proofByOrder.get(p.orderId) ?? [];
-        list.push({ id: p.id, imageUrl: p.imageUrl, status: p.status });
-        proofByOrder.set(p.orderId, list);
-      }
-    }
+  for (const p of proofRows) {
+    const list = proofByOrder.get(p.orderId) ?? [];
+    list.push({ id: p.id, imageUrl: p.imageUrl, status: p.status });
+    proofByOrder.set(p.orderId, list);
   }
 
   const complaintByOrder = new Map<
     string,
     { id: string; reason: string; status: string; createdAt: Date }
   >();
-  {
-    const orderIds = orderRows.map((o) => o.id);
-    if (orderIds.length) {
-      const complaintRows = await db
-        .select({
-          id: complaints.id,
-          orderId: complaints.orderId,
-          reason: complaints.reason,
-          status: complaints.status,
-          createdAt: complaints.createdAt,
-        })
-        .from(complaints)
-        .where(inArray(complaints.orderId, orderIds));
-      for (const c of complaintRows) {
-        if (!c.orderId) continue;
-        complaintByOrder.set(c.orderId, {
-          id: c.id,
-          reason: c.reason,
-          status: c.status,
-          createdAt: c.createdAt,
-        });
-      }
-    }
+  for (const c of complaintRows) {
+    if (!c.orderId) continue;
+    complaintByOrder.set(c.orderId, {
+      id: c.id,
+      reason: c.reason,
+      status: c.status,
+      createdAt: c.createdAt,
+    });
   }
 
   return orderRows.map((order) => {
