@@ -51,16 +51,32 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       'API_URL_MISSING',
     );
   }
+  /**
+   * Chỉ gắn Content-Type khi thực sự có body.
+   *
+   * Web và API khác origin, nên mọi request mang header "không đơn giản" đều bị
+   * trình duyệt bắt gửi thêm một preflight OPTIONS trước. Trước đây mọi lời gọi
+   * đều kèm `Content-Type` và `X-Requested-With`, kể cả GET không body — nghĩa là
+   * mỗi lần đọc dữ liệu tốn hai lượt đi-về thay vì một.
+   *
+   * Nặng nhất là `/orders/pulse`: seller poll 5 giây/lần, mà Chrome chỉ cache
+   * preflight mặc định 5 giây — gần như lượt nào cũng phải preflight lại.
+   *
+   * Bỏ hai header đó khỏi GET thì request trở thành "simple request" và không
+   * cần preflight nữa. `X-Requested-With` bỏ hẳn được vì API không đọc nó ở đâu
+   * cả — chống CSRF đang dựa vào kiểm tra Origin/Referer (middleware csrf-origin).
+   */
+  const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
+  if (options.body != null && headers['Content-Type'] == null) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   let res: Response;
   try {
     res = await fetch(`${base}${path}`, {
       ...options,
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        ...options.headers,
-      },
+      headers,
     });
   } catch {
     throw new ApiError('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.', 0, 'NETWORK_ERROR');

@@ -43,6 +43,18 @@ app.use(
   cors({
     origin: buildCorsOrigins(FRONTEND_URL, EXTRA_ORIGINS),
     credentials: true,
+    /**
+     * Cho phép trình duyệt nhớ kết quả preflight.
+     *
+     * Không đặt thì Chrome chỉ nhớ 5 giây — mà seller poll `/orders/pulse` đúng
+     * 5 giây/lần, nên gần như lượt nào cũng phải OPTIONS lại trước khi gọi thật.
+     * Đo được: preflight 213ms + request 201ms, tức gấp đôi cả số request lẫn độ trễ.
+     *
+     * GET nay đã không cần preflight nữa (xem apps/web/src/lib/api.ts), nên phần
+     * còn lại chỉ là POST/PATCH/DELETE có body JSON. Chrome chặn trần ở 2 giờ,
+     * Firefox 24 giờ — khai 24 giờ để mỗi trình duyệt tự lấy mức tối đa của nó.
+     */
+    maxAge: 86_400,
   }),
 );
 
