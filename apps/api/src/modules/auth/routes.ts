@@ -18,6 +18,7 @@ import {
 } from '@langdaihoc/shared';
 import { profiles, sellers } from '@langdaihoc/database';
 import { asyncHandler, AppError } from '../../middleware/error-handler.js';
+import { ipKey, loginIdentityLimiter } from '../../lib/rate-limit.js';
 import { requireAuth, invalidateAuthCache, invalidateAuthCacheForUser, primeAuthCache } from '../../middleware/auth.js';
 import {
   setSessionCookies,
@@ -63,9 +64,20 @@ const authLimiter = rateLimit({
   message: { error: { message: 'Quá nhiều yêu cầu, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
 });
 
+/**
+ * Trần theo IP cho đăng nhập.
+ *
+ * Cố ý để rộng: cả toà KTX chung một IP NAT nên mức 30/15 phút trước đây khoá
+ * nhầm sinh viên thật hàng ngày. Việc chống dò mật khẩu nay do
+ * `loginIdentityLimiter` đảm nhiệm — giới hạn theo từng email và chỉ đếm lần sai,
+ * nên chặt hơn hẳn mà không phạt oan người dùng chung IP.
+ */
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 30 : 200,
+  max: process.env.NODE_ENV === 'production' ? 300 : 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKey,
   message: { error: { message: 'Quá nhiều lần đăng nhập, vui lòng thử lại sau', code: 'RATE_LIMIT' } },
 });
 
@@ -271,6 +283,7 @@ authRouter.post(
 authRouter.post(
   '/login',
   loginLimiter,
+  loginIdentityLimiter,
   asyncHandler(async (req, res) => {
     const input = loginSchema.parse(req.body);
     const db = req.app.locals.db;

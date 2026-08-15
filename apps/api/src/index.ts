@@ -17,6 +17,7 @@ import { healthRouter } from './modules/health/routes.js';
 import { scheduleDataRetention } from './jobs/data-retention.js';
 import { buildCorsOrigins, getDatabaseUrl, getFrontendUrl, isProd } from './lib/env.js';
 import { requireTrustedOrigin } from './middleware/csrf-origin.js';
+import { anonymousFloodLimiter } from './lib/rate-limit.js';
 
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -44,10 +45,31 @@ app.use(
     credentials: true,
   }),
 );
-// Base64 ảnh tối đa ~5MB → JSON body cần ~7MB; giới hạn theo upload.
-app.use(express.json({ limit: '7mb' }));
+
+/**
+ * Giới hạn body theo từng route thay vì một mức chung.
+ *
+ * Chỉ 3 endpoint upload cần body lớn (ảnh base64 5MB → JSON ~7MB). Trước đây mức
+ * 7MB được áp cho TOÀN BỘ API, nghĩa là bắn body 7MB vào bất kỳ đường nào — kể cả
+ * /api/health — server vẫn phải nhận, đệm và parse trọn gói. Vài chục request như
+ * vậy là đủ làm cạn RAM một instance mà không cần đăng nhập.
+ */
+const UPLOAD_PATHS = new Set(['/api/admin/upload', '/api/buyer/upload', '/api/seller/upload']);
+const uploadJson = express.json({ limit: '7mb' });
+const standardJson = express.json({ limit: '100kb' });
+app.use((req, res, next) => {
+  if (UPLOAD_PATHS.has(req.path)) {
+    uploadJson(req, res, next);
+    return;
+  }
+  standardJson(req, res, next);
+});
+
 app.use(cookieParser());
 app.use(requireTrustedOrigin);
+// Đặt sau cookieParser: limiter cần đọc cookie phiên để bỏ qua người đã đăng nhập
+// (KTX dùng chung IP NAT — chi tiết trong lib/rate-limit.ts).
+app.use('/api', anonymousFloodLimiter);
 
 app.locals.db = db;
 app.locals.supabaseAdmin = supabaseAdmin;

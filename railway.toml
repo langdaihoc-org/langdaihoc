@@ -3,6 +3,11 @@ builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @langdaihoc/api build"
 
 [deploy]
+# GIU tsx co chu dich, khong doi sang start:dist.
+# `packages/shared` va `packages/database` publish thang file .ts (main tro vao
+# src/index.ts), nen `node dist/index.js` chet ngay o ERR_MODULE_NOT_FOUND.
+# Muon bo tsx thi phai build ca hai package do ra JS (hoac bundle API bang
+# esbuild) — xem muc LD-06 trong ke hoach toi uu.
 startCommand = "pnpm --filter @langdaihoc/api start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100

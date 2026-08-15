@@ -40,10 +40,10 @@ import {
   assertPrivateProofUrlForOrder,
   assertPrivateProofUrlsForOrder,
   assertPrivateProofObjectExists,
-  resignPrivateUrl,
   resignPrivateUrls,
 } from '../../lib/storage.js';
 import { loadOrderForActor, assertSellerApprovedToMutate } from '../../lib/order-access.js';
+import { perUserLimiter } from '../../lib/rate-limit.js';
 
 export const ordersRouter = Router();
 
@@ -75,40 +75,46 @@ const proofLimiter = rateLimit({
 });
 
 /**
- * Pulse nhẹ — 1–2 query aggregate, không join items/address.
+ * Trần theo TÀI KHOẢN cho hai endpoint bị poll liên tục.
+ *
+ * Nhịp bình thường là 12 lượt/phút (seller, 5s) và 6 lượt/phút (buyer, 10s), nên
+ * 120 vẫn dư gấp mười. Cố tình khoá theo user chứ không theo IP: cả KTX chung IP
+ * NAT nên khoá theo IP sẽ chặn nhầm hàng loạt sinh viên thật.
+ */
+const pollingLimiter = perUserLimiter({ windowMs: 60_000, limit: 120 });
+
+/**
+ * Pulse nhẹ — 1 query aggregate, không join items/address.
  * Seller + buyer cùng endpoint; FE chỉ tải full list khi fingerprint đổi.
  */
 ordersRouter.get(
   '/pulse',
   requireAuth,
+  pollingLimiter,
   asyncHandler(async (req, res) => {
     const db = req.app.locals.db as Database;
     const role = req.user!.role;
 
     if (role === 'seller') {
-      const [seller] = await db
-        .select({ id: sellers.id })
+      // Một truy vấn thay vì hai. Seller poll endpoint này mỗi 5 giây khi có đơn
+      // chờ — tức là suốt giờ cao điểm — nên mỗi lượt đi-về DB tiết kiệm được ở
+      // đây đều được nhân với số quán đang mở nhân với 12 lần mỗi phút.
+      const [row] = await db
+        .select({
+          pendingCount: sellerCounters.pendingCount,
+          openCount: sellerCounters.openCount,
+          lateWarningCount: sellerCounters.lateWarningCount,
+          openComplaintCount: sellerCounters.openComplaintCount,
+          latestOrderAt: sellerCounters.latestOrderAt,
+          latestChangeAt: sellerCounters.latestChangeAt,
+          unreadCount: sellerCounters.unreadCount,
+          latestNotificationAt: sellerCounters.latestNotificationAt,
+          version: sellerCounters.version,
+        })
         .from(sellers)
+        .leftJoin(sellerCounters, eq(sellerCounters.sellerId, sellers.id))
         .where(eq(sellers.userId, req.user!.id))
         .limit(1);
-      if (!seller) {
-        res.json({
-          data: {
-            pendingCount: 0,
-            openCount: 0,
-            lateWarningCount: 0,
-            openComplaintCount: 0,
-            latestCreatedAt: null as string | null,
-            latestUpdatedAt: null as string | null,
-            latestLateWarningAt: null as string | null,
-            unreadNotifications: 0,
-            latestNotificationAt: null as string | null,
-          },
-        });
-        return;
-      }
-
-      const [row] = await db.select().from(sellerCounters).where(eq(sellerCounters.sellerId, seller.id)).limit(1);
 
       res.json({
         data: {
@@ -213,6 +219,7 @@ ordersRouter.get(
 ordersRouter.get(
   '/',
   requireAuth,
+  pollingLimiter,
   asyncHandler(async (req, res) => {
     const page = Math.max(1, Number(req.query.page ?? 1));
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
@@ -324,12 +331,16 @@ ordersRouter.get(
           .orderBy(asc(complaintMessages.createdAt))
       : [];
 
-    const proofsFresh = await Promise.all(
-      (proofs as { id: string; imageUrl: string; status: string }[]).map(async (p) => ({
-        ...p,
-        imageUrl: await resignPrivateUrl(supabaseAdmin, p.imageUrl),
-      })),
+    // Ký cả lô trong một lần gọi Supabase Storage, thay vì một request cho mỗi ảnh.
+    const proofRowsTyped = proofs as { id: string; imageUrl: string; status: string }[];
+    const signedProofUrls = await resignPrivateUrls(
+      supabaseAdmin,
+      proofRowsTyped.map((p) => p.imageUrl),
     );
+    const proofsFresh = proofRowsTyped.map((p, i) => ({
+      ...p,
+      imageUrl: signedProofUrls[i] ?? p.imageUrl,
+    }));
     const complaintFresh = complaint
       ? {
           ...complaint,

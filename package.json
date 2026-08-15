@@ -11,7 +11,7 @@
     "lint": "eslint apps/api/src apps/web/src packages/shared/src packages/database/src --max-warnings 200",
     "verify": "pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build",
     "test": "pnpm test:unit",
-    "test:unit": "pnpm --filter @langdaihoc/shared test",
+    "test:unit": "pnpm --filter @langdaihoc/shared --filter @langdaihoc/api test",
     "setup:local": "node scripts/setup-local.mjs",
     "preview": "pnpm --filter @langdaihoc/web preview",
     "db:generate": "pnpm --filter @langdaihoc/database generate",

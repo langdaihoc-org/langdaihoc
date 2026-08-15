@@ -34,6 +34,31 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
+  /**
+   * Lỗi từ express.json — lỗi phía client, không phải sự cố hệ thống.
+   * Nếu để rơi xuống nhánh 500 bên dưới thì vừa báo sai cho người dùng, vừa làm
+   * nhiễu tỉ lệ lỗi 5xx khiến cảnh báo vận hành mất ý nghĩa.
+   */
+  const bodyErr = err as { type?: string; status?: number; statusCode?: number };
+  if (bodyErr?.type === 'entity.too.large') {
+    res.status(413).json({
+      error: {
+        message: 'Dữ liệu gửi lên quá lớn. Ảnh tối đa 5MB.',
+        code: 'PAYLOAD_TOO_LARGE',
+      },
+    });
+    return;
+  }
+  if (bodyErr?.type === 'entity.parse.failed' || bodyErr?.type === 'encoding.unsupported') {
+    res.status(400).json({
+      error: {
+        message: 'Dữ liệu gửi lên không đọc được',
+        code: 'BAD_REQUEST',
+      },
+    });
+    return;
+  }
+
   console.error(err);
   res.status(500).json({
     error: {

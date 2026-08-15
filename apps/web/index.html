@@ -2,9 +2,13 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/langdaihoc-logo-mark.png" />
+    <link rel="icon" type="image/png" href="/favicon-48.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- API khác origin: mở sẵn DNS/TCP/TLS để request đầu tiên không phải trả trọn chi phí bắt tay. -->
+    <!--preconnect-api-->
+    <!-- Logo hiện ở header ngay khi trang mở — nạp sớm để không nhấp nháy. -->
+    <link rel="preload" as="image" href="/langdaihoc-logo-mark.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"

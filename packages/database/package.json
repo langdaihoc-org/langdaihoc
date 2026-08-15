@@ -10,11 +10,12 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
-    "generate": "drizzle-kit generate",
+    "generate": "node scripts/guard-schema-drift.mjs && drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "push": "drizzle-kit push",
+    "push": "node scripts/guard-schema-drift.mjs && drizzle-kit push",
     "studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "guard": "node scripts/guard-schema-drift.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.43.1",

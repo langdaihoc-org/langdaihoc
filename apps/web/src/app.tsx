@@ -6,7 +6,6 @@ import { ToastProvider } from '@/components/ui/toast';
 import { ProtectedRoute, GuestOnlyRoute, BuyerOnlyLayout } from '@/components/layout/buyer-layout';
 import { HomePage } from '@/pages/home-page';
 import { NotFoundPage } from '@/pages/not-found-page';
-import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/password-pages';
 import { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
@@ -28,6 +27,10 @@ function lazyNamed<T extends Record<string, ComponentType>>(
 const ProfilePage = lazyNamed(() => import('@/pages/profile-page'), 'ProfilePage');
 const PrivacyPage = lazyNamed(() => import('@/pages/privacy-page'), 'PrivacyPage');
 const TermsPage = lazyNamed(() => import('@/pages/terms-page'), 'TermsPage');
+
+// Quên/đặt lại mật khẩu là luồng hiếm — không đáng nằm trong chunk khởi động.
+const ForgotPasswordPage = lazyNamed(() => import('@/pages/auth/password-pages'), 'ForgotPasswordPage');
+const ResetPasswordPage = lazyNamed(() => import('@/pages/auth/password-pages'), 'ResetPasswordPage');
 
 const LoginPage = lazyNamed(() => import('@/pages/auth/login-page'), 'LoginPage');
 const CheckEmailPage = lazyNamed(() => import('@/pages/auth/login-page'), 'CheckEmailPage');
