@@ -118,6 +118,16 @@ export const foodItems = pgTable(
     index('food_items_seller_available_sort_idx')
       .on(t.sellerId, t.sortOrder)
       .where(sql`is_available = true`),
+    /**
+     * Tìm kiếm không dấu — index trên biểu thức `ldh_unaccent(name)`, tạo tại
+     * 0036_vietnamese_unaccent_search.sql. Drizzle chưa diễn đạt được index trên
+     * hàm tự định nghĩa kèm operator class, nên khai báo bằng SQL thô để schema
+     * vẫn mô tả đúng những gì DB thật đang có (xem guard-schema-drift.mjs).
+     */
+    index('food_items_name_unaccent_trgm_idx').using(
+      'gin',
+      sql`public.ldh_unaccent(${t.name}) extensions.gin_trgm_ops`,
+    ),
   ],
 );
 

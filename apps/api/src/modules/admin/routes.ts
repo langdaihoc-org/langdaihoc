@@ -237,7 +237,7 @@ adminRouter.patch(
     const body = z
       .object({
         status: z.enum(['approved', 'rejected', 'suspended']).optional(),
-        rejectionReason: z.string().optional(),
+        rejectionReason: z.string().max(1000).optional(),
         serviceTypes: z.enum(['food', 'laundry', 'ship_proxy']).optional(),
         shopName: z.string().trim().min(2).max(120).optional(),
         businessAddress: z.string().trim().min(3).max(300).optional(),
@@ -897,7 +897,7 @@ adminRouter.post(
   '/complaints/:id/messages',
   asyncHandler(async (req, res) => {
     const complaintId = String(req.params.id);
-    const { body } = z.object({ body: z.string().min(1) }).parse(req.body);
+    const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
     const db = req.app.locals.db;
     const [complaint] = await db.select().from(complaints).where(eq(complaints.id, complaintId)).limit(1);
     if (!complaint) throw new AppError(404, 'Không tìm thấy khiếu nại', 'NOT_FOUND');
@@ -926,7 +926,7 @@ adminRouter.patch(
     const { status, adminResolution } = z
       .object({
         status: z.enum(['new', 'processing', 'waiting_seller', 'resolved', 'rejected']),
-        adminResolution: z.string().optional(),
+        adminResolution: z.string().max(2000).optional(),
       })
       .parse(req.body);
     const db = req.app.locals.db;

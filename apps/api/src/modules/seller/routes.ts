@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { perUserLimiter } from '../../lib/rate-limit.js';
 import { z } from 'zod';
 import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import {
@@ -126,9 +127,9 @@ sellerRouter.patch(
     const seller = await getMySeller(req);
     const body = z
       .object({
-        shopName: z.string().optional(),
-        description: z.string().optional(),
-        businessAddress: z.string().optional(),
+        shopName: z.string().max(120).optional(),
+        description: z.string().max(2000).optional(),
+        businessAddress: z.string().max(500).optional(),
         avatarUrl: z.string().optional(),
         phone: z.string().trim().min(9).max(20).nullable().optional(),
         openHours: z.string().trim().max(200).nullable().optional(),
@@ -921,10 +922,12 @@ sellerRouter.get(
 sellerRouter.post(
   '/complaints/:id/messages',
   requireApprovedSeller,
+  // Khoá theo tài khoản, không theo IP — quán cũng dùng chung mạng KTX.
+  perUserLimiter({ windowMs: 60_000, limit: 10 }),
   asyncHandler(async (req, res) => {
     const seller = (req as Request & { seller: Awaited<ReturnType<typeof getMySeller>> }).seller;
     const complaintId = paramId(req);
-    const { body } = z.object({ body: z.string().min(1) }).parse(req.body);
+    const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
     const db = req.app.locals.db;
     const [complaint] = await db
       .select()

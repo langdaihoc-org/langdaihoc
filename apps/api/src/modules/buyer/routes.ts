@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { perUserLimiter } from '../../lib/rate-limit.js';
 import { z } from 'zod';
 import { eq, and, isNull, gte, sql, desc } from 'drizzle-orm';
 import { buyerAddresses, profiles, notifications, orders, paymentProofs } from '@langdaihoc/database';
@@ -82,12 +83,12 @@ buyerRouter.post(
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        recipientName: z.string().min(2),
-        phone: z.string().min(9),
-        detail: z.string().min(5),
-        dormName: z.string().optional(),
-        roomNumber: z.string().optional(),
-        note: z.string().optional(),
+        recipientName: z.string().min(2).max(100),
+        phone: z.string().min(9).max(20),
+        detail: z.string().min(5).max(500),
+        dormName: z.string().max(120).optional(),
+        roomNumber: z.string().max(30).optional(),
+        note: z.string().max(300).optional(),
         addressType: z.enum(['dorm', 'rental', 'other']).default('dorm'),
         isDefault: z.boolean().optional(),
       })
@@ -113,12 +114,12 @@ buyerRouter.patch(
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        recipientName: z.string().min(2).optional(),
-        phone: z.string().min(9).optional(),
-        detail: z.string().min(5).optional(),
-        dormName: z.string().optional(),
-        roomNumber: z.string().optional(),
-        note: z.string().optional(),
+        recipientName: z.string().min(2).max(100).optional(),
+        phone: z.string().min(9).max(20).optional(),
+        detail: z.string().min(5).max(500).optional(),
+        dormName: z.string().max(120).optional(),
+        roomNumber: z.string().max(30).optional(),
+        note: z.string().max(300).optional(),
         addressType: z.enum(['dorm', 'rental', 'other']).optional(),
         isDefault: z.boolean().optional(),
       })
@@ -154,8 +155,16 @@ buyerRouter.delete(
   }),
 );
 
+/**
+ * Đổi hồ sơ có thể kéo theo đổi mật khẩu → Supabase phải băm bcrypt, tốn CPU trên
+ * đúng compute nano đang chạy chung với DB. Không giới hạn thì một tài khoản là
+ * đủ để đốt CPU cả hệ thống.
+ */
+const profileLimiter = perUserLimiter({ windowMs: 15 * 60_000, limit: 10 });
+
 buyerRouter.patch(
   '/profile',
+  profileLimiter,
   asyncHandler(async (req, res) => {
     const body = profileUpdateSchema.parse(req.body);
     const db = req.app.locals.db;

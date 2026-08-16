@@ -94,6 +94,18 @@ export function SellerProfilePage() {
     mutationFn: () => {
       const isLaundry = shop?.serviceTypes === 'laundry';
       const isFood = shop?.serviceTypes === 'food';
+      /**
+       * Quán ăn cũng phải gửi operatingWindows.
+       *
+       * `checkoutFood` có sẵn đoạn chặn đặt ngoài giờ dựa trên trường này, nhưng
+       * trước đây chỉ tiệm giặt mới được gửi lên — nên với quán ăn nó luôn null và
+       * đoạn chặn đó không bao giờ chạy. Kết quả: quán khai "17:50–22:10" mà khách
+       * vẫn đặt được lúc 16:20.
+       *
+       * Khi đã có khung giờ thì API tự sinh chuỗi `openHours` hiển thị từ chúng,
+       * nên không gửi kèm openHours nữa để khỏi có hai nguồn sự thật lệch nhau.
+       */
+      const dungKhungGio = isLaundry || isFood;
       const normalizedWindows = normalizeOperatingWindows(operatingWindows);
       return sellerApi.updateShop({
         shopName: shopName || shop?.shopName,
@@ -101,10 +113,10 @@ export function SellerProfilePage() {
         businessAddress: businessAddress || shop?.businessAddress || undefined,
         avatarUrl: avatarUrl ?? shop?.avatarUrl ?? undefined,
         phone: shopPhone.trim() || null,
-        ...(!isLaundry ? { openHours: openHours.trim() || null } : {}),
+        ...(!dungKhungGio ? { openHours: openHours.trim() || null } : {}),
+        ...(dungKhungGio ? { operatingWindows: normalizedWindows } : {}),
         ...(isLaundry
           ? {
-              operatingWindows: normalizedWindows,
               laundryMinReturnGapMinutes: laundryMinReturnGapMinutes.trim()
                 ? Number(laundryMinReturnGapMinutes)
                 : 60,
@@ -230,7 +242,7 @@ export function SellerProfilePage() {
           />
           <p className="-mt-2 text-xs text-[var(--color-muted)]">Người mua sẽ thấy để liên lạc khi cần</p>
 
-          {shop?.serviceTypes === 'laundry' ? (
+          {shop?.serviceTypes === 'laundry' || shop?.serviceTypes === 'food' ? (
             <>
               <div>
                 <label className="mb-1 block text-sm font-medium">Khung giờ hoạt động</label>
@@ -292,22 +304,28 @@ export function SellerProfilePage() {
                   )}
                 </div>
                 <p className="mt-1.5 text-xs text-[var(--color-muted)]">
-                  Người mua chỉ chọn giờ lấy/giao trong các khung này. VD: 09:00–12:00 và 17:00–22:00.
+                  {shop?.serviceTypes === 'laundry'
+                    ? 'Người mua chỉ chọn giờ lấy/giao trong các khung này. VD: 09:00–12:00 và 17:00–22:00.'
+                    : 'Người mua chỉ chọn được giờ giao trong các khung này — để trống là nhận đơn bất kỳ giờ nào. VD: 17:00–22:00.'}
                 </p>
               </div>
-              <Input
-                label="Giao lại sau giờ lấy tối thiểu (phút)"
-                type="number"
-                min={30}
-                step={10}
-                value={laundryMinReturnGapMinutes}
-                onChange={(e) => setLaundryMinReturnGapMinutes(e.target.value)}
-                placeholder="60"
-                disabled={!editing}
-              />
-              <p className="-mt-2 text-xs text-[var(--color-muted)]">
-                VD: 60 = khách phải chọn giờ giao lại cách giờ lấy ít nhất 1 tiếng.
-              </p>
+              {shop?.serviceTypes === 'laundry' && (
+                <>
+                  <Input
+                    label="Giao lại sau giờ lấy tối thiểu (phút)"
+                    type="number"
+                    min={30}
+                    step={10}
+                    value={laundryMinReturnGapMinutes}
+                    onChange={(e) => setLaundryMinReturnGapMinutes(e.target.value)}
+                    placeholder="60"
+                    disabled={!editing}
+                  />
+                  <p className="-mt-2 text-xs text-[var(--color-muted)]">
+                    VD: 60 = khách phải chọn giờ giao lại cách giờ lấy ít nhất 1 tiếng.
+                  </p>
+                </>
+              )}
             </>
           ) : (
             <>

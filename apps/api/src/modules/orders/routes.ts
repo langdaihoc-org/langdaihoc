@@ -84,6 +84,15 @@ const proofLimiter = rateLimit({
 const pollingLimiter = perUserLimiter({ windowMs: 60_000, limit: 120 });
 
 /**
+ * Ghi nội dung do người dùng nhập (khiếu nại, tin nhắn khiếu nại, đánh giá).
+ *
+ * Mỗi lượt tốn 6–8 truy vấn trong đó có aggregate, và ghi text tự do vào DB chỉ
+ * có 500MB. Khoá theo TÀI KHOẢN chứ không theo IP — cả KTX đi chung IP NAT.
+ * 10 lượt/phút là quá thoải mái cho người thật đang tranh luận với quán.
+ */
+const writeContentLimiter = perUserLimiter({ windowMs: 60_000, limit: 10 });
+
+/**
  * Pulse nhẹ — 1 query aggregate, không join items/address.
  * Seller + buyer cùng endpoint; FE chỉ tải full list khi fingerprint đổi.
  */
@@ -399,7 +408,7 @@ ordersRouter.post(
         paymentMethod: z.enum(['cash', 'bank_transfer']),
         desiredDeliveryAt: z.string().optional(),
         desiredDeliveryUntil: z.string().optional(),
-        notes: z.string().optional(),
+        notes: z.string().max(1000).optional(),
         idempotencyKey: z.string().uuid().optional(),
       })
       .parse(req.body);
@@ -498,7 +507,7 @@ ordersRouter.patch(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { status, note } = z
-      .object({ status: z.string(), note: z.string().optional() })
+      .object({ status: z.string().max(40), note: z.string().max(1000).optional() })
       .parse(req.body);
     const db = req.app.locals.db;
     const orderId = paramId(req);
@@ -520,7 +529,7 @@ ordersRouter.post(
         actualQty: z.number().positive().optional(),
         unitPrice: z.number().positive().optional(),
         surcharge: z.number().optional(),
-        sellerNote: z.string().optional(),
+        sellerNote: z.string().max(1000).optional(),
       })
       .refine(
         (v) =>
@@ -835,7 +844,7 @@ ordersRouter.post(
   requireRole('seller', 'admin'),
   asyncHandler(async (req, res) => {
     const { approved, rejectionReason } = z
-      .object({ approved: z.boolean(), rejectionReason: z.string().optional() })
+      .object({ approved: z.boolean(), rejectionReason: z.string().max(1000).optional() })
       .parse(req.body);
     if (!approved && !rejectionReason?.trim()) {
       throw new AppError(400, 'Vui lòng nhập lý do từ chối biên lai', 'REJECTION_REASON_REQUIRED');
@@ -941,8 +950,8 @@ ordersRouter.post(
     const body = z
       .object({
         rating: z.number().int().min(1).max(5),
-        comment: z.string().optional(),
-        tags: z.array(z.string()).optional(),
+        comment: z.string().max(2000).optional(),
+        tags: z.array(z.string().max(50)).max(10).optional(),
       })
       .parse(req.body);
     const db: Database = req.app.locals.db;
@@ -986,8 +995,8 @@ ordersRouter.patch(
     const body = z
       .object({
         rating: z.number().int().min(1).max(5),
-        comment: z.string().nullable().optional(),
-        tags: z.array(z.string()).optional(),
+        comment: z.string().max(2000).nullable().optional(),
+        tags: z.array(z.string().max(50)).max(10).optional(),
       })
       .parse(req.body);
     const db: Database = req.app.locals.db;
@@ -1024,11 +1033,14 @@ ordersRouter.patch(
 ordersRouter.post(
   '/:id/complaint',
   ...buyerGuard,
+  writeContentLimiter,
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        reason: z.string().min(3),
-        description: z.string().min(10),
+        // reason là varchar(200) trong DB — thiếu .max() thì chuỗi dài ném lỗi
+        // Postgres 22001 và trả 500 thay vì 400.
+        reason: z.string().min(3).max(200),
+        description: z.string().min(10).max(4000),
         evidenceUrls: z.array(z.string()).max(10).optional(),
       })
       .parse(req.body);
@@ -1129,9 +1141,10 @@ ordersRouter.post(
 ordersRouter.post(
   '/:id/complaint/messages',
   ...buyerGuard,
+  writeContentLimiter,
   asyncHandler(async (req, res) => {
     const orderId = paramId(req);
-    const { body } = z.object({ body: z.string().min(1) }).parse(req.body);
+    const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
     const db = req.app.locals.db;
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order || order.buyerId !== req.user!.id) {

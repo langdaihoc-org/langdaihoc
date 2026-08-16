@@ -18,18 +18,28 @@ function foodItemImages(item: FoodItem, fallbackIndex: number): string[] {
   return urls.slice(0, 10);
 }
 
-function validateGroups(groups: FoodOptionGroup[], selected: string[]): string | null {
+/**
+ * Trả về cả `groupId` để người gọi cuộn tới đúng nhóm đang thiếu.
+ *
+ * Trước đây chỉ trả chuỗi lỗi, và chuỗi đó render ở tận đáy vùng cuộn (sau ô ghi
+ * chú). Người dùng bấm "Thêm giỏ" ở footer dính thì thông báo nằm ngoài màn hình
+ * — nhìn như nút bị hỏng, bấm mãi không ra gì.
+ */
+function validateGroups(
+  groups: FoodOptionGroup[],
+  selected: string[],
+): { message: string; groupId: string } | null {
   for (const group of groups) {
     if (group.id === 'optional') continue;
     const picked = group.options.filter((o) => selected.includes(o.id)).length;
     if (group.required && picked < Math.max(1, group.minSelect)) {
-      return `Vui lòng chọn "${group.name}"`;
+      return { message: `Vui lòng chọn "${group.name}"`, groupId: group.id };
     }
     if (picked < group.minSelect) {
-      return `Chọn tối thiểu ${group.minSelect} trong "${group.name}"`;
+      return { message: `Chọn tối thiểu ${group.minSelect} trong "${group.name}"`, groupId: group.id };
     }
     if (picked > group.maxSelect) {
-      return `Chọn tối đa ${group.maxSelect} trong "${group.name}"`;
+      return { message: `Chọn tối đa ${group.maxSelect} trong "${group.name}"`, groupId: group.id };
     }
   }
   return null;
@@ -301,6 +311,9 @@ export function FoodItemSheet({
   const [selected, setSelected] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [errorGroupId, setErrorGroupId] = useState<string | null>(null);
+  /** Tham chiếu từng nhóm tuỳ chọn — dùng để cuộn tới nhóm đang thiếu. */
+  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [pendingAction, setPendingAction] = useState<FoodSheetAction | null>(null);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -313,8 +326,9 @@ export function FoodItemSheet({
     if (!open || !item) return;
     setQty(1);
     setSelected([]);
-    setNote('');
     setError(null);
+    setErrorGroupId(null);
+    setNote('');
     setPendingAction(null);
     setPhotoIndex(0);
     setGalleryOpen(false);
@@ -336,10 +350,15 @@ export function FoodItemSheet({
     if (!item) return;
     const err = validateGroups(groups, selected);
     if (err) {
-      setError(err);
+      setError(err.message);
+      setErrorGroupId(err.groupId);
+      // Kéo nhóm đang thiếu vào tầm nhìn — nếu không, người dùng chỉ thấy nút
+      // không phản ứng vì thông báo lỗi nằm ngoài vùng cuộn.
+      groupRefs.current[err.groupId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     setError(null);
+    setErrorGroupId(null);
     setPendingAction(action);
     // Gửi đúng thứ tự nhóm → option trên menu (không theo lúc bấm)
     const ordered = groups.flatMap((g) => (g.options ?? []).map((o) => o.id)).filter((id) => selected.includes(id));
@@ -403,7 +422,16 @@ export function FoodItemSheet({
               )}
 
               {groups.map((group) => (
-                <div key={group.id} className="mt-5">
+                <div
+                  key={group.id}
+                  ref={(el) => {
+                    groupRefs.current[group.id] = el;
+                  }}
+                  className={cn(
+                    'mt-5 scroll-mt-4 rounded-xl transition-colors',
+                    errorGroupId === group.id && '-mx-2 bg-red-50/60 px-2 py-2 ring-1 ring-red-200',
+                  )}
+                >
                   <div className="mb-2.5 flex flex-wrap items-center gap-2">
                     <h4 className="text-sm font-semibold">{group.name}</h4>
                     <span
@@ -427,7 +455,12 @@ export function FoodItemSheet({
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() => setSelected((p) => toggleOption(group, opt.id, p))}
+                          onClick={() => {
+                            setSelected((p) => toggleOption(group, opt.id, p));
+                            // Vừa chọn thì bỏ cảnh báo ngay, không bắt bấm lại mới biết đã đủ.
+                            setError(null);
+                            setErrorGroupId(null);
+                          }}
                           className={cn(
                             'flex min-h-11 items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
                             isSelected

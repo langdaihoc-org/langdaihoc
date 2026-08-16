@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 export const userRoleEnum = pgEnum('user_role', ['buyer', 'seller', 'admin']);
 export const userStatusEnum = pgEnum('user_status', [
@@ -114,6 +114,11 @@ export const sellers = pgTable(
   (table) => [
     index('sellers_status_idx').on(table.status),
     index('sellers_status_service_idx').on(table.status, table.serviceTypes),
+    /** Tìm quán không dấu — xem 0036_vietnamese_unaccent_search.sql. */
+    index('sellers_shop_name_unaccent_trgm_idx').using(
+      'gin',
+      sql`public.ldh_unaccent(${table.shopName}) extensions.gin_trgm_ops`,
+    ),
   ],
 );
 

@@ -50,7 +50,18 @@ export async function verifyJwtLocally(token: string): Promise<LocalJwtPayload |
       e.code === 'ERR_JWT_EXPIRED' ||
       e.code === 'ERR_JWS_INVALID' ||
       e.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' ||
-      e.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED'
+      e.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' ||
+      /**
+       * `kid` không khớp khoá nào trong JWKS = TOKEN SAI, không phải hạ tầng hỏng.
+       *
+       * Trước đây hai mã này rơi xuống nhánh "lỗi infrastructure" bên dưới và bị
+       * ném lên, khiến caller fallback sang `getUser` — tức là một HTTP call sang
+       * Supabase Auth. Kẻ tấn công chỉ cần bịa `kid` ngẫu nhiên là ép được mỗi
+       * request của mình thành một lượt gọi mạng tới GoTrue, mà GoTrue lại chạy
+       * chung compute nano với chính DB.
+       */
+      e.code === 'ERR_JWKS_NO_MATCHING_KEY' ||
+      e.code === 'ERR_JWKS_MULTIPLE_MATCHING_KEYS'
     ) {
       return null;
     }

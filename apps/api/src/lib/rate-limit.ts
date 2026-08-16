@@ -1,6 +1,7 @@
 import rateLimit, { type Options } from 'express-rate-limit';
 import type { Request } from 'express';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './supabase.js';
+import { peekJwt, looksLikeLiveSession } from './jwt-peek.js';
 
 /**
  * Rate limit cho bối cảnh Làng Đại Học.
@@ -30,8 +31,27 @@ export function ipKey(req: Request): string {
   return `${groups.slice(0, 4).join(':')}::/64`;
 }
 
-function hasSessionCookie(req: Request): boolean {
-  return Boolean(req.cookies?.[ACCESS_TOKEN_COOKIE] || req.cookies?.[REFRESH_TOKEN_COOKIE]);
+/**
+ * Có vẻ là một phiên đăng nhập THẬT — dùng để quyết định có bỏ qua limiter theo IP.
+ *
+ * Bản đầu chỉ kiểm tra cookie CÓ TỒN TẠI, và đó là một lỗ hổng thật:
+ * `curl -H "Cookie: ldh_access_token=x"` là bỏ qua được toàn bộ rate limit, chi phí
+ * tấn công bằng 0. Nay phải đọc được payload JWT, có `sub` dạng UUID và `exp` còn
+ * hạn thì mới được bỏ qua.
+ *
+ * KHÔNG kiểm chữ ký ở tầng này — cố ý. Kiểm chữ ký tốn CPU và phải tra JWKS, tức là
+ * biến chính limiter thành thứ đắt tiền mà kẻ tấn công muốn ép ta chạy. Đọc lướt đủ
+ * để chặn cookie bịa; token giả mạo tinh vi vẫn sẽ chết ở `requireAuth` ngay sau đó.
+ */
+function looksLikeRealSession(req: Request): boolean {
+  const access = req.cookies?.[ACCESS_TOKEN_COOKIE] as string | undefined;
+  if (looksLikeLiveSession(access)) return true;
+  // Access token hết hạn nhưng refresh token còn hình dạng hợp lệ vẫn là phiên thật
+  // (client sắp gọi refresh). Refresh token của Supabase KHÔNG phải JWT nên chỉ
+  // kiểm được hình dạng — vì vậy đòi kèm access token đọc được, dù đã hết hạn.
+  const refresh = req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined;
+  if (!refresh || refresh.length < 12 || refresh.length > 512) return false;
+  return peekJwt(access) != null;
 }
 
 const RATE_LIMIT_BODY = {
@@ -48,19 +68,39 @@ function base(overrides: Partial<Options>): Partial<Options> {
 }
 
 /**
- * Lưới chặn nền cho toàn bộ /api.
+ * Lưới chặn nền cho toàn bộ /api — CHỈ để cắt flood bệnh hoạn, không để nắn lưu lượng.
  *
- * Chỉ tính request KHÔNG mang cookie phiên. Người dùng đã đăng nhập được bỏ qua ở
- * tầng này vì họ dùng chung IP NAT với cả toà KTX — họ đã có giới hạn riêng theo
- * tài khoản ở các route đắt tiền. Mục tiêu ở đây là chặn kịch bản một máy quét
- * hoặc bơm request ẩn danh vào catalog / pulse.
+ * Chỉ tính request KHÔNG mang cookie phiên; người đã đăng nhập có giới hạn riêng
+ * theo tài khoản ở các route đắt tiền.
+ *
+ * Vì sao ngưỡng cao như vậy — đây là bài học phải trả giá:
+ * mốc 300/phút ban đầu bị đo thực tế cho thấy quá thấp. Nhà mạng di động Việt Nam
+ * dùng CGNAT: hàng trăm đến hàng nghìn thuê bao Viettel/Vinaphone đi chung MỘT IPv4,
+ * cộng thêm wifi ký túc xá cũng chung IP. Một khách ẩn danh mở app tiêu ~5 request
+ * mỗi phút, nên 300/phút chỉ đủ cho khoảng 60 người — tức là giờ cao điểm sẽ khoá
+ * nhầm nguyên cả toà nhà.
+ *
+ * 6.000/phút = 100 request/giây từ MỘT địa chỉ. Không người thật nào đạt mức đó, kể
+ * cả cả nghìn người sau CGNAT (1.000 người × 5 = 5.000). Nhưng máy quét hay script
+ * bơm request thì vượt trong vài giây. Đây là cầu chì cuối, còn chống DDoS thể tích
+ * thật phải do Cloudflare đứng trước làm.
+ *
+ * Chỉnh được lúc đang có sự cố mà không cần deploy: đặt ANON_RATE_LIMIT_PER_MIN.
  */
+export const ANON_LIMIT_PER_MIN = Math.max(
+  60,
+  Number(process.env.ANON_RATE_LIMIT_PER_MIN ?? 6_000) || 6_000,
+);
+
+/** Ước lượng số request/phút của MỘT khách ẩn danh đang mở app (dùng trong test). */
+export const ANON_REQ_PER_MIN_PER_USER = 5;
+
 export const anonymousFloodLimiter = rateLimit(
   base({
     windowMs: 60_000,
-    limit: IS_PROD ? 300 : 5_000,
+    limit: IS_PROD ? ANON_LIMIT_PER_MIN : 50_000,
     keyGenerator: ipKey,
-    skip: hasSessionCookie,
+    skip: looksLikeRealSession,
   }),
 );
 
