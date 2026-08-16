@@ -33,7 +33,7 @@ cartRouter.post(
       .object({
         foodItemId: z.string().uuid(),
         quantity: z.number().int().min(1).max(99).default(1),
-        note: z.string().optional(),
+        note: z.string().max(500).optional(),
         options: z
           .array(z.object({ id: z.string(), name: z.string().optional(), priceDelta: z.number().optional() }))
           .optional(),

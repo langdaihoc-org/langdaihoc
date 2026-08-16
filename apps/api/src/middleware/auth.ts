@@ -12,6 +12,7 @@ import { setSessionCookies, wantsRememberMe, clearSessionCookies } from '../lib/
 import { AppError } from './error-handler.js';
 import { syncProfileStatusOnLogin, authUserHasPassword, isAuthEmailVerified } from '../modules/auth/service.js';
 import { verifyJwtLocally, type LocalJwtPayload } from '../lib/jwt-verify.js';
+import { peekJwt } from '../lib/jwt-peek.js';
 
 let supabaseAnon: ReturnType<typeof createSupabaseAnon> | null = null;
 function getSupabaseAnon() {
@@ -135,11 +136,66 @@ type ResolvedSession =
  * Xác minh access token, tự gia hạn bằng refresh cookie khi hết hạn.
  * Trả luôn user đã xác minh để caller không phải gọi `getUser` lần nữa.
  */
+/**
+ * Token đã bị từ chối gần đây — chặn cùng một chuỗi rác gọi mạng lần thứ hai.
+ *
+ * Không có nó thì kẻ tấn công lặp lại đúng một token hỏng là mỗi request đều tốn
+ * một lượt đi-về sang Supabase Auth.
+ */
+const REJECT_CACHE_TTL_MS = 60_000;
+const REJECT_CACHE_MAX = 5_000;
+const rejectedTokens = new Map<string, number>();
+
+function daBiTuChoi(token: string): boolean {
+  const until = rejectedTokens.get(token);
+  if (until == null) return false;
+  if (until <= Date.now()) {
+    rejectedTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function ghiNhanTuChoi(token: string) {
+  if (rejectedTokens.size >= REJECT_CACHE_MAX) {
+    const now = Date.now();
+    for (const [k, v] of rejectedTokens) {
+      if (v <= now) rejectedTokens.delete(k);
+    }
+    while (rejectedTokens.size >= REJECT_CACHE_MAX) {
+      const oldest = rejectedTokens.keys().next();
+      if (oldest.done) break;
+      rejectedTokens.delete(oldest.value);
+    }
+  }
+  rejectedTokens.set(token, Date.now() + REJECT_CACHE_TTL_MS);
+}
+
+/** Refresh token Supabase không phải JWT — chỉ kiểm được hình dạng. */
+function refreshTokenCoHinhDangHopLe(token: string | undefined): token is string {
+  return typeof token === 'string' && token.length >= 12 && token.length <= 512;
+}
+
 async function resolveSession(req: Request, res: Response): Promise<ResolvedSession | null> {
   const accessToken = presentedAccessToken(req);
   const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
 
-  if (accessToken) {
+  /**
+   * Loại chuỗi rác TRƯỚC khi chạm tới bất kỳ thứ gì tốn kém.
+   *
+   * `verifyJwtLocally` có thể ném lỗi rồi rơi xuống `getUser` — một HTTP call sang
+   * Supabase Auth. Đường đó chạy trước mọi limiter theo user, nên nếu không chặn
+   * sớm thì một token bịa cũng ép được ta gọi mạng. Đọc lướt payload rẻ hơn hàng
+   * nghìn lần và loại được gần hết rác.
+   */
+  if (accessToken && (daBiTuChoi(accessToken) || peekJwt(accessToken) == null)) {
+    if (!refreshTokenCoHinhDangHopLe(refreshToken)) {
+      if (accessToken) ghiNhanTuChoi(accessToken);
+      return null;
+    }
+    // Access token rác nhưng refresh token đúng hình dạng → bỏ qua bước verify,
+    // đi thẳng xuống nhánh gia hạn bên dưới.
+  } else if (accessToken) {
     try {
       const payload = await verifyJwtLocally(accessToken);
       if (payload?.sub) {
@@ -155,8 +211,10 @@ async function resolveSession(req: Request, res: Response): Promise<ResolvedSess
     }
   }
 
-  // Access het han / thieu — gia han bang refresh cookie
-  if (!refreshToken) return null;
+  // Access hết hạn / thiếu — gia hạn bằng refresh cookie.
+  // Kiểm hình dạng trước: refreshSession() là một HTTP call sang Supabase Auth,
+  // không để chuỗi rác cũng ép được ta gọi mạng.
+  if (!refreshTokenCoHinhDangHopLe(refreshToken)) return null;
 
   const { data, error } = await getSupabaseAnon().auth.refreshSession({
     refresh_token: refreshToken,

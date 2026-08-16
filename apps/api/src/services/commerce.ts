@@ -1,5 +1,5 @@
 import type { Database, DbConn } from '@langdaihoc/database';
-import { eq, and, desc, sql, inArray, ilike, or, count, isNull, isNotNull, lte, gte } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or, count, isNull, isNotNull, lte, gte } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import {
   foodItems,
@@ -349,7 +349,26 @@ export async function getFoodCatalog(db: Database, params: FoodCatalogParams = {
   if (q?.trim()) {
     const escaped = q.trim().replace(/[%_\\]/g, '\\$&');
     const term = `%${escaped}%`;
-    conditions.push(or(ilike(foodItems.name, term), ilike(sellers.shopName, term))!);
+    /**
+     * So khớp trên bản đã bỏ dấu, cả hai vế.
+     *
+     * `ldh_unaccent` (0036_vietnamese_unaccent_search.sql) vừa hạ chữ thường vừa
+     * bỏ dấu, nên gõ "com" ra "Cơm gà xối mỡ", gõ "do chien" ra "Đồ chiên gà".
+     * Sinh viên gõ không dấu là mặc định — ILIKE thẳng trên tên có dấu khiến
+     * khách không tìm ra món đang có thật trong menu.
+     *
+     * Áp cùng hàm đó lên từ khoá để người gõ CÓ dấu vẫn ra kết quả. Ký tự đại
+     * diện % và ký tự thoát đều không bị hàm đụng tới nên giữ nguyên nghĩa.
+     *
+     * Dùng `like` chứ không `ilike`: hai vế đã hạ chữ thường sẵn, và đây là dạng
+     * mà GIN trgm index trên chính biểu thức này phục vụ được.
+     */
+    conditions.push(
+      or(
+        sql`public.ldh_unaccent(${foodItems.name}) like public.ldh_unaccent(${term})`,
+        sql`public.ldh_unaccent(${sellers.shopName}) like public.ldh_unaccent(${term})`,
+      )!,
+    );
   }
 
   const where = and(...conditions);
